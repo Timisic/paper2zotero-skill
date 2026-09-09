@@ -1,6 +1,7 @@
 # Project documentation
 
 - [User guide](../README.md): capabilities, configuration and use.
+- [Agent setup instructions](../install/AGENT_SETUP.md): platform-specific installation, Wizard startup and completion checks.
 - [Architecture and domain](../CONTEXT.md): module boundaries and invariants.
 - [Agent skill](../literature-to-zotero/SKILL.md): execution instructions; its `references/` remain part of the portable skill.
 
