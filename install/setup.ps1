@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([switch]$Demo, [switch]$DependenciesOnly, [switch]$Check, [switch]$Group)
+param([switch]$Demo, [switch]$DependenciesOnly, [switch]$Check, [switch]$Group, [switch]$LaunchWizard)
 $ErrorActionPreference = 'Stop'
 # This launcher prepares native Windows tools, then reuses the Bash Wizard UI.
 if ($env:OS -ne 'Windows_NT') { throw 'Use bash setup.sh on macOS or Linux.' }
@@ -42,7 +42,7 @@ function Test-Poppler {
 function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
     $entry = Join-Path $PSScriptRoot 'windows-wizard.sh'
     if (-not (Test-Path -LiteralPath $entry)) { throw "Wizard launcher missing: $entry" }
-    # Check/agent modes do not need a terminal or read any credentials.
+    # Check/dependency modes do not need a terminal or prompt for credentials.
     if ($Check -or $DependenciesOnly) {
         & $BashPath $entry.Replace('\', '/') @WizardArgs | Out-Host
         return $LASTEXITCODE
@@ -54,6 +54,28 @@ function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
     # Quote each path explicitly; use a one-word title so it cannot become a command.
     $arguments = @('--hold', 'error', '--title', 'literature-to-zotero', '-e', '/usr/bin/bash', ('"' + $entry.Replace('\', '/') + '"')) + $WizardArgs
     Write-Host 'Opening the eight-stage wizard in a Git Bash terminal.' -ForegroundColor Cyan
+    if ($LaunchWizard) {
+        # Agent tool calls must be able to return while the human enters keys.
+        $startup = Join-Path ([IO.Path]::GetTempPath()) ('paper2zotero-start-' + [guid]::NewGuid().ToString('N'))
+        $env:PAPER2ZOTERO_STARTUP_FILE = $startup
+        try {
+            $process = Start-Process -FilePath $terminal -ArgumentList $arguments -PassThru
+            $deadline = [DateTime]::UtcNow.AddSeconds(15)
+            while ([DateTime]::UtcNow -lt $deadline) {
+                if (Test-Path -LiteralPath $startup) {
+                    Write-Host 'Wizard terminal is ready. Ask the user to complete it, then run setup.ps1 -Check.' -ForegroundColor Green
+                    return 0
+                }
+                # mintty may hand off to another process before Bash starts;
+                # its initial process exiting is not a startup failure.
+                Start-Sleep -Milliseconds 100
+            }
+            throw 'Wizard startup was not confirmed. Check the terminal error; do not report setup complete.'
+        } finally {
+            Remove-Item Env:PAPER2ZOTERO_STARTUP_FILE -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $startup -ErrorAction SilentlyContinue
+        }
+    }
     $process = Start-Process -FilePath $terminal -ArgumentList $arguments -PassThru -Wait
     return $process.ExitCode
 }

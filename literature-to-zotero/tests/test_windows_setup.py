@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -26,9 +27,9 @@ def release(tmp_path):
     return path / 'literature-to-zotero'
 
 
-def run_setup(package, env, mode):
+def run_setup(package, env, *modes):
     return subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-                           '-File', str(package / 'install/setup.ps1'), mode],
+                           '-File', str(package / 'install/setup.ps1'), *modes],
                           env=env, capture_output=True, text=True, encoding='utf-8',
                           errors='replace', timeout=45)
 
@@ -96,6 +97,63 @@ class WindowsSetupTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn('Stage 8/8', result.stdout)
             self.assertFalse((Path(env['HOME']) / '.config/literature-to-zotero/env').exists())
+
+    def test_agent_launch_returns_with_terminal_ready(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)
+            package = release(path)
+            env = environment(path / '用户 home')
+            marker = path / 'completed.txt'
+            env['PAPER2ZOTERO_TEST_RESULT'] = str(marker)
+            (package / 'literature-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
+set -eu
+test -t 0
+sleep 3
+printf 'finished' > "$PAPER2ZOTERO_TEST_RESULT"
+''', encoding='utf-8', newline='\n')
+            result = run_setup(package, env, '-Demo', '-LaunchWizard')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('Wizard terminal is ready', result.stdout)
+            self.assertFalse(marker.exists(), 'Agent waited for the entire wizard to finish')
+            deadline = time.monotonic() + 10
+            while not marker.exists() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertEqual(marker.read_text(), 'finished')
+
+    def test_online_entry_forwards_modes_and_preserves_dirty_cache(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)
+            source = path / 'local repository'
+            (source / 'install').mkdir(parents=True)
+            (source / 'install/setup.ps1').write_text('''param([switch]$DependenciesOnly, [switch]$Check, [switch]$LaunchWizard)
+"$DependenciesOnly,$Check,$LaunchWizard" | Set-Content $env:PAPER2ZOTERO_TEST_RESULT
+''', encoding='utf-8')
+            def git(*args):
+                subprocess.run(['git', '-C', str(source), *args], check=True, capture_output=True)
+            git('init', '-b', 'main')
+            git('add', '.')
+            git('-c', 'user.name=Setup Test', '-c', 'user.email=test@example.invalid',
+                'commit', '-m', 'fixture')
+            env = environment(path / '用户 home')
+            cache = path / 'download cache'
+            marker = path / 'mode.txt'
+            env.update(PAPER2ZOTERO_SOURCE_DIR=str(cache), PAPER2ZOTERO_TEST_RESULT=str(marker),
+                       GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='url.' + source.as_uri() + '.insteadOf',
+                       GIT_CONFIG_VALUE_0='https://github.com/Timisic/paper2zotero-skill.git')
+            command = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                       '-File', str(ROOT / 'install/install.ps1')]
+            for mode, expected in [('-DependenciesOnly', 'True,False,False'),
+                                   ('-LaunchWizard', 'False,False,True'),
+                                   ('-Check', 'False,True,False')]:
+                result = subprocess.run([*command, mode], env=env, capture_output=True, timeout=25)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(marker.read_text().strip(), expected)
+            (cache / 'user-file').write_text('preserve me')
+            marker.unlink()
+            result = subprocess.run(command, env=env, capture_output=True, timeout=25)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((cache / 'user-file').read_text(), 'preserve me')
+            self.assertFalse(marker.exists())
 
 
 if __name__ == '__main__':

@@ -1,7 +1,8 @@
+param([switch]$DependenciesOnly, [switch]$Check, [switch]$LaunchWizard)
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Use the macOS/Linux installer.' }
 $repo = 'https://github.com/Timisic/paper2zotero-skill.git'
-$checkout = Join-Path $env:LOCALAPPDATA 'paper2zotero-source'
+$checkout = if ($env:PAPER2ZOTERO_SOURCE_DIR) { $env:PAPER2ZOTERO_SOURCE_DIR } else { Join-Path $env:LOCALAPPDATA 'paper2zotero-source' }
 if (-not (Get-Command git.exe -ErrorAction SilentlyContinue)) {
     if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
         Start-Process 'ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1'
@@ -13,7 +14,7 @@ if (-not (Get-Command git.exe -ErrorAction SilentlyContinue)) {
 }
 if (Test-Path -LiteralPath $checkout) {
     if (-not (Test-Path -LiteralPath (Join-Path $checkout '.git'))) { throw 'Installation cache is occupied; existing files were preserved.' }
-    $origin = & git.exe -C $checkout remote get-url origin
+    $origin = & git.exe -C $checkout config --get remote.origin.url
     if ($LASTEXITCODE -ne 0 -or $origin -ne $repo) { throw 'Installation cache has a different origin; preserved.' }
     $changes = & git.exe -C $checkout status --porcelain
     if ($LASTEXITCODE -ne 0 -or $changes) { throw 'Installation cache has local changes; preserved.' }
@@ -22,5 +23,9 @@ if (Test-Path -LiteralPath $checkout) {
     & git.exe clone --depth 1 --branch main $repo $checkout
 }
 if ($LASTEXITCODE -ne 0) { throw 'Repository download failed; re-run to continue.' }
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $checkout 'install\setup.ps1')
+$setupArgs = @()
+if ($DependenciesOnly) { $setupArgs += '-DependenciesOnly' }
+if ($Check) { $setupArgs += '-Check' }
+if ($LaunchWizard) { $setupArgs += '-LaunchWizard' }
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $checkout 'install\setup.ps1') @setupArgs
 if ($LASTEXITCODE -ne 0) { throw 'Setup is incomplete; saved settings are preserved. Re-run to continue.' }
