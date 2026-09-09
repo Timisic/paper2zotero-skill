@@ -1,0 +1,12 @@
+interface:
+  display_name: "Literature to Zotero"
+  short_description: "Find, verify, summarize, and save research papers"
+  default_prompt: "Use $literature-to-zotero to find recent papers for my research question and save my approved selections to Zotero."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "zotero"
+      description: "Writable Zotero MCP server for library reads and writes"
+      transport: "stdio"
+policy:
+  allow_implicit_invocation: true

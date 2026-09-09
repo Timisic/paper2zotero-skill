@@ -1,0 +1,51 @@
+{
+  "total": 3,
+  "offset": 0,
+  "data": [
+    {
+      "paperId": "s2alpha",
+      "title": "Artificial Intelligence Interventions for Mental Health",
+      "abstract": "A Semantic Scholar abstract for the same paper.",
+      "year": 2025,
+      "publicationDate": "2025-03-10",
+      "venue": "Journal of Digital Mental Health",
+      "publicationVenue": {"name": "Journal of Digital Mental Health", "type": "journal"},
+      "publicationTypes": ["JournalArticle"],
+      "externalIds": {"DOI": "10.1000/ALPHA", "ArXiv": "2501.00001", "CorpusId": 5551},
+      "authors": [{"name": "Ada Researcher"}],
+      "citationCount": 19,
+      "isOpenAccess": true,
+      "openAccessPdf": {"url": "https://repo.example.org/alpha-preprint.pdf", "status": "GREEN"}
+    },
+    {
+      "paperId": "s2gamma",
+      "title": "Therapist-in-the-loop language models for CBT homework",
+      "abstract": "Only Semantic Scholar indexes this one.",
+      "year": 2026,
+      "publicationDate": "2026-01-15",
+      "venue": "ACL",
+      "publicationVenue": {"name": "ACL", "type": "conference"},
+      "publicationTypes": ["Conference"],
+      "externalIds": {"DOI": "10.1000/gamma", "CorpusId": 5552},
+      "authors": [{"name": "Grace Example"}],
+      "citationCount": 3,
+      "isOpenAccess": false,
+      "openAccessPdf": {"url": "", "status": null}
+    },
+    {
+      "paperId": "s2delta",
+      "title": "Conversational agents for psychological support",
+      "abstract": "Same title as an OpenAlex record, different year.",
+      "year": 2019,
+      "publicationDate": "2019-05-01",
+      "venue": "CHI",
+      "publicationVenue": {"name": "CHI", "type": "conference"},
+      "publicationTypes": ["Conference"],
+      "externalIds": {"CorpusId": 5553},
+      "authors": [{"name": "Lin Example"}],
+      "citationCount": 100,
+      "isOpenAccess": false,
+      "openAccessPdf": null
+    }
+  ]
+}

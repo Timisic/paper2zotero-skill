@@ -1,0 +1,30 @@
+.DS_Store
+.pytest_cache/
+__pycache__/
+*.pyc
+.omx/
+
+# User-provided reference material and local run artifacts
+文献管理-参考/
+literature-runs/
+output/
+zotero-mcp-test-2026-09-04.md
+.coverage
+
+# Generated standalone release packages
+dist/
+.mypy_cache/
+
+# Credentials and private local evidence (never publish)
+.env
+.env.*
+!.env.example
+**/env
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+docs/archive/
+docs/validation.md

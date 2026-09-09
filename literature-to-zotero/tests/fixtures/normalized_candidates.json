@@ -1,0 +1,17 @@
+[
+  {
+    "id": "doi:10.1000/alpha",
+    "doi": "10.1000/alpha",
+    "title": "Artificial intelligence interventions for mental health",
+    "year": 2025,
+    "venue": "Journal of Digital Mental Health",
+    "authors": ["Ada Lovelace", "Alan Turing"]
+  },
+  {
+    "id": "openalex:W3",
+    "title": "Conversational agents for psychological support",
+    "year": 2024,
+    "venue": "CHI",
+    "authors": ["Grace Hopper"]
+  }
+]
