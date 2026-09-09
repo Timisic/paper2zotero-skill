@@ -37,7 +37,9 @@ curl -fsSL https://raw.githubusercontent.com/Timisic/paper2zotero-skill/main/ins
 
 已克隆仓库的用户可运行 `install/setup.cmd`（Windows）或 `bash install/setup.sh`（macOS/Linux）。想预览界面，使用 `install/setup-demo.cmd` 或 `bash install/setup.sh --demo`；Windows 预览需要已有 Git Bash。
 
-Windows 入口已做语法和兼容分支测试，仍待 Windows 真机安装验收。浏览器与 Desktop 同步按需配置。
+Windows 会打开独立的 Git Bash 八步向导窗口；密钥在该窗口填写。已在 Windows 真机验证依赖检查、向导终端和重复安装；全新系统的软件下载与账号授权仍需实际完成。浏览器与 Desktop 同步按需配置。
+
+技能安装在 `%USERPROFILE%\.codex\skills\literature-to-zotero`，配置保存在 `%USERPROFILE%\.config\literature-to-zotero`；在线安装器的仓库入口在 `%LOCALAPPDATA%\paper2zotero-source\install\setup.cmd`。以后双击该入口即可继续配置。
 
 ## 使用
 

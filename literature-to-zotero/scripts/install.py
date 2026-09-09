@@ -48,7 +48,11 @@ def install() -> None:
             link.unlink()
         if WINDOWS:
             if link.exists():
-                backup = Path(tempfile.mkdtemp(prefix='previous-literature-', dir=root))
+                # Agent runtimes recursively discover SKILL.md. Backups must
+                # live outside their skill roots or every rerun adds a duplicate.
+                backup_root = destination.parent / 'backups'
+                backup_root.mkdir(exist_ok=True)
+                backup = Path(tempfile.mkdtemp(prefix='previous-literature-', dir=backup_root))
                 link.rename(backup / 'skill')
             shutil.copytree(destination, link)
             (link / MARKER).write_text('v1')

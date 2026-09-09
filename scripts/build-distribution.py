@@ -27,7 +27,7 @@ def build(output: Path) -> Path:
                                 ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         # User README is standalone; developer links stay in the repository only.
         readme = stage / 'README.md'
-        readme.write_text(readme.read_text().split('<!-- repository-only -->')[0].rstrip() + '\n')
+        readme.write_text(readme.read_text(encoding='utf-8').split('<!-- repository-only -->')[0].rstrip() + '\n', encoding='utf-8')
         stage.rename(release)
     shutil.make_archive(str(release), 'zip', output, release.name)
     return release

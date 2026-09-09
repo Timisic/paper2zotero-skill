@@ -39,6 +39,24 @@ function Test-Poppler {
     try { $process = Start-Process -FilePath $tool.Source -ArgumentList '-v' -Wait -PassThru -NoNewWindow } catch { return $false }
     return $process.ExitCode -eq 0
 }
+function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
+    $entry = Join-Path $PSScriptRoot 'windows-wizard.sh'
+    if (-not (Test-Path -LiteralPath $entry)) { throw "Wizard launcher missing: $entry" }
+    # Check/agent modes do not need a terminal or read any credentials.
+    if ($Check -or $DependenciesOnly) {
+        & $BashPath $entry.Replace('\', '/') @WizardArgs | Out-Host
+        return $LASTEXITCODE
+    }
+    $gitRoot = Split-Path (Split-Path $BashPath)
+    $terminal = Join-Path $gitRoot 'usr\bin\mintty.exe'
+    if (-not (Test-Path -LiteralPath $terminal)) { throw "Git terminal missing: $terminal. Repair Git for Windows and retry." }
+    # Start-Process joins its argument array into one Windows command line.
+    # Quote each path explicitly; use a one-word title so it cannot become a command.
+    $arguments = @('--hold', 'error', '--title', 'literature-to-zotero', '-e', '/usr/bin/bash', ('"' + $entry.Replace('\', '/') + '"')) + $WizardArgs
+    Write-Host 'Opening the eight-stage wizard in a Git Bash terminal.' -ForegroundColor Cyan
+    $process = Start-Process -FilePath $terminal -ArgumentList $arguments -PassThru -Wait
+    return $process.ExitCode
+}
 function Install-Tool([string]$Package) {
     if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
         Write-Host 'Install/update App Installer in Microsoft Store, then run setup.cmd again.' -ForegroundColor Yellow
@@ -68,13 +86,18 @@ try {
         if (-not $pythonPath -or -not $popplerReady -or -not $bashPath) { throw 'Tool verification failed. Close this window and re-run setup.cmd.' }
     }
     if ($pythonPath) { $env:PYTHON_BIN = $pythonPath }
+    if ($popplerReady) {
+        # Git prepends its own bin directory on startup. Its bundled Xpdf
+        # pdftotext returns 99 for -v, so carry the verified native tool to Bash.
+        $env:PAPER2ZOTERO_PDF_BIN = Split-Path (Get-Command pdftotext.exe).Source
+    }
     $wizardArgs = @()
     if ($Demo) { $wizardArgs += '--demo' }
     elseif ($Check) { $wizardArgs += '--check' }
     elseif ($DependenciesOnly) { $wizardArgs += '--dependencies-only' }
     elseif ($Group) { $wizardArgs += '--group' }
-    & $bashPath ($PSScriptRoot.Replace('\', '/') + '/setup.sh') @wizardArgs
-    exit $LASTEXITCODE
+    $result = Start-Wizard $bashPath $wizardArgs
+    exit $result
 } catch {
     Write-Host $_.Exception.Message -ForegroundColor Red
     exit 1
