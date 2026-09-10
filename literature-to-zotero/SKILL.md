@@ -7,7 +7,7 @@ description: Find, screen, acquire, verify, summarize, and save scholarly papers
 
 Turn a research intent into a verified Zotero collection while preserving the distinction between source metadata, source PDFs, derived text, and generated summaries.
 
-Resolve `SKILL_DIR` to the directory containing this `SKILL.md`. Run every bundled helper as `python "$SKILL_DIR/scripts/<name>.py"`; the user's current working directory is the run workspace, not the skill directory.
+Resolve `SKILL_DIR` to the directory containing this `SKILL.md` (Claude Code also exposes `${CLAUDE_SKILL_DIR}`). Run every bundled helper as `python "$SKILL_DIR/scripts/<name>.py"`; the user's current working directory is the run workspace, not the skill directory.
 
 ## The shape of a run
 
@@ -22,7 +22,7 @@ A clear request authorizes retrieval inside its own intent, so there is no separ
 
 ## Runtime
 
-On native Windows, run `scripts/run-python.cmd <script-path> <args>` instead of Bash launchers; setup records the native interpreter. On macOS/Linux, for Python CLI examples below, use `bash "$SKILL_DIR/scripts/run-python.sh"` in place of `python` or `python3`. Setup records the verified interpreter there, so commands work even when the agent shell has an older system Python.
+On Windows PowerShell, run `& "$SKILL_DIR/scripts/run-python.ps1" <script-path> <args>`; on cmd.exe use `scripts/run-python.cmd`. In Claude Code's Windows Git Bash, use `bash "$SKILL_DIR/scripts/run-python.sh" <script-path> <args>`. These launchers restore the verified Python and PDF-tool paths, including paths with spaces or Chinese characters. On macOS/Linux, for Python CLI examples below, use `bash "$SKILL_DIR/scripts/run-python.sh"` in place of `python` or `python3`. Setup records the verified interpreter there, so commands work even when the agent shell has an older system Python.
 
 ## Routine execution
 
@@ -32,7 +32,7 @@ Normal delivery ends when the processing result returns its table and read-back 
 
 ## Workflow
 
-1. On first installation or after environment changes, read [workflow.md](references/workflow.md) and run `bash "$SKILL_DIR/scripts/setup-wizard.sh"` to install dependencies and configure services. Do not re-run full setup on an ordinary run. Check what a stage needs when that stage runs: `preflight.py --stage discovery|acquisition|browser_fallback|conversion|ingestion|local_sync`. Discovery and acquisition require nothing local — a search is never blocked because Zotero Desktop is closed, and an open-access PDF is fetched without a browser. Kimi gates `browser_fallback` alone. The automatic processing entry point requires Zotero Web API read/write credentials. MCP can assist library reading but does not replace the scripted writer or its credentials.
+1. On first installation or after environment changes, read [workflow.md](references/workflow.md) and follow the [Agent installation instructions](https://github.com/Timisic/paper2zotero-skill/blob/main/install/AGENT_SETUP.md) using the current host and agent target to install dependencies and configure services. Do not re-run full setup on an ordinary run. Check what a stage needs when that stage runs: `preflight.py --stage discovery|acquisition|browser_fallback|conversion|ingestion|local_sync`. Discovery and acquisition require nothing local — a search is never blocked because Zotero Desktop is closed, and an open-access PDF is fetched without a browser. Kimi gates `browser_fallback` alone. The automatic processing entry point requires Zotero Web API read/write credentials. MCP can assist library reading but does not replace the scripted writer or its credentials.
 2. Initialize the run package with `workflow.py init`. Store every query, decision, artifact, warning, and paper state there. Never write run artifacts into the installed skill.
 3. Translate the intent into controlled concept groups and record it with `workflow.py record-scope` — evidence of what you understood, not a claim that the user approved a plan. Ask a clarifying round only for an ambiguity that changes the result (construct, task, or time range); give transparent defaults for lesser preferences, and never invent a direction to hit a question quota.
 4. Read [discovery-and-screening.md](references/discovery-and-screening.md). Run one `discovery.py` round over OpenAlex and Semantic Scholar together — it merges and deduplicates them — then screen. At most one purposeful supplementary round, and only when reliable candidates are clearly too few; `discovery.py --round supplementary --reason ...` holds that budget, which covers every source, every retry and every throttle wait. Read each source's status before presenting: only `empty` says the literature has nothing, and a `partial` round must be reported as such. Aim to have the list in front of the user within about five minutes — a target to measure, not a guarantee.

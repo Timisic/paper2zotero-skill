@@ -221,6 +221,10 @@ def test_skill_link_roots_discovers_symlinks_under_agent_roots(tmp_path: Path, m
     link = home / ".codex" / "skills" / "literature-to-zotero"
     link.parent.mkdir(parents=True)
     link.symlink_to(tmp_path / "target", target_is_directory=True)
+    assert MODULE.skill_link_roots(home) == []  # A dangling link is not an installation.
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "SKILL.md").write_text("fixture")
     roots = MODULE.skill_link_roots(home)
     assert any(str(link) == candidate for candidate in roots)
 

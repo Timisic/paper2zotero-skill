@@ -3,6 +3,9 @@ from pathlib import Path
 import shutil
 import tempfile
 import os
+import argparse
+
+from agent_installation import CHOICES, selected_roots
 
 WINDOWS = os.name == "nt"
 MARKER = ".literature-to-zotero-managed"
@@ -10,12 +13,12 @@ MARKER = ".literature-to-zotero-managed"
 SOURCE = Path(__file__).resolve().parent.parent
 
 
-def install() -> None:
+def install(agent: str = "auto") -> None:
     home = Path.home()
     destination = home / '.local/share/literature-to-zotero/skill'
-    roots = [home / '.codex/skills', home / '.pi/agent/skills', home / '.claude/skills']
-    if (home / '.agents/skills').is_dir():
-        roots.append(home / '.agents/skills')
+    roots = selected_roots(agent)
+    if not roots:
+        raise SystemExit('未找到已使用的 AI 助手。请运行 setup 并选择 Codex、Claude Code 或 Pi；Agent 可传 --agent。')
     # Preflight all conflicts before changing any runtime.
     for root in roots:
         link = root / 'literature-to-zotero'
@@ -63,4 +66,10 @@ def install() -> None:
 
 
 if __name__ == '__main__':
-    install()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--agent', choices=CHOICES, default=os.environ.get('PAPER2ZOTERO_AGENT', 'auto'))
+    parser.add_argument('--detect', action='store_true', help='Exit 0 if a target is available; write nothing.')
+    args = parser.parse_args()
+    if args.detect:
+        raise SystemExit(0 if selected_roots(args.agent) else 1)
+    install(args.agent)

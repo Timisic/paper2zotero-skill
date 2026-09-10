@@ -81,12 +81,15 @@ if [[ "$python_ready" != 1 || "$pdf_ready" != 1 ]]; then
 fi
 find_python || { echo '系统仓库没有 Python 3.11+；请升级到 Debian 12+/Ubuntu 24.04+ 后重试。' >&2; exit 1; }
 pdftotext -v >/dev/null 2>&1 || { echo 'PDF 工具安装未成功，请重跑 setup。' >&2; exit 1; }
-echo '[2/3] 安装 skill'
+echo '[2/3] 保存运行工具的位置'
 # Persist the interpreter choice without requiring shell profile changes.
 mkdir -p "$HOME/.config/literature-to-zotero"
 interpreter_path="$PYTHON_BIN"
 if [[ "$SYSTEM" == MINGW* || "$SYSTEM" == MSYS* || "$SYSTEM" == CYGWIN* ]]; then interpreter_path="$(cygpath -w "$PYTHON_BIN")"; fi
 printf '%s\n' "$interpreter_path" > "$HOME/.config/literature-to-zotero/python-path"
+pdf_directory="$(dirname "$(command -v pdftotext)")"
+if [[ "$SYSTEM" == MINGW* || "$SYSTEM" == MSYS* || "$SYSTEM" == CYGWIN* ]]; then pdf_directory="$(cygpath -w "$pdf_directory")"; fi
+printf '%s\n' "$pdf_directory" > "$HOME/.config/literature-to-zotero/pdf-bin"
 if [[ "${1:-}" == --runtime-only ]]; then exit 0; fi
 export PYTHON_BIN
 bash "$SKILL_DIR/scripts/install-skill.sh"

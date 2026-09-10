@@ -184,20 +184,37 @@ finish() {
 # Replace the example below. Set TOTAL_STAGES to match the stages you write.
 # ──────────────────────────────────────────────────────────────────────────
 
-TOTAL_STAGES=8
+TOTAL_STAGES=4
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 WINDOWS=0
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WINDOWS=1 ;; esac
-MODE="${1:-}"
+MODE=""
 GROUP_LIBRARY=0
-if [[ "$MODE" == --group ]]; then GROUP_LIBRARY=1; MODE=""; fi
-case "$MODE" in
-  --help) echo 'Usage: bash setup.sh [--demo | --demo-missing | --dependencies-only | --check | --group]'; exit 0 ;;
-  --dependencies-only|--check) exec bash "$SKILL_DIR/scripts/bootstrap.sh" "$MODE" ;;
-  ''|--demo|--demo-missing) ;;
-  *) echo 'Unknown option; use --help' >&2; exit 2 ;;
-esac
+ADVANCED=0
+export PAPER2ZOTERO_AGENT="${PAPER2ZOTERO_AGENT:-auto}"
+while (( $# )); do
+  case "$1" in
+    --help)
+      echo 'Usage: bash install/setup.sh [--demo | --demo-missing | --dependencies-only | --check] [--advanced] [--group] [--agent auto|codex|claude-code|pi|all]'
+      exit 0 ;;
+    --group) GROUP_LIBRARY=1 ;;
+    --advanced) ADVANCED=1 ;;
+    --agent)
+      [[ $# -ge 2 ]] || { echo '--agent needs a value' >&2; exit 2; }
+      PAPER2ZOTERO_AGENT="$2"; shift ;;
+    --dependencies-only|--check|--demo|--demo-missing)
+      [[ -z "$MODE" ]] || { echo 'Choose one setup mode' >&2; exit 2; }
+      MODE="$1" ;;
+    *) echo 'Unknown option; use --help' >&2; exit 2 ;;
+  esac
+  shift
+done
+case "$PAPER2ZOTERO_AGENT" in auto|codex|claude-code|pi|all) ;; *) echo 'Unknown agent; use --help' >&2; exit 2;; esac
+if [[ "$MODE" == --dependencies-only || "$MODE" == --check ]]; then
+  exec bash "$SKILL_DIR/scripts/bootstrap.sh" "$MODE"
+fi
+if [[ "$ADVANCED" == 1 ]]; then TOTAL_STAGES=7; fi
 # The library remains verbatim. Setup-specific behavior lives below STAGES.
 umask 077
 ENV_FILE="$HOME/.config/literature-to-zotero/env"
@@ -220,17 +237,16 @@ fi
 persist() {
   local key="$1" value="$2"
   [[ -n "$value" ]] || return 0
-  mkdir -p "$(dirname "$ENV_FILE")"
-  write_env "$key" "$value"
-  chmod 600 "$ENV_FILE"
-  if [[ "$WINDOWS" == 1 && "$DEMO" == 0 ]]; then
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$SKILL_DIR/scripts/protect-config.ps1")" -ConfigPath "$(cygpath -w "$ENV_FILE")"
+  if [[ "$DEMO" == 1 ]]; then
+    write_env "$key" "$value" >/dev/null
+  else
+    printf '%s' "$value" | "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --set "$key"
   fi
   export "$key=$value"
 }
 verify_step() {
   if [[ "$DEMO" == 1 ]]; then note '[模拟检查通过，未连接服务]'; return 0; fi
-  "$PYTHON_BIN" "$SKILL_DIR/scripts/verify.py" "$1"
+  "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --verify "$1"
 }
 existing_ok() {
   [[ "$DEMO" == 0 ]] || return 1
@@ -247,14 +263,21 @@ PY
   fi
 }
 
-banner "literature-to-zotero 环境向导"
+_clear
+printf '\n%s%s  把论文和阅读笔记放进 Zotero%s\n\n' "$BOLD" "$BLUE" "$RESET"
+say '工具由安装器准备；你只需要登录账号，复制网页上的授权码。'
+say '第一次主要连接两个账号。暂时没有也可以跳过，之后继续。'
+note '输入授权码时屏幕不会显示字符，这是正常的。Ctrl-C 可退出，已保存内容会保留。'
+if [[ "$ADVANCED" == 1 ]]; then note '已打开更多设置：检索来源、电脑同步、浏览器全文。'; fi
+pause '按回车开始'
+
 if [[ "$DEMO" == 1 ]]; then
   warn '演示模式：不安装软件、不打开网页、不连接服务。配置仅写入临时目录，退出即删除。'
   note '密钥直接回车使用示例；请勿输入真实密钥。'
   pause '回车开始体验'
 fi
 
-stage "检查 Python 与 Poppler"
+stage "准备工具和 AI 助手"
 if [[ "$DEMO" == 1 ]]; then
   bash "$SKILL_DIR/scripts/bootstrap.sh" --probe
   if [[ "$MODE" == --demo-missing ]]; then
@@ -268,30 +291,46 @@ else
   if [[ "$WINDOWS" == 1 ]]; then PYTHON_BIN="$(cygpath -u "$PYTHON_BIN")"; fi
   export PYTHON_BIN
 fi
-pause '依赖检查完成，回车继续'
-
-stage "安装 skill"
 if [[ "$DEMO" == 1 ]]; then
-  note '[模拟安装] 保存到固定位置，再连接 Codex / Pi / Claude Code。'
+  note '[模拟安装] 连接所选 AI 助手，工具保存到固定位置。'
 else
+  if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/install.py" --detect; then
+    say '你要在哪个 AI 助手中使用？1 = Codex，2 = Claude Code，3 = Pi'
+    while true; do
+      printf '  输入 1、2 或 3：'
+      IFS= read -r AGENT_CHOICE || { note '配置已暂停，重跑向导可继续。'; exit 130; }
+      case "$AGENT_CHOICE" in
+        1) PAPER2ZOTERO_AGENT=codex; break ;;
+        2) PAPER2ZOTERO_AGENT=claude-code; break ;;
+        3) PAPER2ZOTERO_AGENT=pi; break ;;
+        *) warn '请选择一个助手。' ;;
+      esac
+    done
+  fi
   bash "$SKILL_DIR/scripts/install-skill.sh"
 fi
-pause '回车配置账号'
+pause '准备完成，回车连接 Zotero'
 
-stage "Zotero 读写密钥"
+stage "连接 Zotero：保存你的论文"
+say 'Zotero 是保存和整理文献的工具。这一步允许助手把论文和笔记存入你的账号。'
+say '授权码相当于给这个工具的一把专用钥匙；不要填写账号密码。'
 if [[ "$GROUP_LIBRARY" == 0 ]] && existing_ok zotero-key; then
   note '✓ 已有凭据通过验证，跳过填写。'
 else
   open_url 'https://www.zotero.org/settings/keys'
-  step '创建允许目标文库读写的 key，并复制到下方；暂时没有可以直接回车。'
-  ask_secret ZOTERO_API_KEY 'Zotero key（回车保留已有值，没有则暂时跳过）：'
+  step '1. 登录 Zotero；还没有账号，可先在网页上注册。'
+  step '2. 点击 Create new private key / New Key，新建一个授权码，名称填 paper2zotero。'
+  step '3. 个人文库勾选 Allow library access、Allow notes access、Allow write access，然后保存。'
+  if [[ "$GROUP_LIBRARY" == 1 ]]; then step '你选择了群组文库：还需要允许目标群组的读取和写入。'; fi
+  step '4. 复制刚生成的 Key，粘贴到下方。'
+  ask_secret ZOTERO_API_KEY '粘贴 Zotero 授权码（回车保留已有值；没有则稍后再配）：'
   persist ZOTERO_API_KEY "$ZOTERO_API_KEY"
   ZOTERO_LIBRARY_TYPE="${ZOTERO_LIBRARY_TYPE:-$(_existing ZOTERO_LIBRARY_TYPE || true)}"
   ZOTERO_LIBRARY_TYPE="${ZOTERO_LIBRARY_TYPE:-user}"
   if [[ "$GROUP_LIBRARY" == 1 ]]; then ZOTERO_LIBRARY_TYPE=group; fi
   [[ "$ZOTERO_LIBRARY_TYPE" == user || "$ZOTERO_LIBRARY_TYPE" == group ]] || { warn '已有文库类型无效，请检查配置。'; exit 1; }
   persist ZOTERO_LIBRARY_TYPE "$ZOTERO_LIBRARY_TYPE"
-  if [[ "$ZOTERO_LIBRARY_TYPE" == user ]]; then note '使用个人文库（默认），无需填写文库类型。'; fi
+  if [[ "$ZOTERO_LIBRARY_TYPE" == user ]]; then note '默认保存到你自己的 Zotero。'; fi
   if [[ -n "$ZOTERO_API_KEY" ]]; then
     LIBID=''
     if [[ "$ZOTERO_LIBRARY_TYPE" == user ]]; then
@@ -304,7 +343,7 @@ else
     fi
     if [[ -n "$LIBID" ]]; then
       persist ZOTERO_LIBRARY_ID "$LIBID"
-      note "已自动取得文库 ID：$LIBID"
+      note '✓ 已自动找到你的个人文库。'
     else
       ask ZOTERO_LIBRARY_ID '未自动取得文库 ID，可填写或回车稍后配置：'
       [[ -z "$ZOTERO_LIBRARY_ID" || "$ZOTERO_LIBRARY_ID" =~ ^[0-9]+$ ]] || { warn '文库 ID 应为数字。'; exit 1; }
@@ -315,46 +354,65 @@ else
     note '已跳过 Zotero 凭据；检索仍可使用，写入文库需稍后补齐。'
   fi
 fi
-pause
+pause '按回车继续'
 
-stage "MinerU 解析凭据"
+stage "启用全文阅读：整理 PDF"
+say '这一步使用 MinerU，把论文 PDF 转成适合阅读和总结的文字，也能识别扫描页。'
+say '它是独立的在线服务，需要另一个账号；下面会打开注册和授权页面。'
+note '配置时不上传论文。以后处理时，助手会说明论文将上传到 MinerU，并取得你的许可。'
+note '暂时跳过仍可检索和保存 PDF；格式化阅读材料需要以后补齐。'
 if existing_ok mineru; then
-  note '✓ 已有 token 通过验证，跳过填写。'
+  note '✓ 已有授权通过验证，跳过填写。'
 else
   open_url 'https://mineru.net/apiManage/token'
-  step '登录后在 API 管理页面创建并复制 token。'
-  ask_secret MINERU_TOKEN 'MinerU token（回车保留已有值，没有则暂时跳过）：'
+  step '1. 登录或注册 MinerU。'
+  step '2. 在 API 管理页面创建 Token（授权码），名称可填 paper2zotero。'
+  step '3. 复制刚生成的完整授权码，粘贴到下方。'
+  note '页面上的 API / Token 是网站使用的名称，你不需要编写代码。'
+  ask_secret MINERU_TOKEN '粘贴全文阅读授权码（回车保留已有值；没有则稍后再配）：'
   persist MINERU_TOKEN "$MINERU_TOKEN"
   if [[ -n "$MINERU_TOKEN" ]]; then
-    verify_step mineru || warn 'token 尚未通过验证；可稍后重跑。'
+    verify_step mineru || warn '授权尚未通过验证；可以稍后重试。'
   else
-    note '已跳过 MinerU；全文解析需稍后补齐 token。'
+    note '已跳过；需要格式化阅读材料时，再来连接这个账号。'
   fi
 fi
-pause
+pause '按回车继续'
 
-stage "可选检索增强"
+if [[ "$ADVANCED" == 1 ]]; then
+stage "更多设置：补充检索来源"
 say '默认跳过，直接回车即可；仍可检索，部分来源覆盖或请求额度可能减少。'
 if confirm '现在填写检索增强配置'; then
-  open_url 'https://openalex.org'
-  ask_secret OPENALEX_API_KEY 'OpenAlex API key（可留空）：'
-  persist OPENALEX_API_KEY "$OPENALEX_API_KEY"
-  open_url 'https://www.semanticscholar.org/product/api'
-  ask_secret SEMANTIC_SCHOLAR_API_KEY 'Semantic Scholar API key（可留空）：'
-  persist SEMANTIC_SCHOLAR_API_KEY "$SEMANTIC_SCHOLAR_API_KEY"
-  open_url 'https://www.crossref.org/documentation/retrieve-metadata/rest-api/'
-  ask CROSSREF_MAILTO 'Crossref 联系邮箱（不是 API key；可留空）：'
-  persist CROSSREF_MAILTO "$CROSSREF_MAILTO"
-  open_url 'https://unpaywall.org/products/api'
-  ask UNPAYWALL_EMAIL 'Unpaywall 联系邮箱（启用开放全文定位；可留空）：'
-  persist UNPAYWALL_EMAIL "$UNPAYWALL_EMAIL"
+  say '这些都是额外的文献来源。没有授权码就跳过，不用现在逐个注册。'
+  if confirm '已有 OpenAlex 授权码，或需要打开申请页面'; then
+    note 'OpenAlex 提供论文题录；服务额度以账号页面为准。'
+    open_url 'https://openalex.org'
+    ask_secret OPENALEX_API_KEY 'OpenAlex 授权码（可留空）：'
+    persist OPENALEX_API_KEY "$OPENALEX_API_KEY"
+  fi
+  if confirm '已有 Semantic Scholar 授权码，或需要打开申请页面'; then
+    note 'Semantic Scholar 是另一个学术搜索服务，可补充论文与引用信息。申请可能需要等待。'
+    open_url 'https://www.semanticscholar.org/product/api'
+    ask_secret SEMANTIC_SCHOLAR_API_KEY 'Semantic Scholar 授权码（可留空）：'
+    persist SEMANTIC_SCHOLAR_API_KEY "$SEMANTIC_SCHOLAR_API_KEY"
+  fi
+  if confirm '用联系邮箱启用 Crossref 的友好访问'; then
+    note 'Crossref 提供论文题录；邮箱随查询发送给 Crossref，用于联系，不需要邮箱密码。'
+    ask CROSSREF_MAILTO '联系邮箱（可留空）：'
+    persist CROSSREF_MAILTO "$CROSSREF_MAILTO"
+  fi
+  if confirm '用联系邮箱启用 Unpaywall 免费全文查找'; then
+    note 'Unpaywall 帮助定位合法开放的全文；邮箱随查询发送给该服务。'
+    ask UNPAYWALL_EMAIL '联系邮箱（可留空）：'
+    persist UNPAYWALL_EMAIL "$UNPAYWALL_EMAIL"
+  fi
 else
   note '已跳过；已有配置保留。'
 fi
-pause
+pause '按回车继续'
 
-stage "可选：Zotero Desktop 本地同步"
-if confirm '需要在 Desktop 中自动下载并核验附件'; then
+stage "更多设置：在电脑上阅读附件"
+if confirm '现在配置电脑上的 Zotero，让附件自动下载'; then
   persist SETUP_DESKTOP 1
   if [[ "$DEMO" == 1 ]]; then
     note '[模拟] 检查/安装 Zotero Desktop 并启动。'
@@ -377,10 +435,12 @@ if confirm '需要在 Desktop 中自动下载并核验附件'; then
 else
   note '跳过本次配置；云端写入不依赖 Desktop。'
 fi
-pause
+pause '按回车继续'
 
-stage "可选：浏览器机构全文"
-if confirm '配置 Kimi 浏览器连接'; then
+stage "更多设置：通过学校或机构获取全文"
+say '如果需要在已登录的浏览器中下载论文，可以连接浏览器扩展。'
+note '只下载直接公开的全文，可以跳过。'
+if confirm '现在连接浏览器（使用 Kimi 扩展）'; then
   persist SETUP_BROWSER 1
   if [[ "$DEMO" == 1 ]]; then
     note '[模拟] 检查 daemon，缺失则安装，然后启动。'
@@ -407,18 +467,25 @@ if confirm '配置 Kimi 浏览器连接'; then
 else
   note '已跳过；可直接下载的全文不需要浏览器。'
 fi
-pause
+pause '按回车继续'
 
-stage "总检"
+fi
+
+stage "检查结果，开始使用"
 if [[ "$DEMO" == 1 ]]; then
   note '[模拟检查通过] 正式版会验证核心服务及选中的可选功能。'
   pause '回车查看演示结果'
-  finish
+  _clear
+  say '✓ 配置演示结束。'
   warn '以上结果均为模拟，不代表真实环境就绪；临时配置即将删除。'
 else
   if "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --check; then
     pause '检查通过，回车查看结果'
-    finish
+    _clear
+    say '✓ 配置完成。回到你的 AI 助手，试着说：'
+    say '“帮我找近三年 AI 心理健康干预的研究，先给我一份候选清单。”'
+    note '如果暂时找不到技能，新开一个助手会话再试。'
+    note '以后需要更多设置，可以让助手“打开文献工具的更多设置”。'
   else
     warn '部分配置尚未完成；已填写内容保留，重跑 setup 即可继续。'
     exit 1

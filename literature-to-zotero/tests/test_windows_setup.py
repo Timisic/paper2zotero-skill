@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 def environment(home):
     home.mkdir()
     env = {**os.environ, 'HOME': str(home), 'USERPROFILE': str(home),
-           'PYTHON_BIN': sys.executable, 'PYTHONUTF8': '1'}
+           'PYTHON_BIN': sys.executable, 'PYTHONUTF8': '1',
+           'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude')}
     # The virtualenv interpreter is acceptable; account credentials are never used.
     return env
 
@@ -29,7 +30,7 @@ def release(tmp_path):
 
 def run_setup(package, env, *modes):
     return subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-                           '-File', str(package / 'install/setup.ps1'), *modes],
+                           '-File', str(package / 'install/setup.ps1'), '-Agent', 'all', *modes],
                           env=env, capture_output=True, text=True, encoding='utf-8',
                           errors='replace', timeout=45)
 
@@ -47,7 +48,7 @@ def check_native_repeat_install_and_removed_download(tmp_path):
     assert len(list(backups.rglob('SKILL.md'))) == 3
     result = run_setup(package, env, '-Check')
     assert result.returncode == 1, result.stdout + result.stderr
-    assert 'MINERU_TOKEN' in result.stdout
+    assert '全文阅读材料' in result.stdout
     assert '安装已保存' in result.stdout
     shutil.rmtree(package)
     result = subprocess.run([sys.executable,
@@ -91,11 +92,12 @@ class WindowsSetupTests(unittest.TestCase):
             git = shutil.which('git.exe')
             self.assertIsNotNone(git)
             bash = Path(git).parent.parent / 'bin/bash.exe'
-            result = subprocess.run([str(bash), str(ROOT / 'install/windows-wizard.sh'),
-                                     '--demo'], env=env, input='\n' * 40, capture_output=True,
-                                    text=True, encoding='utf-8', errors='replace', timeout=20)
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn('Stage 8/8', result.stdout)
+            for extra, stage in [([], '4/4'), (['--advanced'], '7/7')]:
+                result = subprocess.run([str(bash), str(ROOT / 'install/windows-wizard.sh'),
+                                         '--demo', *extra], env=env, input='\n' * 40, capture_output=True,
+                                        text=True, encoding='utf-8', errors='replace', timeout=20)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('Stage ' + stage, result.stdout)
             self.assertFalse((Path(env['HOME']) / '.config/literature-to-zotero/env').exists())
 
     def test_agent_launch_returns_with_terminal_ready(self):
@@ -125,8 +127,8 @@ printf 'finished' > "$PAPER2ZOTERO_TEST_RESULT"
             path = Path(folder)
             source = path / 'local repository'
             (source / 'install').mkdir(parents=True)
-            (source / 'install/setup.ps1').write_text('''param([switch]$DependenciesOnly, [switch]$Check, [switch]$LaunchWizard)
-"$DependenciesOnly,$Check,$LaunchWizard" | Set-Content $env:PAPER2ZOTERO_TEST_RESULT
+            (source / 'install/setup.ps1').write_text('''param([switch]$DependenciesOnly, [switch]$Check, [switch]$LaunchWizard, [switch]$Advanced, [string]$Agent)
+"$DependenciesOnly,$Check,$LaunchWizard,$Advanced,$Agent" | Set-Content $env:PAPER2ZOTERO_TEST_RESULT
 ''', encoding='utf-8')
             def git(*args):
                 subprocess.run(['git', '-C', str(source), *args], check=True, capture_output=True)
@@ -141,10 +143,11 @@ printf 'finished' > "$PAPER2ZOTERO_TEST_RESULT"
                        GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='url.' + source.as_uri() + '.insteadOf',
                        GIT_CONFIG_VALUE_0='https://github.com/Timisic/paper2zotero-skill.git')
             command = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-                       '-File', str(ROOT / 'install/install.ps1')]
-            for mode, expected in [('-DependenciesOnly', 'True,False,False'),
-                                   ('-LaunchWizard', 'False,False,True'),
-                                   ('-Check', 'False,True,False')]:
+                       '-File', str(ROOT / 'install/install.ps1'), '-Agent', 'claude-code']
+            for mode, expected in [('-DependenciesOnly', 'True,False,False,False,claude-code'),
+                                   ('-LaunchWizard', 'False,False,True,False,claude-code'),
+                                   ('-Check', 'False,True,False,False,claude-code'),
+                                   ('-Advanced', 'False,False,False,True,claude-code')]:
                 result = subprocess.run([*command, mode], env=env, capture_output=True, timeout=25)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual(marker.read_text().strip(), expected)

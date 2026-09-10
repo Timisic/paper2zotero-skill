@@ -2,6 +2,8 @@
 # Enter Git's POSIX environment explicitly, even when launched from Explorer.
 set -euo pipefail
 export PATH="/usr/bin:/mingw64/bin:$PATH"
+# Bash and native Python must use the same profile, including Chinese names.
+if [[ -n "${USERPROFILE:-}" ]]; then export HOME="$(/usr/bin/cygpath -u "$USERPROFILE")"; fi
 if [[ -n "${PAPER2ZOTERO_PDF_BIN:-}" ]]; then
   export PATH="$(/usr/bin/cygpath -u "$PAPER2ZOTERO_PDF_BIN"):$PATH"
 fi

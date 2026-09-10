@@ -33,6 +33,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from agent_installation import installed_paths
+
 # A capability record. `detail` describes the measured state; `remediation`
 # is the human action that fixes a missing capability. Never contains secrets.
 Record = dict[str, str | bool]
@@ -40,8 +42,6 @@ Record = dict[str, str | bool]
 ZOTERO_LOCAL_API = "http://127.0.0.1:23119/api/users/0/items?limit=1"
 ZOTERO_API_BASE = "https://api.zotero.org"
 KIMI_BINARY = Path.home() / ".kimi-webbridge" / "bin" / "kimi-webbridge"
-# Agent runtimes the skill is symlinked into by scripts/install-skill.sh.
-SKILL_LINK_ROOTS = (".codex", ".pi/agent", ".claude", ".hermes")
 
 # One canonical human fix per capability (single source for install
 # knowledge, C3). The setup doctor renders `do` for a missing item; the setup
@@ -91,7 +91,7 @@ GUIDE: dict[str, dict[str, str]] = {
     "skill_links": {
         "label": "skill 安装",
         "url": "",
-        "do": "运行 scripts/install-skill.sh：自动探测本机运行时（Claude Code / Codex / Pi / Hermes 与共享的 ~/.agents/skills）并符号链接本 skill；幂等、可重复运行。",
+        "do": "重跑安装入口；用 --agent codex、--agent claude-code 或 --agent pi 指定使用的助手。Windows 对应 -Agent 参数，使用目录复制，无需符号链接权限。",
     },
 }
 
@@ -276,13 +276,7 @@ def command_available(command: str | None) -> bool:
 
 def skill_link_roots(home: Path | None = None) -> list[str]:
     """Absolute paths at which this skill is reachable from agent runtimes."""
-    base = home if home is not None else Path.home()
-    links = []
-    for root in SKILL_LINK_ROOTS:
-        candidate = base / root / "skills" / "literature-to-zotero"
-        if candidate.exists() or candidate.is_symlink():
-            links.append(str(candidate))
-    return links
+    return installed_paths(home)
 
 
 def zotero_key_access(

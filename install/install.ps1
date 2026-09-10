@@ -1,4 +1,5 @@
-param([switch]$DependenciesOnly, [switch]$Check, [switch]$LaunchWizard)
+param([switch]$DependenciesOnly, [switch]$Check, [switch]$LaunchWizard, [switch]$Advanced,
+      [ValidateSet('auto','codex','claude-code','pi','all')][string]$Agent = 'auto')
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Use the macOS/Linux installer.' }
 $repo = 'https://github.com/Timisic/paper2zotero-skill.git'
@@ -23,7 +24,8 @@ if (Test-Path -LiteralPath $checkout) {
     & git.exe clone --depth 1 --branch main $repo $checkout
 }
 if ($LASTEXITCODE -ne 0) { throw 'Repository download failed; re-run to continue.' }
-$setupArgs = @()
+$setupArgs = @('-Agent', $Agent)
+if ($Advanced) { $setupArgs += '-Advanced' }
 if ($DependenciesOnly) { $setupArgs += '-DependenciesOnly' }
 if ($Check) { $setupArgs += '-Check' }
 if ($LaunchWizard) { $setupArgs += '-LaunchWizard' }

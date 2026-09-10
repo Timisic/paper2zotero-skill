@@ -1,10 +1,13 @@
 ﻿[CmdletBinding()]
-param([switch]$Demo, [switch]$DependenciesOnly, [switch]$Check, [switch]$Group, [switch]$LaunchWizard)
+param([switch]$Demo, [switch]$DependenciesOnly, [switch]$Check, [switch]$Group, [switch]$LaunchWizard, [switch]$Advanced,
+      [ValidateSet('auto','codex','claude-code','pi','all')][string]$Agent = 'auto')
 $ErrorActionPreference = 'Stop'
 # This launcher prepares native Windows tools, then reuses the Bash Wizard UI.
 if ($env:OS -ne 'Windows_NT') { throw 'Use bash setup.sh on macOS or Linux.' }
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
 $env:PYTHONUTF8 = '1'
+$env:PAPER2ZOTERO_AGENT = $Agent
+if (([int][bool]$Demo + [int][bool]$DependenciesOnly + [int][bool]$Check) -gt 1) { throw 'Choose only one of -Demo, -DependenciesOnly or -Check.' }
 Write-Host 'System: Windows - checking installed tools first.' -ForegroundColor Cyan
 function Refresh-ToolPath {
     $env:PATH = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
@@ -53,7 +56,7 @@ function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
     # Start-Process joins its argument array into one Windows command line.
     # Quote each path explicitly; use a one-word title so it cannot become a command.
     $arguments = @('--hold', 'error', '--title', 'literature-to-zotero', '-e', '/usr/bin/bash', ('"' + $entry.Replace('\', '/') + '"')) + $WizardArgs
-    Write-Host 'Opening the eight-stage wizard in a Git Bash terminal.' -ForegroundColor Cyan
+    Write-Host '正在打开配置向导。请在新窗口填写账号授权；粘贴时可按 Shift+Insert。' -ForegroundColor Cyan
     if ($LaunchWizard) {
         # Agent tool calls must be able to return while the human enters keys.
         $startup = Join-Path ([IO.Path]::GetTempPath()) ('paper2zotero-start-' + [guid]::NewGuid().ToString('N'))
@@ -117,7 +120,8 @@ try {
     if ($Demo) { $wizardArgs += '--demo' }
     elseif ($Check) { $wizardArgs += '--check' }
     elseif ($DependenciesOnly) { $wizardArgs += '--dependencies-only' }
-    elseif ($Group) { $wizardArgs += '--group' }
+    if ($Group) { $wizardArgs += '--group' }
+    if ($Advanced) { $wizardArgs += '--advanced' }
     $result = Start-Wizard $bashPath $wizardArgs
     exit $result
 } catch {

@@ -1,6 +1,7 @@
 # Project documentation
 
 - [User guide](../README.md): capabilities, configuration and use.
+- [Setup architecture](setup-architecture.md): onboarding, installation targets and remaining platform acceptance.
 - [Agent setup instructions](../install/AGENT_SETUP.md): platform-specific installation, Wizard startup and completion checks.
 - [Architecture and domain](../CONTEXT.md): module boundaries and invariants.
 - [Agent skill](../literature-to-zotero/SKILL.md): execution instructions; its `references/` remain part of the portable skill.
@@ -20,7 +21,7 @@ Run `python3 scripts/build-distribution.py` from the repository root. The genera
 
 The distribution tests exercise installation into a temporary home, repeat installation, removal of the downloaded package, conflicting existing skills, private config updates, and incomplete setup exit codes. System package downloads and account/browser authorization still need fresh-machine acceptance on supported platforms.
 
-The setup UI uses the wizard skill template verbatim above its STAGES section. Automatic dependency work lives in `bootstrap.sh`; `--demo` follows the same Bash stages with temporary example configuration, simulated service checks, and no browser launch. Wizard stages are statically traced; interactive acceptance is left to the human.
+The setup UI uses the wizard skill template verbatim above its STAGES section. Automatic dependency work lives in `bootstrap.sh`; `--demo` follows the same Bash stages with temporary example configuration, simulated service checks, and no browser launch. Demo tests execute the basic and advanced paths with isolated settings; real account authorization remains separate acceptance.
 
 ## Windows setup validation
 
@@ -34,6 +35,6 @@ Agents use `install/install.ps1 -LaunchWizard` (or `install/setup.ps1 -LaunchWiz
 
 Run `python literature-to-zotero/tests/test_windows_setup.py -v` on Windows with Git and Poppler installed. These standard-library tests build a distribution in a Chinese/spaced directory, install twice into an isolated Chinese/spaced home, check that backups remain outside agent skill roots, remove the download, and run the installed CLI. A second test substitutes only the account wizard in the temporary package and verifies that the actual PowerShell/mintty/Bash chain provides a TTY and a working Poppler. It never reads service credentials.
 
-Additional tests traverse all eight real demo stages, verify that agent launch returns while the terminal is still working, and exercise the online download/update entry against a local Git fixture, including mode forwarding and preservation of a dirty cache. The tests use isolated homes and no account authorization.
+Additional tests traverse the basic and advanced demo stages, verify that agent launch returns while the terminal is still working, and exercise the online download/update entry against a local Git fixture, including mode forwarding and preservation of a dirty cache. The tests use isolated homes and no account authorization.
 
-Validated on this Windows machine: those native regression tests, PowerShell parsing, and real wizard startup. Still pending for full release acceptance: dependency installation on a fresh Windows 10/11 image, human credential entry and ACL read-back, optional browser/Desktop authorization, and one real PDF processing run. A missing App Installer requires the Microsoft Store step; optional Kimi Windows installation follows its product page. Preview never installs missing tools and needs Git Bash already present.
+Prior Windows validation recorded before the current onboarding revision: those native regression tests, PowerShell parsing, and real wizard startup. Still pending for full release acceptance: dependency installation on a fresh Windows 10/11 image, human credential entry and ACL read-back, optional browser/Desktop authorization, and one real PDF processing run. A missing App Installer requires the Microsoft Store step; optional Kimi Windows installation follows its product page. Preview never installs missing tools and needs Git Bash already present.

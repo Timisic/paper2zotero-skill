@@ -20,7 +20,7 @@ def test_release_survives_download_removal_and_repeat_install(tmp_path):
     assert (output / 'literature-to-zotero.zip').is_file()
     home = tmp_path / 'new home'
     home.mkdir()
-    env = {**os.environ, 'HOME': str(home), 'PYTHON_BIN': sys.executable}
+    env = {**os.environ, 'HOME': str(home), 'PYTHON_BIN': sys.executable, 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(home / '.codex')}
     command = ['bash', str(release / 'install/setup.sh'), '--dependencies-only']
     for _ in range(2):
         result = subprocess.run(command, env=env, text=True, capture_output=True)
@@ -39,7 +39,7 @@ def test_conflict_preserves_existing_skill(tmp_path):
     existing.mkdir(parents=True)
     (existing / 'mine').write_text('user content')
     result = subprocess.run([sys.executable, str(SCRIPTS / 'install.py')],
-                            env={**os.environ, 'HOME': str(tmp_path)}, capture_output=True)
+                            env={**os.environ, 'HOME': str(tmp_path), 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(tmp_path / '.codex')}, capture_output=True)
     assert result.returncode != 0
     assert (existing / 'mine').read_text() == 'user content'
     assert not (tmp_path / '.local/share/literature-to-zotero/skill').exists()
@@ -62,7 +62,7 @@ def test_config_update_private_literal_and_preserves_other_values(tmp_path, monk
 def test_noninteractive_setup_stops_without_prompting_or_writing_secrets(tmp_path):
     result = subprocess.run([sys.executable, str(SCRIPTS / 'configure.py')],
                             input='', text=True, capture_output=True,
-                            env={**os.environ, 'HOME': str(tmp_path)}, timeout=5)
+                            env={**os.environ, 'HOME': str(tmp_path), 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(tmp_path / '.codex')}, timeout=5)
     assert result.returncode == 2
     assert not (tmp_path / '.config/literature-to-zotero/env').exists()
 
@@ -75,37 +75,39 @@ def test_requested_optional_feature_failure_is_not_ready(tmp_path, monkeypatch, 
     config = tmp_path / 'env'
     config.write_text('SETUP_BROWSER=1\n')
     monkeypatch.setattr(module.credentials, 'SKILL_ENV_FILE', config)
-    monkeypatch.setattr(module.shutil, 'which', lambda _: '/fake/pdftotext')
+    monkeypatch.setattr(module.agent_installation, 'installation_ok', lambda _: True)
+    monkeypatch.setattr(module.agent_installation, 'installed_paths', lambda **_: ['/fake/skill'])
     monkeypatch.setattr(module.subprocess, 'run', lambda command, **kwargs:
                         subprocess.CompletedProcess(command, 1 if command[-1] == 'kimi' else 0,
-                                                    '{"ok": false}', ''))
+                                                    '{"ok": false}' if command[-1] == 'kimi' else '{"ok": true}', ''))
     assert module.check() == 1
-    assert '待完成 Kimi' in capsys.readouterr().out
+    assert '待完成 浏览器获取全文' in capsys.readouterr().out
 
 
 def test_wizard_keeps_template_library_and_isolates_demo():
     import hashlib
     wizard = (SCRIPTS / 'setup-wizard.sh').read_text()
-    library = wizard.split('TOTAL_STAGES=8\n')[0]
+    library = wizard.split('TOTAL_STAGES=4\n')[0]
     assert hashlib.sha256(library.encode()).hexdigest() == 'c9459b25a3584a9117a0a946843e07c7754b03e8e0b84d49dd69d3c67f773616'
     assert 'ENV_FILE="$DEMO_DIR/env"' in wizard
     assert "trap 'rm -rf \"$DEMO_DIR\"' EXIT" in wizard
     assert 'open_url() { note "[模拟打开网页] $1"; }' in wizard
     assert 'bootstrap.sh" --probe' in wizard
-    assert wizard.count('\nstage "') == 8
+    assert wizard.count('\nstage "') == 7
 
 
 def test_windows_install_uses_managed_copies_without_symlink_permission(tmp_path):
     code = '''import runpy, sys
+sys.path.insert(0, str(__import__('pathlib').Path(sys.argv[1]).parent))
 from pathlib import Path
 module = runpy.run_path(sys.argv[1])
 install = module['install']
 install.__globals__['WINDOWS'] = True
-install()
-install()
+install('codex')
+install('codex')
 '''
     result = subprocess.run([sys.executable, '-c', code, str(SCRIPTS / 'install.py')],
-                            env={**os.environ, 'HOME': str(tmp_path)}, capture_output=True, text=True)
+                            env={**os.environ, 'HOME': str(tmp_path), 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(tmp_path / '.codex')}, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     skill = tmp_path / '.codex/skills/literature-to-zotero'
     assert not skill.is_symlink()
