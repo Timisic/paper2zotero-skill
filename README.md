@@ -39,7 +39,7 @@ curl -fsSL https://raw.githubusercontent.com/Timisic/paper2zotero-skill/main/ins
 
 已经下载仓库：Windows 双击 `install/setup.cmd`；macOS/Linux 运行 `bash install/setup.sh`。
 
-以后可让助手“继续文献工具的配置”或“打开文献工具的更多设置”。[安装帮助](install/HELP.md)包含 Windows 操作说明、预览入口和常见问题。
+以后可让助手“继续文献工具的配置”或“打开文献工具的更多设置”。[安装与使用帮助](install/HELP.md)包含 Windows 操作说明、数据流向和常见问题。
 
 </details>
 

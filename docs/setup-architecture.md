@@ -1,35 +1,29 @@
 # Setup architecture
 
-The user-facing interface is one request to an agent and four wizard stages. The human supplies account authorization; the installer supplies operating-system and agent-specific behavior. Additional search providers, Desktop and browser settings are disclosed through `--advanced`, and never expanded in the default flow.
+The default setup has four stages: prepare tools, connect Zotero, enable full-text reading, and check the result. Extra search providers, Desktop sync and browser access are available through `--advanced`. Platform commands and completion criteria live in [AGENT_SETUP.md](../install/AGENT_SETUP.md); human instructions live in [HELP.md](../install/HELP.md).
+
+## Ownership
+
+Paths below are relative to the repository root.
 
 | Owner | Responsibility |
 | --- | --- |
-| `README.md`, `install/HELP.md` | User purpose, one-sentence entry, recovery and familiar-language help |
-| `install/AGENT_SETUP.md` | Agent target, platform commands, terminal handoff, precise completion evidence |
-| `install/setup.ps1`, `scripts/bootstrap.sh` | Native system tools and verified executable paths |
-| `scripts/agent_installation.py`, `scripts/install.py` | One destination map, targeted installation, conflict preservation and runtime availability |
-| `scripts/setup-wizard.sh` | Human sequence and account-specific instructions, using the existing terminal template |
-| `scripts/configure.py` | Private configuration writes and a human-readable completion report |
-| `scripts/credentials.py`, `scripts/capability.py` | Credential resolution, service probes and capability semantics |
+| `install/setup.ps1`, `literature-to-zotero/scripts/bootstrap.sh` | Prepare native tools and save their verified paths |
+| `literature-to-zotero/scripts/agent_installation.py`, `install.py` in the same directory | Select agent destinations, install runtime files and preserve conflicts |
+| `literature-to-zotero/scripts/setup-wizard.sh` | Human steps using the existing terminal template |
+| `literature-to-zotero/scripts/configure.py` | Atomic UTF-8 configuration writes and completion checks |
+| `literature-to-zotero/scripts/credentials.py`, `capability.py` in the same directory | Resolve credentials and judge service capabilities |
 
-Both installation and completion checks use the same target definitions. `auto` detects existing configuration directories; explicit agent parameters avoid guessing from the agent's shell. A Claude Code installation does not require an invented Claude YAML counterpart to `agents/openai.yaml`: the common `SKILL.md` is the execution contract. Externally managed skill directories remain protected.
+Installation and verification share agent destinations. Explicit targets avoid installing into another assistant merely because its directory exists. Managed copies are used on Windows; links are used on macOS/Linux. Independent installations are preserved. Updating several runtime copies is not transactional: a mid-copy filesystem failure may require rerunning setup, and backups remain available.
 
-Configuration writes from the real wizard use the same atomic UTF-8 writer as the Python entry point. Values arrive via stdin, retain unrelated settings and are never command arguments. Windows applies the existing ACL helper. The demo remains independent of credentials and can run without Python, using temporary example values only.
+The wizard sends configuration values to the Python writer through stdin. Empty input retains existing values; unrelated settings survive updates. Windows applies a current-user ACL. Demo mode uses a temporary example configuration and simulated services, so it can run without account access or Python.
 
-Windows uses native tools and Git Bash for the established wizard UI. The selected Python and PDF-tool directory are both saved: a later Claude Code Git Bash session must not accidentally select Git's bundled Xpdf instead of the verified Poppler. Shell and PowerShell runtime launchers restore those paths. This keeps per-paper commands independent of shell profiles and the original downloaded repository.
+## Windows constraints
 
-## Scope and verification
+PowerShell prepares native Python, Poppler and Git Bash. Interactive setup runs in a mintty terminal; check and dependency-only modes stay with the caller. A temporary marker confirms that the wizard has a terminal and can start, not that account setup is complete.
 
-This change keeps the existing paper-processing modules and consent/recovery rules. It does not replace the wizard with a new GUI or introduce a second service-configuration system. The legacy `setup.py` remains a developer diagnostic, since its global checklist includes integrations that the core workflow does not require.
+Bash and native Python use the same user profile. Both the Python executable and verified PDF-tool directory are saved; Bash and PowerShell launchers restore them on later runs. This prevents Git's bundled PDF tool from taking precedence in a new Claude Code session. Preserve quoted paths, UTF-8 handling and the LF/CRLF rules in `.gitattributes`.
 
-Tests should exercise targeted installs and conflicts, repeat installs after removal of the download, basic/advanced demo navigation, literal private writes, selected optional failures, and restored tool paths. Native Windows tests cover the PowerShell/mintty/Bash chain with Chinese/spaced paths; running those tests on macOS skips them and does not establish Windows acceptance.
+## Verification
 
-Validation on macOS, 2026-09-10: 300 tests passed, 5 native Windows tests skipped; the focused setup regression suite passed again after final edits (43 tests). Mypy, Bash syntax, skill structure validation and `git diff --check` passed. Basic and advanced demos were executed with simulated services. An anonymous OpenAlex search also returned HTTP 200; that single probe is not a guarantee of ongoing service quotas.
-
-Remaining release acceptance: a fresh native Windows image, actual package downloads, human account authorization, ACL read-back, agent skill discovery in both Claude Code and Codex, and a real PDF run. Historical Windows results in the documentation do not validate this revision.
-
-## Further changes worth separating
-
-The shared persistent runtime is updated by renaming directories and retaining backups. Making the whole multi-agent update transactional would require an installation manifest and rollback across copies; current conflict preflight protects existing user directories, but does not provide transactionality under mid-copy I/O failure. This is a concrete future improvement for updater work, not a reason to add a general plugin framework to onboarding.
-
-Cross-platform download/launch logic remains in its platform adapter because package managers, path encoding and terminal ownership differ. Keep regression checks at the distributed entry points rather than extracting a generic shell abstraction solely to reduce line counts.
+Distribution tests cover repeat installation, conflicting directories, download removal, private writes and incomplete checks. Onboarding tests cover targeted installs, basic/advanced demo paths, tool-path restoration and service timeouts. Native Windows tests cover the PowerShell/mintty/Bash chain with Chinese and spaced paths. These tests do not replace fresh-system installation, human authorization or a real paper run; see the [maintenance entry](README.md#检查与打包).

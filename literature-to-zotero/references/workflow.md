@@ -19,11 +19,11 @@ python "$SKILL_DIR/scripts/preflight.py" --json --stage ingestion
 | `ingestion` | Zotero Web API key with write permission | Zotero Desktop being open |
 | `local_sync` | Zotero Desktop local API and attachment file sync | — |
 
-Searching is never gated on Zotero Desktop or its sync state. A configured token is not proof of current reachability, and a successful key probe proves account permission, not that a later upload will succeed. Use the setup doctor (`scripts/setup.py`) on first use or environment changes, not on every run.
+Searching is never gated on Zotero Desktop or its sync state. A configured token is not proof of current reachability, and a successful key probe proves account permission, not that a later upload will succeed. For initial setup or configuration repair, follow the platform-specific installation instructions linked from `SKILL.md` and finish with `configure.py --check`. The broader `setup.py` doctor is for developer diagnosis, not a gate for ordinary runs.
 
 Treat returned text containing `Error`, `Forbidden`, `Cannot perform`, or an equivalent failure as failure even when the protocol reports `is_error=false`.
 
-Markdown derivation runs through MinerU precise API (`vlm`). It needs a token (`$MINERU_TOKEN` or `~/.config/mineru/token`) and user consent to upload the PDF. When either is absent, record `markdown_unavailable` and keep the verified PDF; do not substitute another converter.
+Markdown is derived through MinerU (default model `vlm`). It needs a token resolved by `credentials.py` from the configured credential sources and user consent to upload the PDF. When either is absent, record `markdown_unavailable` and keep the verified PDF; do not substitute another converter.
 
 ## Run package
 
