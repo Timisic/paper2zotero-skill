@@ -84,6 +84,10 @@ Terminal states are `read_back_verified`, `sync_pending`, `metadata_only`, `part
 
 ## Processing
 
+The first acquisition/conversion pass can add `--check-ingestion`. It checks the configured Zotero identity/write permission once in parallel (one request, three-second socket timeout) and returns `ingestion_readiness`; this is advisory and leaves local work runnable. Redacted placeholder keys do not mask a usable key configured for the same library. Keys from a different library are not borrowed.
+
+Each stage emits timestamped start/finish events and the result includes `started_at`, `finished_at`, and per-stage `timings`. These measure scripts, not the agent's reasoning or human interaction between commands. Remote writing and conversion own separate service locks; the manifest lock covers short state commits, so one paper can record its PDF while another uploads. Same-service operations still serialize their journals.
+
 Normal path: `--stages acquire,convert` → agent writes/checks summaries once → `--stages ingest`. With PDFs already present, start at `--stages convert`; with summaries ready, start at `--stages ingest`. The combined default command remains available for recovery and early partial delivery. Routine delivery does not need an extra idempotency replay.
 
 ```bash

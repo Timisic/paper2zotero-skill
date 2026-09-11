@@ -284,6 +284,7 @@ def zotero_key_access(
     library_id: str,
     library_type: str,
     api_base_url: str = ZOTERO_API_BASE,
+    *, timeout: float = 8, attempts: int = 2,
 ) -> dict[str, bool | None]:
     """Check a Web API key directly: reachable, owns the library, can write."""
     request = urllib.request.Request(
@@ -292,13 +293,14 @@ def zotero_key_access(
     )
     result: dict[str, bool | None] = {"reachable": False, "identity_match": None, "write_permission": None}
     payload: dict[str, Any] | None = None
+    from http_client import SafeRedirect
     openers = (
-        urllib.request.build_opener(),
-        urllib.request.build_opener(urllib.request.ProxyHandler({})),
+        urllib.request.build_opener(SafeRedirect()),
+        urllib.request.build_opener(urllib.request.ProxyHandler({}), SafeRedirect()),
     )
-    for opener in openers:
+    for opener in openers[:attempts]:
         try:
-            with opener.open(request, timeout=8) as response:
+            with opener.open(request, timeout=timeout) as response:
                 payload = json.load(response)
             break
         except urllib.error.HTTPError as error:

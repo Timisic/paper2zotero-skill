@@ -116,7 +116,12 @@ def test_pdf_verification_rejects_html_and_accepts_matching_pdf(tmp_path: Path) 
     assert payload["identity_evidence"]["title_token_overlap"] >= 0.75
 
 
-def test_preflight_reports_capabilities_without_secrets(tmp_path: Path) -> None:
+def test_preflight_reports_capabilities_without_secrets(tmp_path: Path, monkeypatch) -> None:
+    # Credential precedence has its own isolated tests. This subprocess must
+    # not combine its fixture account with the developer's personal dotenv.
+    monkeypatch.setenv('ZOTERO_API_KEY', 'super-secret')
+    monkeypatch.setenv('ZOTERO_LIBRARY_ID', '123')
+    monkeypatch.setenv('ZOTERO_LIBRARY_TYPE', 'user')
     config = tmp_path / "config.toml"
     config.write_text(
         '[mcp_servers.zotero]\ncommand = "/opt/zotero-mcp"\n'
@@ -273,4 +278,3 @@ def test_preflight_treats_absent_storage_sync_pref_as_default_on(tmp_path: Path)
     ).stdout)
     assert payload["capabilities"]["zotero_sync"]["ok"] is False
     assert payload["ready"] is False
-

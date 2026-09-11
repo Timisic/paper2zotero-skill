@@ -21,6 +21,7 @@ read; the agent writes it with `summary_artifact.py`, records it with
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
 import json
@@ -40,6 +41,7 @@ import capability  # noqa: E402
 import credentials  # noqa: E402
 import mineru_parse  # noqa: E402
 import sources  # noqa: E402
+import summary_artifact  # noqa: E402
 import workflow  # noqa: E402
 import zotero_ingest  # noqa: E402
 from http_client import RequestError  # noqa: E402
@@ -74,6 +76,7 @@ class ProcessRequest:
     browser_timeout: float = 300
     acquire_timeout: float = 240
     source_lookup: bool = True
+    check_ingestion: bool = False
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> ProcessRequest:
@@ -89,6 +92,7 @@ class ProcessRequest:
             mineru_model=args.mineru_model, retry_budget=args.retry_budget,
             poll_timeout=args.poll_timeout, browser_timeout=args.browser_timeout,
             acquire_timeout=args.acquire_timeout, source_lookup=not args.no_source_lookup,
+            check_ingestion=args.check_ingestion,
         )
 
     def ingest_request(self, ids: Sequence[str]) -> zotero_ingest.IngestRequest:
@@ -155,14 +159,20 @@ def browser_channel(request: ProcessRequest) -> tuple[Any, list[str]]:
     """
     if not request.browser_command and os.environ.get("LITERATURE_BROWSER_DISABLED") == "1":
         return None, ["browser_disabled"]
-    if not request.browser_command:
-        missing = capability.stage_missing("browser_fallback",
-                                           {"kimi": capability.kimi(capability.probe_kimi())})
-        if missing:
-            return None, missing
+    missing: list[str] = []
+    checked = bool(request.browser_command)
     broken = False
+    human_pending = False
     def call(*command: str) -> tuple[int, dict[str, Any]]:
-        nonlocal broken
+        nonlocal broken, checked, human_pending
+        if human_pending:
+            return 2, {"status": "failed", "kind": "challenge_unsolved",
+                       "detail": "earlier paper awaits a human click; preserve the current browser tab and continue HTTP work"}
+        if not checked:
+            checked = True
+            missing.extend(capability.stage_missing("browser_fallback",
+                           {"kimi": capability.kimi(capability.probe_kimi())}))
+            broken = bool(missing)
         if broken:
             return 3, {"status": "failed", "kind": "browser_error",
                        "detail": "browser channel paused after an earlier error; inspect the existing session"}
@@ -174,8 +184,10 @@ def browser_channel(request: ProcessRequest) -> tuple[Any, list[str]]:
                        "detail": f"browser adapter stopped: {type(error).__name__}; inspect the existing session"}
         if result[1].get("kind") == "browser_error":
             broken = True
+        if result[1].get("kind") == "challenge_unsolved":
+            human_pending = True
         return result
-    return call, []
+    return call, missing
 
 
 def stage_acquire(request: ProcessRequest, identities: list[str], candidates: dict[str, Any]) -> dict[str, Any]:
@@ -291,7 +303,7 @@ def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, A
             workflow.Run.record(run, identity, warning="markdown_unavailable: no MinerU token")
         return {"converted": [], "failed": {}, "skipped": {**skipped, **{key: "markdown_unavailable: no MinerU token" for key in pending}}}
     try:
-        with workflow.run_lock(run):
+        with workflow.run_lock(run, "conversion"):
             result = mineru_parse.parse(request.parse_request(list(pending.values())))
     except (RequestError, ValueError, OSError) as error:
         reason = f"markdown_unavailable: {error}"
@@ -367,9 +379,40 @@ def ingest_command(request: ProcessRequest, identities: list[str]) -> list[str]:
     return command
 
 
+def ingestion_readiness(request: ProcessRequest) -> dict[str, Any]:
+    account = credentials.zotero_credentials()
+    configured = bool(account['api_key'] and account['library_id'])
+    access = None
+    if configured:
+        try:
+            access = capability.zotero_key_access(account['api_key'], account['library_id'],
+                                                 account['library_type'], request.api_base,
+                                                 timeout=3, attempts=1)
+        except (RequestError, OSError, ValueError):
+            access = {'reachable': False, 'identity_match': None, 'write_permission': None}
+    result = capability.zotero_key(configured, access)
+    print(json.dumps({'stage': 'ingestion_readiness', 'at': workflow.utc_now(), **result}),
+          file=sys.stderr, flush=True)
+    return result
+
+
 def process(request: ProcessRequest) -> dict[str, Any]:
+    # Advisory only. A refused or unreachable key does not gate local artifacts.
+    if request.check_ingestion and not request.dry_run:
+        started = time.monotonic()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            readiness = pool.submit(ingestion_readiness, request)
+            result = _process(request)
+            result['ingestion_readiness'] = readiness.result()
+            result.update(elapsed_seconds=round(time.monotonic() - started, 3), finished_at=workflow.utc_now())
+            return result
+    return _process(request)
+
+
+def _process(request: ProcessRequest) -> dict[str, Any]:
     run = request.run_dir
     started = time.monotonic()
+    started_at = workflow.utc_now()
     package = workflow.Run.open(run)
     if not package.confirmed:
         raise ValueError("candidate selection is not approved; confirm the list first")
@@ -379,6 +422,17 @@ def process(request: ProcessRequest) -> dict[str, Any]:
     candidates = package.require_candidates(identities)
     stages = list(request.stages)
     result: dict[str, Any] = {"run_dir": str(run), "stages": stages, "ids": identities}
+    timings: dict[str, float] = {}
+    def timed(stage: str, action: Any) -> Any:
+        begin = time.monotonic()
+        print(json.dumps({'stage': stage, 'status': 'started', 'at': workflow.utc_now()}),
+              file=sys.stderr, flush=True)
+        try:
+            return action()
+        finally:
+            timings[stage] = round(time.monotonic() - begin, 3)
+            print(json.dumps({'stage': stage, 'status': 'finished', 'at': workflow.utc_now(),
+                              'elapsed_seconds': timings[stage]}), file=sys.stderr, flush=True)
     if request.dry_run:
         # A preview must not download anything or upload a PDF to MinerU, so
         # dry run means the read-only validation stage and nothing else.
@@ -387,13 +441,13 @@ def process(request: ProcessRequest) -> dict[str, Any]:
         result["dry_run"] = True
 
     if "acquire" in stages:
-        result["acquire"] = stage_acquire(request, identities, candidates)
+        result["acquire"] = timed('acquire', lambda: stage_acquire(request, identities, candidates))
     if "convert" in stages:
-        result["convert"] = stage_convert(request, identities)
+        result["convert"] = timed('convert', lambda: stage_convert(request, identities))
 
     pending_summaries = summary_handoff(workflow.Run.open(run), identities, candidates)
     if "ingest" in stages:
-        result["ingest"] = stage_ingest(request, identities)
+        result["ingest"] = timed('ingest', lambda: stage_ingest(request, identities))
 
     package = workflow.Run.open(run)
     rows = package.report(identities)
@@ -412,9 +466,10 @@ def process(request: ProcessRequest) -> dict[str, Any]:
         "papers": rows,
         "pending_summaries": pending_summaries,
         "elapsed_seconds": round(time.monotonic() - started, 3),
+        "started_at": started_at, "finished_at": workflow.utc_now(), "timings": timings,
         "next_action": {
-            "awaiting_summaries": "write each pending summary from its source, save it with summary_artifact.py, "
-                                  "record it with workflow.py record-paper, then execute resume_command",
+            "awaiting_summaries": "read summary_batch_file, write each content_file from its full-text source, "
+                                  "self-check once, execute summary_batch_command, then resume_command",
             "pending": "read the ingest reason, then re-run this command on the same run once the service recovers",
             "partial": "deliver the table; re-running retries only the rows marked actionable "
                        "(a paper with no obtainable full text is finished, not waiting)",
@@ -426,6 +481,11 @@ def process(request: ProcessRequest) -> dict[str, Any]:
     if pending_summaries:
         result["resume_command"] = ingest_command(request, identities)
         result["resume_shell"] = shlex.join(result["resume_command"])
+        handoff = summary_artifact.prepare_handoff(run, pending_summaries, result['resume_command'])
+        result['summary_batch_file'] = str(handoff)
+        result['summary_batch_command'] = [sys.executable, str(SCRIPTS / 'summary_artifact.py'),
+                                            '--batch-file', str(handoff), '--provider', '<actual-agent-model>']
+    result.update(elapsed_seconds=round(time.monotonic() - started, 3), finished_at=workflow.utc_now())
     return result
 
 
@@ -440,6 +500,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--storage-root")
     parser.add_argument("--reuse-map")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--check-ingestion", action="store_true",
+                        help="Check Zotero identity/write access once in parallel; never block acquisition or conversion")
     parser.add_argument("--session", help="Kimi WebBridge session; defaults to one session per run")
     parser.add_argument("--browser-command", action="append", metavar="TOKEN",
                         help="Program speaking the browser_pdf.py acquisition protocol, one "

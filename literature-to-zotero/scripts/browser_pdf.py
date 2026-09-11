@@ -169,6 +169,12 @@ PROBE_JS = r"""
     ready: document.readyState,
     text: (document.body ? document.body.innerText : '').slice(0, 1200),
     citation_pdf_url: meta ? meta.content : null,
+    embedded_pdf_urls: [...document.querySelectorAll('iframe[src],embed[src],object[data]')]
+      .map(e => e.src || e.data).filter(u => {
+        try { const v = new URL(u, location.href);
+          return v.origin === location.origin && /(?:\/doi\/(?:pdfdirect|pdf|epdf)\/|\.pdf$)/i.test(v.pathname);
+        } catch (_) { return false; }
+      }).slice(0, 8),
     links: links.slice(0, 800),
     captcha: frames
   });
@@ -649,6 +655,18 @@ def command_capture(args: argparse.Namespace) -> int:
     if getattr(args, "current", False):
         state = read_state(args.session)
         state.update({"kind": classify_page(state), "trail": ["capture current authenticated page"]})
+        # Wiley serves an HTML PDF wrapper after successful authentication.
+        # Follow only an actually observed same-origin document, never ad/login
+        # frames or a new publisher URL guessed from the wrapper's address.
+        if state["kind"] in ("landing", "blocked"):
+            origin = urllib.parse.urlparse(str(state.get("url") or ""))
+            for target in state.get("embedded_pdf_urls", []):
+                parsed = urllib.parse.urlparse(target)
+                if (parsed.scheme in ("http", "https") and parsed.netloc == origin.netloc
+                        and parsed.scheme == origin.scheme and target != state.get("url")
+                        and PDF_HREF.search(parsed.path)):
+                    state = walk(target, args.session, args.rounds, args.settle)
+                    break
     else:
         if not args.url:
             raise BrowserError("capture requires --url or --current")

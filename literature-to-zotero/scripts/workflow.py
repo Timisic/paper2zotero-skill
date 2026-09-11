@@ -53,8 +53,8 @@ ALLOWED_TRANSITIONS: dict[PaperState, set[PaperState]] = {
     # Acquisition verifies the PDF against the candidate's own metadata, so a
     # confirmed paper may go straight to an identity-checked source PDF.
     PaperState.SELECTED: {PaperState.METADATA_VERIFIED, PaperState.PDF_ACQUIRED,
-                          PaperState.METADATA_ONLY, PaperState.FAILED},
-    PaperState.METADATA_VERIFIED: {PaperState.PDF_ACQUIRED, PaperState.METADATA_ONLY, PaperState.FAILED},
+                          PaperState.METADATA_ONLY, PaperState.PARTIAL, PaperState.FAILED},
+    PaperState.METADATA_VERIFIED: {PaperState.PDF_ACQUIRED, PaperState.METADATA_ONLY, PaperState.PARTIAL, PaperState.FAILED},
     PaperState.PDF_ACQUIRED: {
         PaperState.MARKDOWN_DERIVED, PaperState.SUMMARY_GENERATED, PaperState.ZOTERO_WRITTEN,
         PaperState.PARTIAL, PaperState.FAILED,
@@ -79,9 +79,11 @@ ALLOWED_TRANSITIONS: dict[PaperState, set[PaperState]] = {
 
 
 @contextmanager
-def run_lock(run: Path) -> Iterator[None]:
+def run_lock(run: Path, name: str = "workflow") -> Iterator[None]:
     import fcntl
-    with (run / '.workflow.lock').open('a') as lock:
+    if name not in {"workflow", "zotero", "conversion"}:
+        raise ValueError("unknown run lock")
+    with (run / f'.{name}.lock').open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:

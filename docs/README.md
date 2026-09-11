@@ -31,3 +31,5 @@ python3 scripts/build-distribution.py --output <新的输出目录>
 打包只包含首页、`install/` 和运行 skill；本目录、测试和本地运行数据不进入安装包。`literature-to-zotero/references/` 是 Agent 执行所需的材料，随 skill 分发。
 
 Windows 原生测试需在装有 Python、Git 和 Poppler 的 Windows 上运行：`python literature-to-zotero/tests/test_windows_setup.py -v`。其他系统上的跳过结果不算 Windows 验收。新系统安装、账号授权、客户端发现技能和真实论文处理，需要分别验证。
+
+批处理性能回归集中在 `tests/test_session_bottlenecks.py`：占位凭据及账号边界、PDF 包装页恢复、批内一次扫描、上传期间登记其他论文、总结批量交接与来源变化保护。配合 `test_write_cost.py` 保留附件读回与重试去重约束；请求数和本地模拟测试不等同于真实网络的十分钟完成保证。

@@ -21,6 +21,16 @@ Correct only the concrete errors found in that read-back, then package and recor
 
 ## Save and continue
 
+For a batch, open `summary_batch_file`. Its `reading` outline gives the Markdown section lines and the end of the main text; appendices and references remain in the original source for specific checks. Write each summary body to its `content_file`, then run:
+
+```bash
+python "$SKILL_DIR/scripts/summary_artifact.py" --batch-file <summary_batch_file> --provider <actual-agent-model>
+```
+
+This validates selection and unchanged full-text hashes before saving, records all summaries under one short run lock, preserves differing existing summaries, and returns the original `resume_command` with collection/storage options. An identical retry does not rewind delivered papers. A missing body or changed source fails before saving summaries. The handoff stays in the run, so interruption needs no reconstructed paths or per-paper registration commands.
+
+The single-paper entry remains available for an individual correction or a PDF-based summary when the chosen reading basis differs from the handoff:
+
 Use the paths and source basis from `pending_summaries`. Save a body file and run:
 
 ```bash

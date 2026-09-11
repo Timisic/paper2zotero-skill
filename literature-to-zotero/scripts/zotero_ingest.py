@@ -18,7 +18,7 @@ import urllib.parse
 import credentials
 import paper_artifacts
 from http_client import Client, RequestError
-from workflow import Paper, Run, read_json, utc_now, write_json
+from workflow import Paper, Run, read_json, run_lock, utc_now, write_json
 
 
 def doi(value: str | None) -> str:
@@ -77,6 +77,8 @@ class Writer:
         self.base = f"{api_base.rstrip('/')}/{account['library_type']}s/{account['library_id']}"
         self.headers = {'Zotero-API-Key': account['api_key'], 'Zotero-API-Version': '3'}
         self.path = run / 'zotero-state.json'
+        self.inventory: list[dict[str, Any]] | None = None
+        self.doi_index: dict[str, list[dict[str, Any]]] = {}
         self.state = read_json(self.path) if self.path.exists() else {'operations': {}, 'papers': {}}
         if self.state.get('library', self.base) != self.base:
             raise ValueError('run is bound to another Zotero library')
@@ -170,18 +172,22 @@ class Writer:
                 raise ValueError('saved parent was deleted; explicit reconciliation required')
             return str(saved['key']), item
         data = item_data(candidate)
-        matches = []
-        for item in self.all('/items'):
-            other = item.get('data', {})
-            if other.get('itemType') in ('attachment', 'note'):
-                continue
-            if same_work(data, other):
-                matches.append(item['key'])
+        if self.inventory is None:
+            self.inventory = [item for item in self.all('/items')
+                              if item.get('data', {}).get('itemType') not in ('attachment', 'note')]
+            for item in self.inventory:
+                self.doi_index.setdefault(doi(item.get('data', {}).get('DOI')), []).append(item)
+        candidates = self.doi_index.get(data['DOI'], []) if data.get('DOI') else self.inventory
+        matches = [item['key'] for item in candidates if same_work(data, item.get('data', {}))]
         if len(matches) > 1:
             raise ValueError('multiple DOI matches; resolve existing duplicates before writing')
         if not data.get('DOI') and (not data.get('date') or not data.get('creators')):
             raise ValueError('paper without DOI needs title, year and first author for identity matching')
         key = matches[0] if matches else self.create('parent:' + identity, 'items', data)
+        if not matches:
+            created = {'key': key, 'data': data}
+            self.inventory.append(created)
+            self.doi_index.setdefault(doi(data.get('DOI')), []).append(created)
         saved['key'] = key
         self.save()
         return str(key), None
@@ -451,6 +457,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def artifact_snapshot(paper: Paper) -> dict[str, tuple[str, str]]:
+    return {field: (str(path), hashlib.sha256(path.read_bytes()).hexdigest())
+            for field in Paper.ARTIFACTS if (path := paper.artifact(field)) is not None}
+
+
 def ingest(request: IngestRequest) -> dict[str, Any]:
     """Write the requested papers and return one structured result.
 
@@ -477,7 +488,10 @@ def ingest(request: IngestRequest) -> dict[str, Any]:
     account = credentials.zotero_credentials()
     if not account['api_key'] or not account['library_id']:
         raise ValueError('Zotero credentials missing')
-    with Run.locked(run) as package:
+    # One remote writer owns its journal, but HTTP never owns the manifest
+    # lock: acquisition/conversion of other papers can commit while we wait.
+    with run_lock(run, "zotero"):
+        package = Run.open(run)
         package.require_confirmed()
         writer = Writer(run, account, request.api_base, request.retry_budget)
         if request.reuse_map:
@@ -494,12 +508,18 @@ def ingest(request: IngestRequest) -> dict[str, Any]:
                 writer.state['papers'][identity]['key'] = key
             writer.save()
         collection = writer.collection(request.collection_key, request.collection_name)
-        package.collection = collection
+        with Run.locked(run) as latest:
+            latest.collection = collection
+            latest.save()
         errors, pending = 0, 0
-        for paper in package.papers(identities):
-            identity = paper.id
+        for identity in identities:
             print(json.dumps({'paper': identity, 'stage': 'zotero'}), file=sys.stderr, flush=True)
             try:
+                package = Run.open(run)
+                package.require_confirmed()
+                package.resolve_ids([identity])
+                paper = package.paper(identity)
+                before = artifact_snapshot(paper)
                 validate_artifacts(candidates[identity], paper)
                 key, existing = writer.parent(candidates[identity])
                 writer.file_into(key, collection, candidates[identity], existing)
@@ -507,9 +527,16 @@ def ingest(request: IngestRequest) -> dict[str, Any]:
                 # The writer's read-back evidence is the authority for a state
                 # it just proved, so it is recorded directly rather than
                 # re-derived from a transition rule.
-                paper.record['state'] = state
-                paper.record['zotero'] = writer.state['papers'][identity]
-                package.save()
+                with Run.locked(run) as latest:
+                    latest.resolve_ids([identity])
+                    current = latest.paper(identity)
+                    if artifact_snapshot(current) != before:
+                        # Keep the new artifact pending; this read-back only
+                        # describes the snapshot uploaded above.
+                        raise ValueError('paper artifacts changed during upload; resume to write the new artifacts')
+                    current.record['state'] = state
+                    current.record['zotero'] = writer.state['papers'][identity]
+                    latest.save()
                 if state in ('sync_pending', 'partial'):
                     pending += 1
             except (RequestError, ValueError) as error:
@@ -522,7 +549,6 @@ def ingest(request: IngestRequest) -> dict[str, Any]:
                 if isinstance(error, RequestError) and error.kind not in ('invalid_request', 'not_found', 'conflict'):
                     break
             writer.save()
-        package.save()
         status = 'pending' if errors else ('partial' if pending else 'complete')
         return {'status': status, 'collection': collection, 'ids': identities,
                 'errors': errors, 'incomplete': pending,

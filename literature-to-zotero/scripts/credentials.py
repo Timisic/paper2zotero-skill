@@ -114,6 +114,16 @@ def _claude_zotero_env() -> dict[str, str]:
     return merged
 
 
+def usable_secret(value: str) -> bool:
+    """Reject empty/redacted setup values without prescribing a token format."""
+    token = value.strip()
+    return bool(token and not (len(token) <= 3 and not token.isalnum())
+                and set(token) - set("*xX.•…") and token.casefold() not in {
+        "<redacted>", "[redacted]", "redacted", "your-api-key", "your_api_key",
+        "replace-me", "replace_me", "changeme", "<api_key>", "<api-key>",
+    })
+
+
 def zotero_credentials(explicit_codex_config: str | Path | None = None) -> dict[str, str]:
     """Resolve Zotero Web API credentials across runtimes.
 
@@ -127,6 +137,10 @@ def zotero_credentials(explicit_codex_config: str | Path | None = None) -> dict[
         "library_id": os.environ.get("ZOTERO_LIBRARY_ID", ""),
         "library_type": os.environ.get("ZOTERO_LIBRARY_TYPE", ""),
     }
+    # A redacted value is not a credential. Retain the selected account while
+    # looking for a usable key, so fallback never borrows another library's key.
+    if not usable_secret(resolved["api_key"]):
+        resolved["api_key"] = ""
     layers: list[dict[str, str]] = []
     skill_env = _skill_env()
     skill_keys = {k: v for k, v in skill_env.items() if k.startswith("ZOTERO_")}
@@ -142,9 +156,18 @@ def zotero_credentials(explicit_codex_config: str | Path | None = None) -> dict[
         layers.append(_claude_zotero_env())
     env_names = {"api_key": "ZOTERO_API_KEY", "library_id": "ZOTERO_LIBRARY_ID", "library_type": "ZOTERO_LIBRARY_TYPE"}
     for layer in layers:
+        layer_id = layer.get("ZOTERO_LIBRARY_ID", layer.get("library_id", ""))
+        layer_type = layer.get("ZOTERO_LIBRARY_TYPE", layer.get("library_type", "")) or "user"
+        account_matches = ((not resolved["library_id"] or layer_id == resolved["library_id"])
+                           and (not resolved["library_type"] or layer_type == resolved["library_type"]))
         for key, env_name in env_names.items():
             if not resolved[key]:
-                resolved[key] = layer.get(key, "") or layer.get(env_name, "")
+                value = layer.get(key, "") or layer.get(env_name, "")
+                if key == "api_key" and (not usable_secret(value) or not account_matches):
+                    continue
+                if key == "library_type" and not account_matches:
+                    continue
+                resolved[key] = value
     if resolved["library_type"] not in {"user", "group"}:
         resolved["library_type"] = "user"
     return resolved
