@@ -13,6 +13,8 @@ from typing import Any
 
 from workflow import Run, read_json, write_json
 
+TEMPLATE_VERSION = "4"
+
 
 def render(content: str, provider: str, version: str, basis: str) -> str:
     return ("# Core Summary\n\n" f"- provider: `{provider}`\n"
@@ -77,7 +79,9 @@ def save_batch(batch_file: Path, provider: str) -> dict[str, Any]:
             raise ValueError('batch summary must target summary.md')
         if paper.summary and paper.summary.resolve() != output:
             raise ValueError('existing summary uses another path; preserve it')
-        rendered = render(content, provider, '3', basis)
+        # A saved handoff keeps its original contract when resumed after an update.
+        version = str(entry.get('template_version', TEMPLATE_VERSION))
+        rendered = render(content, provider, version, basis)
         if output.exists() and output.read_text(encoding='utf-8') != rendered:
             raise ValueError('existing summary differs; preserve it and request an explicit replacement')
         prepared.append((entry, output, rendered))
@@ -116,7 +120,7 @@ def main() -> None:
     parser.add_argument("--content-file")
     parser.add_argument("--output")
     parser.add_argument("--provider", required=True)
-    parser.add_argument("--template-version", default="3")
+    parser.add_argument("--template-version", default=TEMPLATE_VERSION)
     parser.add_argument("--source-basis", choices=("markdown", "pdf"))
     args = parser.parse_args()
 

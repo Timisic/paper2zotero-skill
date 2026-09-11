@@ -345,7 +345,9 @@ def summary_handoff(package: workflow.Run, identities: list[str],
             "source": str(source),
             "source_basis": "markdown" if paper.markdown else "pdf",
             "instructions": str(SCRIPTS.parent / "references" / "paper-summary.md"),
-            "template_version": "3",
+            "template_version": summary_artifact.TEMPLATE_VERSION,
+            "language_policy": "follow the paper's main language unless the user requests another language",
+            "paper_language": candidates.get(paper.id, {}).get("language"),
             "output": str(package.directory / "papers" / safe_name(paper.id) / "summary.md"),
         })
     return handoff

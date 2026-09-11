@@ -33,7 +33,7 @@ Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Determini
 - **Source PDF**: the original downloaded/provided paper, distinct from browser printouts, derived text and generated notes.
 - **Verification**: `verified` when identity matches; `rejected` when bytes or identity are wrong; `unverified` when identity cannot be established. Unreadable is not the same as wrong.
 - **Derived Markdown**: MinerU's reading representation, with extraction limitations; it does not replace the source PDF.
-- **Summary**: approximately 1,000 Chinese characters by default, with central findings, a key limitation and grounded takeaways. One explicit draft read-back checks measurement and inference boundaries before packaging. Artifact completion does not certify interpretation quality.
+- **Summary**: a full-text analysis in the paper's language by default, covering task, challenges, insights/inspiration, novelty, potential flaws and motivation without a fixed length. One explicit draft read-back checks measurement and inference boundaries before packaging. Artifact completion does not certify interpretation quality.
 - **Run package**: resumable local evidence for one request—candidates, decisions, artifacts, checkpoints and per-paper state.
 - **Summary handoff**: full-text source/basis and output instructions returned by processing; an internal step in already-authorized work.
 - **Access wall**: entitlement, anti-bot challenge or network reachability, each with a different remedy.

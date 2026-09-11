@@ -1,23 +1,54 @@
-# Paper summary — template version 3
+# Paper analysis — template version 4
 
-Write a useful Chinese summary of **about 1,000 characters**. Roughly 800–1,200 is a guide, not a quota to count against; follow a different user request. Explain the paper clearly and add one or two useful insights, rather than producing a miniature peer review.
+Read the verified full text and produce a structured Markdown analysis from first principles: reconstruct the problem, assumptions, mechanisms and evidence. Write in the paper's main language unless the user requests another language; use the full text to resolve missing or incorrect language metadata. Keep the headings below. There is no word or character limit: use the detail needed to explain the argument, without greetings, praise or repeated conclusions.
 
-## Read, write, check once
+## Read and ground the analysis
 
-Read the main text, focusing on question, method, results and discussion. References, appendices and the original PDF are for questions that actually affect the summary. An abstract alone is insufficient. When a table is unclear, check the relevant part or omit the number; do not reconstruct every table or inspect every PDF page.
+Read the main text, including methods, results and discussion. Consult a figure, table, appendix or cited source when it changes a substantive conclusion. An abstract is insufficient. Cite section, page, figure or table locations for central claims. Separate the authors' stated reasoning and measured findings from your reconstruction and proposed research directions. If the paper does not report its inspiration, identify a plausible reconstruction explicitly; do not present it as the authors' actual discovery history.
 
-Use a few natural headings or paragraphs:
+## Output structure
 
-- **Question and approach:** the problem, design/sample and key comparison. Keep a model benchmark distinct from a clinical or user study.
-- **Main findings:** two or three central results, with only the numbers needed to understand them, plus the most important limitation. No exhaustive statistics or caveat list.
-- **My takeaway:** one or two paper-specific insights, connecting a finding to its interpretation and practical value or a new question. Clearly mark your inference. A full experimental proposal, falsification plan or cross-paper synthesis is optional, not a required slot.
+### 1. Task
 
-Add a few real section/table locations where useful. Write the body draft, then read it once against the relevant source passages before creating the final summary artifact:
+Define the problem as precisely as the evidence permits: inputs, outputs or decisions, target outcome/objective, constraints and assumptions. For an intervention study, specify population, intervention, comparator, outcomes and the effect being estimated. Use notation or equations where they clarify the task; do not invent an optimization objective or causal model the study never establishes.
 
-- For each key number, check what was measured, its denominator and time window. A total across a study is not the cost of completing one task; two separate outcomes do not establish an efficiency or causal result. Keep descriptive differences distinct from statistical tests and coded items distinct from people.
-- For each takeaway, distinguish the observed result from your inference. Outcomes the paper never measured belong in a question or explicitly untested hypothesis, not a sentence saying the study demonstrates them. When a test finds no significant difference, say exactly that; it does not establish equivalence or that bias has been eliminated.
+### 2. Challenge
 
-Correct only the concrete errors found in that read-back, then package and record the summary. This is the existing self-check, not another review round, character quota or report. Briefly note source inconsistencies; preserve existing summaries unless asked to replace them.
+Explain what earlier approaches do and where they fail under this task's assumptions. Connect each difficulty to a mechanism, resource constraint, information gap or empirical finding. Distinguish limitations demonstrated by the paper from limitations merely asserted by its authors.
+
+### 3. Insight & Inspiration
+
+Identify the observations, theories, prior work, analogies or basic principles that motivate the approach. Label inspirations and insights so their connections can be traced. For each insight, state what the authors realized, the aspect of the problem it changes, which inspiration supports it, and why that connection addresses a challenge. Distinguish an explanatory insight from the implementation that realizes it. Mark unreported inspiration as unknown or as your reconstruction.
+
+### 4. Novelty
+
+Explain the specific architectural, methodological or strategic contribution relative to the cited baselines. For every novelty, use this exact three-block structure, filling the blocks in the note's language and retaining the brackets and arrows:
+
+`【problem addressed】 -> 【inspiring insight】 -> 【concrete design of the innovation】`
+
+Make the design operational: describe the relevant components, procedure, representation, objective, interaction or intervention strategy. Link the insight to section 3. Follow the chain with the supporting evaluation and central result, including its comparison and scope. Distinguish a proposed design, an ablation-supported contribution and a demonstrated outcome. If the contribution is empirical evidence or a design finding rather than a new architecture, describe it as such.
+
+### 5. Potential flaw
+
+Analyze three questions:
+
+- **Scope:** Which assumptions or contextual boundaries constrain the result? What would change with more dimensions, conditions, actors or constraints, and what extension might address that setting?
+- **Data and evidence:** Which relevant data properties could make the method struggle—such as noise, missingness, selection bias, scarcity, distribution shift or unreliable measurement? Explain the failure mechanism for this paper rather than listing generic risks. For non-data-driven work, examine the corresponding assumptions or evaluation evidence.
+- **Research opportunity:** Which of these difficulties is most worth investigating as a paper, and why? Formulate a testable question, explain its significance, and identify the evidence or comparison needed. Distinguish a substantive research gap from an engineering fix. Treat publishability and the proposed solution as hypotheses, not established novelty or success.
+
+### 6. Motivation
+
+Reconstruct the shortest defensible route from the task's basic requirements to the general idea, preferably as questions: “Earlier methods assume/do X; the essential requirement is Y; could we instead try Z?” Explain why Z is a reasonable, simple response to the challenge and which assumption it changes. This is a first-principles reconstruction, not a claim about the authors' private thought process.
+
+## Self-check once
+
+Check the draft against the relevant source passages before saving:
+
+- All six sections are substantive; each novelty maps a concrete problem to an insight and a specific design.
+- Key numbers retain their measure, denominator, comparison and time window. Association is not causation, a non-significant test is not equivalence, and performance while using a tool is not proof of lasting independent skill.
+- Inspirations, limitations and research proposals are labeled according to their evidence. Note material source inconsistencies; leave missing evidence missing.
+
+Correct concrete errors, then package and record the note. Completion depends on coverage and grounding, not length. Preserve existing notes unless the user requests replacement; old template versions remain readable and are not automatically regenerated.
 
 ## Save and continue
 
@@ -36,7 +67,7 @@ Use the paths and source basis from `pending_summaries`. Save a body file and ru
 ```bash
 python "$SKILL_DIR/scripts/summary_artifact.py" \
   --content-file <body.md> --output <paper-dir>/summary.md \
-  --provider <actual-agent-model> --template-version 3 --source-basis markdown
+  --provider <actual-agent-model> --template-version 4 --source-basis markdown
 python "$SKILL_DIR/scripts/workflow.py" record-paper --run-dir <run_dir> \
   --id '<candidate-id>' --state summary_generated --artifact summary=<paper-dir>/summary.md
 ```

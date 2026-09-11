@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from test_cli import SCRIPTS
+from test_cli import SCRIPTS, run_script
 import sys
 sys.path.insert(0, str(SCRIPTS))
 
@@ -155,6 +155,37 @@ def test_summary_handoff_registers_batch_and_preserves_resume_target(tmp_path):
     with pytest.raises(ValueError, match='existing summary differs'):
         save_batch(batch, 'fixture-agent')
     assert 'Changed interpretation' not in paper.summary.read_text()
+
+
+def test_new_analysis_keeps_source_language_hint_and_unbounded_body(tmp_path):
+    run, _ = run_with_pdf(tmp_path)
+    candidates = json.loads((run / 'candidates.json').read_text())
+    candidates[0]['language'] = 'en'
+    (run / 'candidates.json').write_text(json.dumps(candidates))
+    batch, handoff, first = batch_for(run)
+    entry = handoff['summaries'][0]
+    assert entry['template_version'] == '4'
+    assert entry['paper_language'] == 'en'
+    assert first['pending_summaries'][0]['language_policy'] == entry['language_policy']
+    body = '\n\n'.join('## ' + heading + '\n' + ('Evidence-grounded explanation. ' * 30)
+                       for heading in ['Task', 'Challenge', 'Insight & Inspiration', 'Novelty', 'Potential flaw', 'Motivation'])
+    Path(entry['content_file']).write_text(body)
+    result = run_script('summary_artifact.py', '--batch-file', str(batch), '--provider', 'fixture-agent')
+    assert json.loads(result.stdout)['status'] == 'summaries_recorded'
+    note = Path(entry['output']).read_text()
+    assert 'template_version: `4`' in note
+    assert note.endswith(body.strip() + '\n')
+
+
+def test_resuming_old_summary_handoff_keeps_its_template_version(tmp_path):
+    run, _ = run_with_pdf(tmp_path)
+    batch, handoff, _ = batch_for(run)
+    handoff['summaries'][0]['template_version'] = '3'
+    batch.write_text(json.dumps(handoff))
+    save_batch(batch, 'fixture-agent')
+    note = Path(handoff['summaries'][0]['output']).read_text()
+    assert 'template_version: `3`' in note
+    assert save_batch(batch, 'fixture-agent')['status'] == 'summaries_recorded'
 
 
 def test_summary_batch_refuses_changed_source_before_writing(tmp_path):

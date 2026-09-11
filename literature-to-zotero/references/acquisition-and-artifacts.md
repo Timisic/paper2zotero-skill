@@ -113,6 +113,6 @@ MinerU (`vlm`) is the only converter. Without consent or a token, record `markdo
 
 The current agent writes the note from verified full text; `summary_artifact.py` persists it with provenance. No separate summary model or API key is required.
 
-When `process_run.py` returns `pending_summaries`, read [paper-summary.md](paper-summary.md) for the version-3 concise-summary contract and save/continue commands. Each handoff supplies the source, source basis, output path and instructions. The default is about 1,000 Chinese characters: question/design, main findings, a key limitation and one or two useful insights, with one draft/self-check.
+When `process_run.py` returns `pending_summaries`, read [paper-summary.md](paper-summary.md) for the version-4 six-part analysis contract and save/continue commands. Each handoff supplies the source, source basis, output path and instructions. Notes follow the paper's language unless requested otherwise, have no fixed length, and use one draft/self-check.
 
 A readable PDF can support the note when conversion fails, with `source_basis=pdf`. Missing or unreadable full text leaves the note missing; a source abstract cannot substitute. The normal workflow includes the agent's own factual and interpretive self-check before ingestion, without an extra user gate.

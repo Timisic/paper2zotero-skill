@@ -68,7 +68,7 @@ def test_a_paper_without_a_summary_comes_back_as_an_agent_handoff(tmp_path: Path
     assert handoff[0]["source_basis"] == "pdf"
     assert handoff[0]["source"].endswith("source.pdf")
     assert Path(handoff[0]["instructions"]).is_file()
-    assert handoff[0]["template_version"] == "3"
+    assert handoff[0]["template_version"] == "4"
     assert "resume_command" in body["next_action"]
     # The PDF was still written and read back while the summary is outstanding.
     assert body["papers"][0]["pdf"] is True
