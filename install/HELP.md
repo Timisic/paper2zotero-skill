@@ -29,6 +29,21 @@ Zotero 保存你的论文和笔记；全文阅读使用 MinerU，将 PDF 转成�
 
 直接回车暂时跳过。向导会说明哪些功能还不能使用，可以先尝试找论文；服务是否可用还取决于网络和对应服务的访问额度。需要保存到 Zotero 或生成全文阅读材料时，再补齐对应账号。
 
+## 更换总结提示词
+
+可以保留默认分析方式，也可以换成自己熟悉的提示词。setup 最后会询问是否查看修改位置；这一步只显示说明，不编辑文件。
+
+修改**当前助手实际加载的 skill** 中的 `references/paper-summary.md`。官方安装器的默认位置如下，自定义安装目录以 setup 显示的绝对路径为准：
+
+| 安装方式 | 要修改的文件 |
+| --- | --- |
+| macOS / Linux | `~/.local/share/literature-to-zotero/skill/references/paper-summary.md` |
+| Windows · Codex | `%USERPROFILE%\.codex\skills\literature-to-zotero\references\paper-summary.md` |
+| Windows · Claude Code | `%USERPROFILE%\.claude\skills\literature-to-zotero\references\paper-summary.md` |
+| Windows · Pi | `%USERPROFILE%\.pi\agent\skills\literature-to-zotero\references\paper-summary.md` |
+
+用文本编辑器打开它，把前半部分的阅读分析要求替换为自己的提示词，保留 **`## Save and continue` 及之后**的保存／续跑说明。无需修改密钥或其他账号配置。保存后在新文献任务中使用；已经生成的笔记不会自动重写。更新或重装可能覆盖这个文件，请自行保留自定义提示词副本。
+
 ## 预览界面
 
 Windows 双击 `install/setup-demo.cmd`，macOS/Linux 运行 `bash install/setup.sh --demo`。这只是演示，不安装软件、不连接账号、不上传论文，也不会改变真实配置。Windows 预览需要已经安装 Git Bash。

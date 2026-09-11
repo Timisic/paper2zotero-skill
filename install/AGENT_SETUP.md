@@ -72,6 +72,8 @@ bash "$HOME/.local/share/paper2zotero-source/install/setup.sh" --agent claude-co
 
 最后请当前助手确认可以发现 `literature-to-zotero`。Claude Code 可用 `/literature-to-zotero`，Codex 可用 `$literature-to-zotero`；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。
 
+交付时简短询问用户是否想换用自己熟悉的总结提示词。若向导已询问，复用该选择，不再重复询问。需要时只给出当前助手实际加载的 skill 下 `references/paper-summary.md` 的绝对路径，以及“修改前半部分的阅读分析要求，保留 `## Save and continue` 及之后的保存／续跑说明”的方法；不打开编辑器、不修改提示词，也不新增配置项。通过 `agent_installation.installed_paths(agent=已选目标)` 定位安装目录，避免把下载仓库里的文件误报为生效文件；自定义配置目录以实际路径为准。已有笔记不自动重写，更新或重装可能覆盖自定义内容，提醒用户自行保留副本。
+
 ## 通过其他 skill 分发工具安装
 
 本仓库保留标准 `literature-to-zotero/SKILL.md` 布局。例如已有 Node.js 的用户可用：

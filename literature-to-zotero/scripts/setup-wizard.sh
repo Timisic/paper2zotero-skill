@@ -491,3 +491,28 @@ else
     exit 1
   fi
 fi
+
+say '总结提示词可以换成你更熟悉的版本，保留默认也可以直接使用。'
+if confirm '想换用自己的总结提示词？查看需要修改的文件位置'; then
+  say '需要修改的文件：'
+  if [[ "$DEMO" == 1 ]]; then
+    note '[演示路径] <当前助手的 literature-to-zotero 目录>/references/paper-summary.md'
+  else
+    "$PYTHON_BIN" - "$SKILL_DIR/scripts" "$PAPER2ZOTERO_AGENT" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from agent_installation import installed_paths
+paths = dict.fromkeys(str((Path(root) / 'references' / 'paper-summary.md').resolve())
+                      for root in installed_paths(agent=sys.argv[2]))
+for path in paths:
+    print('  ' + path)
+if not paths:
+    print('  在当前助手实际加载的 literature-to-zotero 目录中，找到 references/paper-summary.md。')
+PY
+  fi
+  step '用文本编辑器打开该 Markdown 文件，将开头的阅读分析要求换成自己的提示词。'
+  step '保留“## Save and continue”及之后的保存、续跑说明；无需修改账号配置。'
+  note '保存后在新文献任务中使用；已有笔记不会自动重写。更新或重装可能覆盖文件，请自行保留自定义提示词副本。'
+  note '这里只提供修改位置，不打开编辑器、不修改文件。'
+fi

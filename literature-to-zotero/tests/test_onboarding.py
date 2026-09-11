@@ -73,7 +73,8 @@ def test_target_verification_rejects_empty_directory_and_other_agent(tmp_path, m
 
 
 @pytest.mark.parametrize('advanced,last_stage', [(False, '4/4'), (True, '7/7')])
-def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_path, advanced, last_stage):
+@pytest.mark.parametrize('customize', [False, True])
+def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_path, advanced, last_stage, customize):
     env = environment(tmp_path)
     config = tmp_path / '.config/literature-to-zotero/env'
     config.parent.mkdir(parents=True)
@@ -82,12 +83,19 @@ def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_pa
     command = ['bash', str(ROOT / 'install/setup.sh'), '--demo', '--agent', 'claude-code']
     if advanced:
         command.append('--advanced')
-    result = subprocess.run(command, input='\n' * 50, env=env, text=True, capture_output=True, timeout=20)
+    prompt_before = (SCRIPTS.parent / 'references/paper-summary.md').read_bytes()
+    replies = ('y\n' if customize else '\n') * 50
+    result = subprocess.run(command, input=replies, env=env, text=True, capture_output=True, timeout=20)
     assert result.returncode == 0, result.stderr
     assert f'Stage {last_stage}' in result.stdout
     assert ('更多设置：补充检索来源' in result.stdout) == advanced
     assert 'private-fixture' not in result.stdout + result.stderr
     assert config.read_bytes() == before
+    assert ('[演示路径]' in result.stdout) == customize
+    if customize:
+        assert 'references/paper-summary.md' in result.stdout
+        assert 'Save and continue' in result.stdout
+    assert (SCRIPTS.parent / 'references/paper-summary.md').read_bytes() == prompt_before
     assert not (tmp_path / '.claude').exists()
 
 
