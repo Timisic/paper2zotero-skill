@@ -30,7 +30,7 @@ def release(tmp_path):
 
 def run_setup(package, env, *modes):
     return subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-                           '-File', str(package / 'install/setup.ps1'), '-Agent', 'all', *modes],
+                           '-File', str(package / 'install/setup.ps1'), '-Agent', 'all', '-Terminal', *modes],
                           env=env, capture_output=True, text=True, encoding='utf-8',
                           errors='replace', timeout=45)
 
@@ -78,6 +78,36 @@ printf 'tty-and-poppler-ok' > "$PAPER2ZOTERO_TEST_RESULT"
 
 @unittest.skipUnless(os.name == 'nt', 'native Windows launcher')
 class WindowsSetupTests(unittest.TestCase):
+    def test_default_launch_uses_native_gui_with_unicode_paths(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)
+            package = release(path)
+            env = environment(path / '用户 home')
+            marker = path / 'native-complete.txt'
+            env['PAPER2ZOTERO_TEST_RESULT'] = str(marker)
+            (package / 'literature-to-zotero/scripts/setup_gui.py').write_text('''import argparse, os, time
+from pathlib import Path
+parser = argparse.ArgumentParser()
+parser.add_argument('--demo', action='store_true')
+parser.add_argument('--agent')
+parser.add_argument('--ready-file')
+args = parser.parse_args()
+assert args.demo and args.agent == 'claude-code'
+Path(args.ready_file).write_text('ready')
+time.sleep(2)
+Path(os.environ['PAPER2ZOTERO_TEST_RESULT']).write_text('native-ok')
+''', encoding='utf-8')
+            result = subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                                     '-File', str(package / 'install/setup.ps1'), '-Demo',
+                                     '-Agent', 'claude-code', '-LaunchWizard'], env=env,
+                                    capture_output=True, text=True, encoding='utf-8', timeout=30)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('Native setup window is ready', result.stdout)
+            deadline = time.monotonic() + 10
+            while not marker.exists() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertEqual(marker.read_text(), 'native-ok')
+
     def test_repeat_install(self):
         with tempfile.TemporaryDirectory() as folder:
             check_native_repeat_install_and_removed_download(Path(folder))

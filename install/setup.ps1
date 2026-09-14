@@ -1,8 +1,8 @@
 ﻿[CmdletBinding()]
-param([switch]$Demo, [switch]$DependenciesOnly, [switch]$Check, [switch]$Group, [switch]$LaunchWizard, [switch]$Advanced,
+param([switch]$Demo, [switch]$DependenciesOnly, [switch]$Check, [switch]$Group, [switch]$LaunchWizard, [switch]$Advanced, [switch]$Terminal,
       [ValidateSet('auto','codex','claude-code','pi','all')][string]$Agent = 'auto')
 $ErrorActionPreference = 'Stop'
-# This launcher prepares native Windows tools, then reuses the Bash Wizard UI.
+# Prepare Windows tools, then open the native GUI (Bash remains a fallback).
 if ($env:OS -ne 'Windows_NT') { throw 'Use bash setup.sh on macOS or Linux.' }
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
 $env:PYTHONUTF8 = '1'
@@ -49,6 +49,36 @@ function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
     if ($Check -or $DependenciesOnly) {
         & $BashPath $entry.Replace('\', '/') @WizardArgs | Out-Host
         return $LASTEXITCODE
+    }
+    if (-not $Terminal -and -not $Advanced) {
+        $gui = Join-Path $PSScriptRoot '..\literature-to-zotero\scripts\setup_gui.py'
+        $pythonw = Join-Path (Split-Path $pythonPath) 'pythonw.exe'
+        if (-not (Test-Path -LiteralPath $pythonw)) { $pythonw = $pythonPath }
+        $guiArgs = @(('"' + $gui + '"'), '--agent', $Agent)
+        if ($Demo) { $guiArgs += '--demo' }
+        if ($Group) { $guiArgs += '--group' }
+        Write-Host '正在打开 Windows 图形向导 v2。请在输入框中按 Ctrl+V，或点击“粘贴”。' -ForegroundColor Cyan
+        if ($LaunchWizard) {
+            $startup = Join-Path ([IO.Path]::GetTempPath()) ('paper2zotero-gui-' + [guid]::NewGuid().ToString('N'))
+            $guiArgs += @('--ready-file', ('"' + $startup + '"'))
+            try {
+                $process = Start-Process -FilePath $pythonw -ArgumentList $guiArgs -PassThru
+                $deadline = [DateTime]::UtcNow.AddSeconds(15)
+                while ([DateTime]::UtcNow -lt $deadline) {
+                    if (Test-Path -LiteralPath $startup) {
+                        Write-Host 'Native setup window is ready (Windows GUI v2).' -ForegroundColor Green
+                        return 0
+                    }
+                    if ($process.HasExited) { throw '图形向导未能启动。可加 -Terminal 使用备用终端向导。' }
+                    Start-Sleep -Milliseconds 100
+                }
+                throw '图形向导启动未获确认。可加 -Terminal 使用备用终端向导。'
+            } finally {
+                Remove-Item -LiteralPath $startup -ErrorAction SilentlyContinue
+            }
+        }
+        $process = Start-Process -FilePath $pythonw -ArgumentList $guiArgs -PassThru -Wait
+        return $process.ExitCode
     }
     $gitRoot = Split-Path (Split-Path $BashPath)
     $terminal = Join-Path $gitRoot 'usr\bin\mintty.exe'
@@ -109,6 +139,7 @@ try {
     if ($Demo -or $Check) {
         if (-not $bashPath) { throw 'Git Bash is needed to display the Wizard. Run setup.cmd once first; this preview/check installed nothing.' }
         if ($Check -and -not $pythonPath) { throw 'Python 3.11+ is missing; run setup.cmd to install it.' }
+        if ($Demo -and -not $Terminal -and -not $Advanced -and -not $pythonPath) { throw '图形演示需要 Python；请先运行 setup.cmd。' }
     } else {
         if (-not $pythonPath) { Install-Tool 'Python.Python.3.13'; $pythonPath = Find-Python }
         if (-not $popplerReady) { Install-Tool 'oschwartz10612.Poppler'; $popplerReady = Test-Poppler }

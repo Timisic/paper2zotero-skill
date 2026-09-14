@@ -264,6 +264,15 @@ PY
   fi
 }
 
+open_setup_url() {
+  if [[ "$DEMO" == 0 && "$WINDOWS" == 1 && -n "${PYTHON_BIN:-}" ]]; then
+    note "打开网页：$1"
+    "$PYTHON_BIN" -c 'import os, sys; os.startfile(sys.argv[1])' "$1" 2>/dev/null || warn "浏览器未能打开，请复制这个网址到浏览器：$1"
+  else
+    open_url "$1"
+  fi
+}
+
 _clear
 printf '\n%s%s  把论文和阅读笔记放进 Zotero%s\n\n' "$BOLD" "$BLUE" "$RESET"
 say '工具由安装器准备；你只需要登录账号，复制网页上的授权码。'
@@ -318,7 +327,7 @@ say '授权码相当于给这个工具的一把专用钥匙；不要填写账号
 if [[ "$GROUP_LIBRARY" == 0 ]] && existing_ok zotero-key; then
   note '✓ 已有凭据通过验证，跳过填写。'
 else
-  open_url 'https://www.zotero.org/settings/keys'
+  open_setup_url 'https://www.zotero.org/settings/keys'
   step '1. 登录 Zotero；还没有账号，可先在网页上注册。'
   step '2. 点击 Create new private key / New Key，新建一个授权码，名称填 paper2zotero。'
   step '3. 个人文库勾选 Allow library access、Allow notes access、Allow write access，然后保存。'
@@ -376,7 +385,7 @@ note '暂时跳过仍可检索和保存 PDF；格式化阅读材料需要以后�
 if existing_ok mineru; then
   note '✓ 已有授权通过验证，跳过填写。'
 else
-  open_url 'https://mineru.net/apiManage/token'
+  open_setup_url 'https://mineru.net/apiManage/token'
   step '1. 登录或注册 MinerU。'
   step '2. 在 API 管理页面创建 Token（授权码），名称可填 paper2zotero。'
   step '3. 复制刚生成的完整授权码，粘贴到下方。'
@@ -404,13 +413,13 @@ if confirm '现在填写检索增强配置'; then
   say '这些都是额外的文献来源。没有授权码就跳过，不用现在逐个注册。'
   if confirm '已有 OpenAlex 授权码，或需要打开申请页面'; then
     note 'OpenAlex 提供论文题录；服务额度以账号页面为准。'
-    open_url 'https://openalex.org'
+    open_setup_url 'https://openalex.org'
     ask_authorization OPENALEX_API_KEY 'OpenAlex 授权码（可留空）：'
     persist OPENALEX_API_KEY "$OPENALEX_API_KEY"
   fi
   if confirm '已有 Semantic Scholar 授权码，或需要打开申请页面'; then
     note 'Semantic Scholar 是另一个学术搜索服务，可补充论文与引用信息。申请可能需要等待。'
-    open_url 'https://www.semanticscholar.org/product/api'
+    open_setup_url 'https://www.semanticscholar.org/product/api'
     ask_authorization SEMANTIC_SCHOLAR_API_KEY 'Semantic Scholar 授权码（可留空）：'
     persist SEMANTIC_SCHOLAR_API_KEY "$SEMANTIC_SCHOLAR_API_KEY"
   fi

@@ -144,7 +144,7 @@ DEMO=0
 GROUP_LIBRARY=0
 SKILL_DIR=.
 PYTHON_BIN=identity_fixture
-open_url() { :; }
+open_setup_url() { :; }
 existing_ok() { return 1; }
 pause() { :; }
 persist() { write_env "$1" "$2" >/dev/null; printf '%s\\n' "$1" >> persisted; export "$1=$2"; }

@@ -18,18 +18,29 @@ SCRIPTS = Path(__file__).resolve().parent
 
 def save(key: str, value: str) -> None:
     """Atomic, private update preserving unrelated configuration."""
-    if not value:
+    save_many({key: value})
+
+
+def save_many(values: dict[str, str]) -> None:
+    """Save an account together, securing the temporary file before replacement."""
+    values = {key: value for key, value in values.items() if value}
+    if not values:
         return
-    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+    if any(ord(c) < 32 or ord(c) == 127 for value in values.values() for c in value):
         raise ValueError('输入含控制字符，请重新粘贴完整内容')
     path = credentials.SKILL_ENV_FILE
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     lines = path.read_text(encoding='utf-8').splitlines() if path.exists() else []
-    lines = [line for line in lines if line.partition('=')[0].strip() != key]
+    lines = [line for line in lines if line.partition('=')[0].strip() not in values]
     fd, temporary = tempfile.mkstemp(dir=path.parent)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as stream:
-            stream.write('\n'.join([*lines, f'{key}={value}']) + '\n')
+            stream.write('\n'.join([*lines, *(f'{key}={value}' for key, value in values.items())]) + '\n')
+        if os.name == 'nt':
+            subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                            '-File', str(SCRIPTS / 'protect-config.ps1'),
+                            '-ConfigPath', temporary], check=True, capture_output=True, timeout=20,
+                           creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         os.replace(temporary, path)
     finally:
         Path(temporary).unlink(missing_ok=True)
@@ -128,10 +139,6 @@ def main() -> int:
     if args.setting:
         value = sys.stdin.read().removesuffix('\n')
         save(args.setting, value)
-        if os.name == 'nt' and value:
-            subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-                            '-File', str(SCRIPTS / 'protect-config.ps1'),
-                            '-ConfigPath', str(credentials.SKILL_ENV_FILE)], check=True)
         return 0
     print('请重新运行安装向导；Windows 双击 install/setup.cmd，macOS/Linux 运行 bash install/setup.sh。')
     return 2

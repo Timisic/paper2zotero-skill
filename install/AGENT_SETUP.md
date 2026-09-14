@@ -14,7 +14,7 @@
 
 ### Windows 原生环境
 
-下载官方安装器并运行。它会准备原生 Python、PDF 工具和 Git Bash，然后打开独立终端。不要自行拼接 mintty 启动命令，也不用 WSL。
+下载官方安装器并运行。它会准备原生 Python、PDF 工具和 Git Bash，然后打开 Windows 图形配置窗口。不要自行拼接 mintty 启动命令，也不用 WSL。
 
 ```powershell
 $installer = Join-Path $env:TEMP 'paper2zotero-install.ps1'
@@ -28,7 +28,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Agent claude
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<仓库绝对路径>\install\setup.ps1' -Agent claude-code -LaunchWizard
 ```
 
-`-LaunchWizard` 等待终端就绪后返回；`-DependenciesOnly` 只准备依赖和 skill。向导窗口标题为 `literature-to-zotero`，授权码可按 Ctrl+V、右键菜单“粘贴”或 Shift+Insert，收到输入显示固定星号，回车后验证连接。仅这个向导窗口映射 Ctrl+V，Ctrl+C 仍可退出。误输入会在当前步骤重新提示，个人文库 ID 自动获取失败会显示原因并提供重试。WinGet 缺失时按安装器打开的 Microsoft Store 页面补齐“应用安装程序”。后续重跑同一入口，已有有效依赖和配置会被复用。
+`-LaunchWizard` 等待图形窗口就绪后返回；`-DependenciesOnly` 只准备依赖和 skill。标题必须包含 `Windows 图形向导 v2`。输入框支持 Ctrl+V 和“粘贴”按钮，以圆点隐藏内容；点击“验证并保存”后检查授权和读写权限，成功才原子保存整个账号。个人文库 ID 自动识别，错误留在当前页，用户可以重试或跳过。`-Terminal` 保留备用终端向导；`-Advanced` 仍使用终端的更多设置。WinGet 缺失时按安装器打开的 Microsoft Store 页面补齐“应用安装程序”。
+
+发布 GitHub 不会自动更新本机已有下载或助手目录。用户报告旧文案时，检查实际启动文件、安装缓存及目标助手副本；`setup.cmd` 不负责拉取更新。更新官方干净缓存应运行 `install.ps1`；缓存有本地改动时先保留备份，不要 reset/clean 覆盖。依赖安装后确认目标助手里的 `scripts/setup_gui.py` 存在且与当前来源一致，再报告本机已更新。保留一条指向明确来源的继续配置入口。
 
 ### macOS / Debian / Ubuntu
 

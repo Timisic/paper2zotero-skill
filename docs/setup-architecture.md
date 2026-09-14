@@ -12,6 +12,7 @@ Paths below are relative to the repository root.
 | `literature-to-zotero/scripts/agent_installation.py`, `install.py` in the same directory | Select agent destinations, install runtime files and preserve conflicts |
 | `literature-to-zotero/scripts/setup-wizard.sh` | Human steps using the existing terminal template |
 | `literature-to-zotero/scripts/setup-input.sh` | Masked authorization input, control-character rejection and retry |
+| `literature-to-zotero/scripts/setup_gui.py`, `setup_connection.py` | Default Windows native wizard and account validation; background service checks, verified account saves |
 | `literature-to-zotero/scripts/configure.py` | Atomic UTF-8 configuration writes and completion checks |
 | `literature-to-zotero/scripts/credentials.py`, `capability.py` in the same directory | Resolve credentials and judge service capabilities |
 
@@ -21,7 +22,11 @@ The wizard sends configuration values to the Python writer through stdin. Empty 
 
 ## Windows constraints
 
-PowerShell prepares native Python, Poppler and Git Bash. Interactive setup runs in a mintty terminal; check and dependency-only modes stay with the caller. A temporary marker confirms that the wizard has a terminal and can start, not that account setup is complete.
+PowerShell prepares native Python, Poppler and Git Bash. Basic interactive setup launches a Tk window through pythonw.exe; check and dependency-only modes stay with the caller. `-Terminal` and advanced setup retain mintty. A temporary marker confirms that the selected UI is ready, not that account setup is complete. Both paths are tested with Chinese and spaced download paths.
+
+Native entry fields use the OS clipboard shortcuts and an explicit Paste button. Keys remain in memory until remote validation succeeds. Personal Zotero identity and write access come from one key-info response. Only the live UI accepts the result and invokes `configure.save_many`, which secures a temporary file before atomically replacing account settings. Closing during a request cannot save a late result. Windows ACL protection uses .NET Framework directly, avoiding a PS7-inherited module path breaking PS5 Set-Acl. Browser launch uses Windows URL association rather than Explorer's process exit code.
+
+The native demo has no credential discovery, account requests, installation or config writes. UI smoke tests use only dummy keys; successful demo output is never real authorization evidence. Updating GitHub does not update installed copies: setup.cmd runs its current source, while install.ps1 updates a clean canonical cache. Dirty caches must be preserved and repaired explicitly.
 
 Bash and native Python use the same user profile. Both the Python executable and verified PDF-tool directory are saved; Bash and PowerShell launchers restore them on later runs. This prevents Git's bundled PDF tool from taking precedence in a new Claude Code session. Preserve quoted paths, UTF-8 handling and the LF/CRLF rules in `.gitattributes`.
 
