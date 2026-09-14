@@ -74,7 +74,7 @@ def test_attachment_file_requires_local_storage_binary(tmp_path: Path) -> None:
     storage = tmp_path
     target = storage / "storage" / "ATTACH1"
     target.mkdir(parents=True)
-    (target / "paper.md").write_text("# Local attachment\n")
+    (target / "paper.md").write_bytes(b"# Local attachment\n")
     server = HTTPServer(("127.0.0.1", 0), AttachmentHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

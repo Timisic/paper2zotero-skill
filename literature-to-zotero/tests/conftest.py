@@ -15,7 +15,15 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import shutil
 from pathlib import Path
+
+if os.name == 'nt':
+    git = shutil.which('git.exe')
+    if git:
+        bash_bin = Path(git).parent.parent / 'bin'
+        if (bash_bin / 'bash.exe').is_file():
+            os.environ['PATH'] = str(bash_bin) + os.pathsep + os.environ.get('PATH', '')
 
 # Unspecified install paths must never resolve to the developer's assistants.
 # Individual tests may override these with their own profile, but an omitted

@@ -5,6 +5,7 @@ The setup window is only the entry point. Regression coverage must also exercise
 ## Platform contracts
 
 - `runtime_io.file_lock` excludes competing writers on Windows with byte-range locks and on POSIX with flock. Workflow locks fail promptly; shared request pacing waits for its short critical section. Closing the process releases the lock.
+- `mineru_parse.parse` owns the conversion lock, consent validation and checkpoint recovery together. CLI and pipeline callers do not need to acquire their own conversion lock. Recovery fixtures enter through this public interface and inject lost private writes at the filesystem.
 - `runtime_io.private_text` creates a private temporary file, applies the Windows user-only ACL before writing, closes it before replacement, and cleans up after failure. POSIX files retain mode 0600. Account saves and signed conversion URLs share this implementation.
 - Tool and content readers explicitly decode UTF-8. Poppler is asked for UTF-8. Missing extractor text remains eligible for the existing fallback.
 - Summary-note evidence hashes normalized UTF-8 text on both write and read-back. PDF/Markdown attachments continue to hash exact bytes. Existing CRLF summaries remain valid without rewriting already stored notes.

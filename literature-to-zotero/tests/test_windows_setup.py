@@ -44,8 +44,7 @@ def check_native_repeat_install_and_removed_download(tmp_path):
         assert result.returncode == 0, result.stdout + result.stderr
     skill_root = home / '.codex/skills'
     assert list(skill_root.rglob('SKILL.md')) == [skill_root / 'literature-to-zotero/SKILL.md']
-    backups = home / '.local/share/literature-to-zotero/backups'
-    assert len(list(backups.rglob('SKILL.md'))) == 3
+    assert not list(home.rglob('.literature-backup-*')), 'identical reinstall should not publish another copy'
     result = run_setup(package, env, '-Check')
     assert result.returncode == 1, result.stdout + result.stderr
     assert '全文阅读材料' in result.stdout

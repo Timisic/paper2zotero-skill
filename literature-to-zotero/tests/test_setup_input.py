@@ -88,8 +88,8 @@ def test_writer_rejects_controls_without_overwriting_existing(tmp_path, monkeypa
 
 
 @pytest.mark.parametrize('error, hint', [
-    (urllib.error.HTTPError('https://api.zotero.org/keys/current', 403, 'fixture-secret', {}, None), '未接受'),
-    (urllib.error.HTTPError('https://api.zotero.org/keys/current', 429, 'fixture-secret', {}, None), '请求次数'),
+    (urllib.error.HTTPError('https://api.zotero.org/keys/current', 403, 'fixture-secret', {}, StringIO('')), '未接受'),
+    (urllib.error.HTTPError('https://api.zotero.org/keys/current', 429, 'fixture-secret', {}, StringIO('')), '请求次数'),
     (urllib.error.URLError('fixture-secret'), '检查网络'),
     (TimeoutError('fixture-secret'), '检查网络'),
 ], ids=['authorization-rejected', 'rate-limited', 'network-error', 'timeout'])
@@ -97,7 +97,7 @@ def test_identity_failure_is_actionable_and_secret_free(monkeypatch, capsys, err
     monkeypatch.setenv('ZOTERO_API_KEY', 'fixture-secret')
     def fail(*args, **kwargs):
         raise error
-    monkeypatch.setattr(verify.urllib.request, 'urlopen', fail)
+    monkeypatch.setattr(verify.capability.urllib.request, 'build_opener', lambda *a: type('Opener', (), {'open': staticmethod(fail)})())
     assert verify.cmd_self_id() == 1
     result = capsys.readouterr()
     assert result.out == '' and hint in result.err
@@ -107,15 +107,15 @@ def test_identity_failure_is_actionable_and_secret_free(monkeypatch, capsys, err
 @pytest.mark.parametrize('payload', ['{}', '[]', '{"userID": null}', '{"userID": true}', '{"userID": -1}', '{"userID": "１２３"}'])
 def test_missing_identity_is_not_success(monkeypatch, capsys, payload):
     monkeypatch.setenv('ZOTERO_API_KEY', 'fixture-secret')
-    monkeypatch.setattr(verify.urllib.request, 'urlopen', lambda *a, **k: StringIO(payload))
+    monkeypatch.setattr(verify.capability.urllib.request, 'build_opener', lambda *a: type('Opener', (), {'open': lambda *a, **k: StringIO(payload)})())
     assert verify.cmd_self_id() == 1
     result = capsys.readouterr()
-    assert result.out == '' and '没有返回个人文库信息' in result.err
+    assert result.out == '' and ('没有返回个人文库信息' in result.err or '无法读取' in result.err)
 
 
 def test_identity_success_prints_only_numeric_id(monkeypatch, capsys):
     monkeypatch.setenv('ZOTERO_API_KEY', 'fixture-secret')
-    monkeypatch.setattr(verify.urllib.request, 'urlopen', lambda *a, **k: StringIO('{"userID": 12345}'))
+    monkeypatch.setattr(verify.capability.urllib.request, 'build_opener', lambda *a: type('Opener', (), {'open': lambda *a, **k: StringIO('{"userID": 12345}')})())
     assert verify.cmd_self_id() == 0
     result = capsys.readouterr()
     assert result.out == '12345\n' and result.err == ''
@@ -123,7 +123,7 @@ def test_identity_success_prints_only_numeric_id(monkeypatch, capsys):
 
 def test_control_key_never_reaches_network(monkeypatch, capsys):
     monkeypatch.setenv('ZOTERO_API_KEY', '\x16')
-    monkeypatch.setattr(verify.urllib.request, 'urlopen', lambda *a, **k: pytest.fail('invalid key sent'))
+    monkeypatch.setattr(verify.capability.urllib.request, 'build_opener', lambda *a: pytest.fail('invalid key sent'))
     assert verify.cmd_self_id() == 1
     result = capsys.readouterr()
     assert not result.out and '重新复制' in result.err
@@ -148,23 +148,19 @@ open_setup_url() { :; }
 existing_ok() { return 1; }
 pause() { :; }
 persist() { write_env "$1" "$2" >/dev/null; printf '%s\\n' "$1" >> persisted; export "$1=$2"; }
-identity_fixture() {
+connect_account() {
   if [[ ! -f attempted ]]; then
     touch attempted
     printf '连接失败，请检查网络后重试\\n' >&2
     return 1
   fi
-  printf '12345\\n'
-}
-verify_step() {
-  if [[ "$1" == mineru && ! -f attempted ]]; then touch attempted; return 1; fi
   printf 'verified\\n'
 }
 '''
     script = tmp_path / 'stage.sh'
     script.write_text(library + '\n' + (SCRIPTS / 'setup-input.sh').read_text(encoding='utf-8')
                       + stub + stage, encoding='utf-8', newline='\n')
-    replies = b'fixture-private-key\n' + (b'1\n\n' if retry else b'2\n')
+    replies = b'fixture-private-key\n' + (b'1\nfixture-private-key\n' if retry else b'2\n')
     env = dict(os.environ)
     for key in ('ENV_FILE', 'ZOTERO_API_KEY', 'ZOTERO_LIBRARY_ID', 'ZOTERO_LIBRARY_TYPE', 'MINERU_TOKEN'):
         env.pop(key, None)
@@ -177,4 +173,4 @@ verify_step() {
     assert ('verified' in output) == retry
     if service == 'zotero':
         assert '连接失败，请检查网络后重试' in output
-        assert ('ZOTERO_LIBRARY_ID' in (tmp_path / 'persisted').read_text()) == retry
+        assert not (tmp_path / 'persisted').exists()

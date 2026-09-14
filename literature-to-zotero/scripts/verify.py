@@ -26,8 +26,6 @@ import json
 import os
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -75,29 +73,10 @@ def cmd_self_id() -> int:
     if not credentials.usable_secret(key) or any(ord(c) < 32 or ord(c) == 127 for c in key):
         print('授权码没有正确填入，请重新复制并粘贴完整授权码。', file=sys.stderr)
         return 1
-    request = urllib.request.Request("https://api.zotero.org/keys/current")
-    request.add_header("Zotero-API-Key", key)
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            payload = json.load(response)
-    except urllib.error.HTTPError as exc:
-        if exc.code in (401, 403):
-            detail = 'Zotero 未接受这个授权码。请检查是否复制完整、是否已撤销，以及文库访问权限。'
-        elif exc.code == 429:
-            detail = 'Zotero 暂时限制了请求次数，请稍后重试。'
-        else:
-            detail = 'Zotero 服务暂时未能完成连接，请稍后重试。'
-        print(detail, file=sys.stderr)
-        return 1
-    except (urllib.error.URLError, TimeoutError, OSError):
-        print('暂时连不上 Zotero，请检查网络后重试；不需要重新申请授权码。', file=sys.stderr)
-        return 1
-    except (ValueError, TypeError):
-        print('Zotero 返回的信息暂时无法读取，请稍后重试。', file=sys.stderr)
-        return 1
-    user_id = payload.get('userID') if isinstance(payload, dict) else None
-    if isinstance(user_id, bool) or not str(user_id).isascii() or not str(user_id).isdigit() or int(str(user_id)) <= 0:
-        print('Zotero 没有返回个人文库信息，请稍后重试。', file=sys.stderr)
+        user_id = capability.zotero_personal_id(capability.zotero_key_info(key))
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
         return 1
     print(user_id)
     return 0

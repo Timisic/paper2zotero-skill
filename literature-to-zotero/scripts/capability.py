@@ -296,61 +296,85 @@ def skill_link_roots(home: Path | None = None) -> list[str]:
     return installed_paths(home)
 
 
-def zotero_key_access(
-    api_key: str,
-    library_id: str,
-    library_type: str,
-    api_base_url: str = ZOTERO_API_BASE,
-    *, timeout: float = 8, attempts: int = 2,
-) -> dict[str, bool | None]:
-    """Check a Web API key directly: reachable, owns the library, can write."""
-    request = urllib.request.Request(
-        f"{api_base_url.rstrip('/')}/keys/current",
-        headers={"Zotero-API-Key": api_key},
-    )
-    result: dict[str, bool | None] = {"reachable": False, "identity_match": None, "write_permission": None}
-    payload: dict[str, Any] | None = None
+class ZoteroConnectionError(ValueError):
+    """Safe connection failure; HTTP refusal differs from unknown permissions."""
+    def __init__(self, message: str, code: int | None = None):
+        super().__init__(message)
+        self.code = code
+
+
+def zotero_key_info(api_key: str, api_base_url: str = ZOTERO_API_BASE,
+                    *, timeout: float = 8, attempts: int = 2) -> dict[str, Any]:
     from http_client import SafeRedirect
-    openers = (
-        urllib.request.build_opener(SafeRedirect()),
-        urllib.request.build_opener(urllib.request.ProxyHandler({}), SafeRedirect()),
-    )
+    request = urllib.request.Request(f"{api_base_url.rstrip('/')}/keys/current",
+                                     headers={"Zotero-API-Key": api_key, "Zotero-API-Version": "3"})
+    failure = ZoteroConnectionError('暂时连不上 Zotero，请检查网络后重试；不需要重新申请授权码。')
+    openers = (urllib.request.build_opener(SafeRedirect()),
+               urllib.request.build_opener(urllib.request.ProxyHandler({}), SafeRedirect()))
     for opener in openers[:attempts]:
         try:
             with opener.open(request, timeout=timeout) as response:
                 payload = json.load(response)
-            break
+            if not isinstance(payload, dict):
+                raise ValueError('invalid account')
+            return payload
         except urllib.error.HTTPError as error:
-            result["reachable"] = True
             code = error.code
             error.close()
             if code in (401, 403):
-                result["write_permission"] = False
-                return result
+                raise ZoteroConnectionError('Zotero 未接受这个授权码，请检查是否复制完整或已被撤销。', code) from None
+            if code == 429:
+                raise ZoteroConnectionError('Zotero 暂时限制了请求次数，请稍后重试。', code) from None
+            failure = ZoteroConnectionError('Zotero 服务暂时不可用，请稍后重试。', code)
+        except (urllib.error.URLError, TimeoutError, OSError):
             continue
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-            continue
-    if payload is None:
-        return result
-    result["reachable"] = True
-    access = payload.get("access") or {}
-    if library_type == "user":
-        user_access = access.get("user") or {}
-        result["identity_match"] = str(payload.get("userID")) == str(library_id)
-        result["write_permission"] = bool(user_access.get("library") and user_access.get("write"))
+        except (ValueError, TypeError):
+            failure = ZoteroConnectionError('Zotero 返回的信息暂时无法读取，请稍后重试。')
+    raise failure
+
+
+def zotero_personal_id(payload: dict[str, Any]) -> str:
+    identity = str(payload.get('userID', ''))
+    if not identity.isascii() or not identity.isdigit() or int(identity) <= 0:
+        raise ValueError('Zotero 没有返回个人文库信息，请稍后重试。')
+    return identity
+
+
+def zotero_library_access(payload: dict[str, Any], library_id: str,
+                          library_type: str) -> dict[str, bool | None]:
+    access = payload.get('access')
+    access = access if isinstance(access, dict) else {}
+    if library_type == 'user':
+        rights = access.get('user')
+        identity = str(payload.get('userID')) == str(library_id)
+    elif library_type == 'group':
+        groups = access.get('groups')
+        groups = groups if isinstance(groups, dict) else {}
+        rights = groups.get(str(library_id)) or groups.get('all')
+        identity = bool(rights)
     else:
-        groups = access.get("groups") or {}
-        group_access = groups.get(str(library_id)) or groups.get("all") or {}
-        result["identity_match"] = bool(group_access)
-        result["write_permission"] = bool(group_access.get("library") and group_access.get("write"))
-    return result
+        rights, identity = None, False
+    rights = rights if isinstance(rights, dict) else {}
+    return {'reachable': True, 'identity_match': identity,
+            'write_permission': bool(rights.get('library') and rights.get('write'))}
+
+
+def zotero_key_access(api_key: str, library_id: str, library_type: str,
+                      api_base_url: str = ZOTERO_API_BASE, *, timeout: float = 8,
+                      attempts: int = 2) -> dict[str, bool | None]:
+    try:
+        payload = zotero_key_info(api_key, api_base_url, timeout=timeout, attempts=attempts)
+    except ZoteroConnectionError as error:
+        return {'reachable': error.code is not None, 'identity_match': None,
+                'write_permission': False if error.code in (401, 403) else None}
+    return zotero_library_access(payload, library_id, library_type)
 
 
 def zotero_key_access_via_runtime(
     command: str, api_key: str, library_id: str, library_type: str, api_base_url: str
-) -> dict[str, bool]:
+) -> dict[str, bool | None]:
     """Fall back to the zotero-mcp runtime's Python env for the same probe."""
-    result = {"reachable": False, "identity_match": False, "write_permission": False}
+    result: dict[str, bool | None] = {"reachable": False, "identity_match": None, "write_permission": None}
     try:
         setup = subprocess.run(
             [command, "setup-info"], text=True, encoding='utf-8', errors='replace', capture_output=True, timeout=15
@@ -361,38 +385,16 @@ def zotero_key_access_via_runtime(
     if not match or not Path(match.group(1).strip()).is_file():
         return result
     probe = """
-import json, os, sys, requests
-url = sys.argv[1].rstrip('/') + '/keys/current'
-response = None
-for trust_env in (True, False):
-    try:
-        session = requests.Session()
-        session.trust_env = trust_env
-        response = session.get(url, headers={'Zotero-API-Key': os.environ['ZOTERO_PREFLIGHT_KEY']}, timeout=8)
-        response.raise_for_status()
-        break
-    except requests.RequestException:
-        response = None
-if response is None:
-    print(json.dumps({'reachable': False, 'identity_match': False, 'write_permission': False}))
-    raise SystemExit
-payload = response.json()
-library_id, library_type = sys.argv[2], sys.argv[3]
-access = payload.get('access') or {}
-if library_type == 'user':
-    rights = access.get('user') or {}
-    identity = str(payload.get('userID')) == library_id
-else:
-    groups = access.get('groups') or {}
-    rights = groups.get(library_id) or groups.get('all') or {}
-    identity = bool(rights)
-print(json.dumps({'reachable': True, 'identity_match': identity, 'write_permission': bool(rights.get('library') and rights.get('write'))}))
+import json, os, sys
+sys.path.insert(0, sys.argv[4])
+from capability import zotero_key_access
+print(json.dumps(zotero_key_access(os.environ['ZOTERO_PREFLIGHT_KEY'], sys.argv[2], sys.argv[3], sys.argv[1])))
 """
     environment = dict(os.environ)
     environment["ZOTERO_PREFLIGHT_KEY"] = api_key
     try:
         completed = subprocess.run(
-            [match.group(1).strip(), "-c", probe, api_base_url, str(library_id), library_type],
+            [match.group(1).strip(), "-c", probe, api_base_url, str(library_id), library_type, str(Path(__file__).resolve().parent)],
             text=True, encoding='utf-8', errors='replace',
             capture_output=True,
             timeout=20,
@@ -403,8 +405,8 @@ print(json.dumps({'reachable': True, 'identity_match': identity, 'write_permissi
         return result
     return {
         "reachable": bool(payload.get("reachable")),
-        "identity_match": bool(payload.get("identity_match")),
-        "write_permission": bool(payload.get("write_permission")),
+        "identity_match": payload.get("identity_match"),
+        "write_permission": payload.get("write_permission"),
     }
 
 

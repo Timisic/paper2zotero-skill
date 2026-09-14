@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import pytest
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -194,6 +196,7 @@ def test_zotero_local_probe_answers_200(monkeypatch: object) -> None:
         server.shutdown()
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX executable fixture; native status covered in test_setup_connection.py')
 def test_kimi_probe_reads_daemon_status_json(tmp_path: Path) -> None:
     binary = tmp_path / "kimi-webbridge"
     binary.write_text(
@@ -220,7 +223,12 @@ def test_skill_link_roots_discovers_symlinks_under_agent_roots(tmp_path: Path, m
     home = tmp_path / "home"
     link = home / ".codex" / "skills" / "literature-to-zotero"
     link.parent.mkdir(parents=True)
-    link.symlink_to(tmp_path / "target", target_is_directory=True)
+    try:
+        link.symlink_to(tmp_path / "target", target_is_directory=True)
+    except OSError as error:
+        if os.name == 'nt' and error.winerror == 1314:
+            pytest.skip('Host lacks symlink privilege; managed-copy discovery is covered separately')
+        raise
     assert MODULE.skill_link_roots(home) == []  # A dangling link is not an installation.
     target = tmp_path / "target"
     target.mkdir()

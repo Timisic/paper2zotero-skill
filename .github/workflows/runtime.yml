@@ -42,3 +42,7 @@ jobs:
           literature-to-zotero/tests/test_full_chain.py
           literature-to-zotero/tests/test_process_run.py
           literature-to-zotero/tests/test_workflow_resume.py
+          literature-to-zotero/tests/test_managed_installation.py
+          literature-to-zotero/tests/test_setup_connection.py
+          literature-to-zotero/tests/test_setup_input.py
+          literature-to-zotero/tests/test_onboarding.py

@@ -19,8 +19,9 @@ PAGES = ('准备工具', '连接 Zotero', '启用全文阅读', '检查结果')
 
 
 class Wizard:
-    def __init__(self, root: tk.Tk, *, agent='auto', demo=False, group=False, ready_file=None, advanced=False):
-        self.root, self.demo, self.group = root, demo, group
+    def __init__(self, root: tk.Tk, *, agent='auto', demo=False, group=None, ready_file=None, advanced=False):
+        self.root, self.demo = root, demo
+        self.group, self.saved_group_id = (bool(group), '') if demo else connection.library_target(group)
         self.agent = agent
         self.page = 4 if advanced else 0
         self.extra_service = 'kimi'
@@ -161,6 +162,7 @@ class Wizard:
         if zotero and self.group:
             self.label('群组文库 ID（数字）：')
             self.group_entry = ttk.Entry(self.body, width=25)
+            self.group_entry.insert(0, self.saved_group_id)
             self.group_entry.pack(anchor='w')
             self.controls.append(self.group_entry)
         elif zotero:
@@ -212,11 +214,13 @@ class Wizard:
             # Closing the window during a request therefore cannot save later.
             if not self.demo:
                 try:
-                    configure.save_many(values)
+                    connection.save_account(values)
                 except Exception:
                     self.status.set('连接成功，但本机保存未完成。请重试；原有配置已保留。')
                     return
             self.connected.add(service)
+            if service == 'zotero' and self.group:
+                self.saved_group_id = values['ZOTERO_LIBRARY_ID']
             self.render()
             prefix = '模拟连接成功（没有保存）' if self.demo else '连接成功，已安全保存'
             self.status.set(prefix + (f'。已自动识别文库 {values["ZOTERO_LIBRARY_ID"]}。点击“下一步”继续。'
@@ -373,7 +377,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--agent', default='auto', choices=agent_installation.CHOICES)
     parser.add_argument('--demo', action='store_true')
-    parser.add_argument('--group', action='store_true')
+    parser.add_argument('--group', action='store_true', default=None)
     parser.add_argument('--advanced', action='store_true')
     parser.add_argument('--ready-file')
     args = parser.parse_args()

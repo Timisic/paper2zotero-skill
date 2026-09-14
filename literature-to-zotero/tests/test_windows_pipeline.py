@@ -15,24 +15,27 @@ import paper_artifacts
 import zotero_ingest
 from http_fixture import server
 import acquire
-import io
-import zipfile
 import configure
 import sources
 import capability
 
 
-def test_standalone_mineru_cannot_enter_an_active_pipeline_conversion(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(sys, 'argv', ['mineru_parse.py', '--pdf', str(tmp_path / 'source.pdf'),
-                                     '--run-dir', str(tmp_path)])
-    def unexpected_parse(request):
-        pytest.fail('standalone entry bypassed the active pipeline conversion lock')
-    monkeypatch.setattr(mineru_parse, 'parse', unexpected_parse)
+def test_conversion_interface_owns_mutual_exclusion(tmp_path):
+    request = mineru_parse.ParseRequest(pdfs=[tmp_path / 'source.pdf'], run_dir=tmp_path)
     with workflow.run_lock(tmp_path, 'conversion'):
-        with pytest.raises(SystemExit) as stopped:
-            mineru_parse.main()
-    assert stopped.value.code == 2
-    assert 'active' in json.loads(capsys.readouterr().out)['reason']
+        with pytest.raises(ValueError, match='active'):
+            mineru_parse.parse(request)
+
+
+def test_reordered_cross_directory_pdfs_share_the_conversion_workspace_lock(tmp_path):
+    a, b = tmp_path / 'a/source.pdf', tmp_path / 'b/source.pdf'
+    a.parent.mkdir()
+    b.parent.mkdir()
+    a.write_bytes(b'%PDF-a')
+    b.write_bytes(b'%PDF-b')
+    with workflow.run_lock(a.parent, 'conversion'):
+        with pytest.raises(ValueError, match='active'):
+            mineru_parse.parse(mineru_parse.ParseRequest(pdfs=[b, a], consent_source='message:fixture'))
 
 
 def test_run_lock_excludes_second_writer_and_releases(tmp_path):
@@ -102,40 +105,6 @@ def test_public_pdf_cookie_redirect_needs_no_browser(tmp_path):
     assert result['channel'] == 'http'
 
 
-def test_missing_private_urls_reconciles_empty_batch_and_resumes(tmp_path):
-    source = tmp_path / 'paper.pdf'
-    source.write_bytes(b'%PDF-fixture')
-    entry = {'data_id': 'file1', 'name': 'file1.pdf', 'path': str(source),
-             'sha256': hashlib.sha256(source.read_bytes()).hexdigest(), 'state': 'pending'}
-    archive = io.BytesIO()
-    with zipfile.ZipFile(archive, 'w') as z:
-        z.writestr('full.md', 'Converted fixture')
-    calls = []
-    def respond(method, path, body, headers):
-        calls.append((method, path))
-        if path.endswith('/OLD'):
-            return 200, {'code': 0, 'data': {'extract_result': [{'data_id': 'file1', 'state': 'waiting-file'}]}}, {}
-        if path == '/api/v4/file-urls/batch':
-            return 200, {'code': 0, 'data': {'batch_id': 'NEW', 'file_urls': [base + '/upload']}}, {}
-        if path.endswith('/NEW'):
-            return 200, {'code': 0, 'data': {'extract_result': [{'data_id': 'file1', 'state': 'done', 'full_zip_url': base + '/zip'}]}}, {}
-        if path == '/upload':
-            return 200, b'', {}
-        if path == '/zip':
-            return 200, archive.getvalue(), {}
-        return 404, {}, {}
-    with server(respond) as base:
-        request = mineru_parse.ParseRequest(pdfs=[source], api_base=base, output=tmp_path / 'out', poll_timeout=1)
-        batch = mineru_parse.Batch(request, tmp_path / 'mineru-fixture.json',
-                                  {'batch_id': 'OLD', 'submission': 'confirmed', 'files': [entry]}, 'fixture')
-        batch.save()
-        batch.resume({'file1'})
-    assert entry['state'] == 'done'
-    assert calls[0] == ('GET', '/api/v4/extract-results/batch/OLD')
-    assert calls.count(('POST', '/api/v4/file-urls/batch')) == 1
-    assert batch.state['reconciliations'][-1]['previous_batch_id'] == 'OLD'
-
-
 def test_setup_does_not_claim_search_ready_when_all_sources_fail(tmp_path, monkeypatch, capsys):
     from types import SimpleNamespace
     monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', tmp_path / 'missing')
@@ -170,20 +139,6 @@ def test_updating_one_agent_updates_all_existing_managed_copies(tmp_path, monkey
     install.install('claude-code')
     for root in ('.claude', '.codex', '.pi/agent'):
         assert (tmp_path / root / 'skills/literature-to-zotero/scripts/runtime.py').read_text() == 'version = 2'
-
-
-@pytest.mark.parametrize('remote', ['running', 'done', 'missing'])
-def test_lost_urls_never_resubmit_unconfirmed_or_running_work(tmp_path, monkeypatch, remote):
-    request = mineru_parse.ParseRequest(pdfs=[tmp_path / 'source.pdf'])
-    batch = mineru_parse.Batch(request, tmp_path / 'mineru-fixture.json',
-                              {'batch_id': 'OLD', 'files': [{'data_id': 'a', 'name': 'a.pdf', 'state': 'pending'}]}, 'fixture')
-    def api(method, *args):
-        assert method == 'GET', 'must not create another batch while existing work is uncertain'
-        return {'extract_result': [] if remote == 'missing' else [{'data_id': 'a', 'state': remote}]}
-    monkeypatch.setattr(batch, 'api', api)
-    with pytest.raises(ValueError, match='upload URLs unavailable'):
-        batch.resume({'a'})
-    assert batch.state['batch_id'] == 'OLD'
 
 
 def test_native_lock_released_after_process_exit(tmp_path):

@@ -122,8 +122,17 @@ def main() -> int:
     modes.add_argument('--check', action='store_true')
     modes.add_argument('--verify', choices=CHECKS)
     modes.add_argument('--set', dest='setting', choices=sorted(SETTINGS), help='Read value from stdin, never from arguments.')
+    modes.add_argument('--connect', choices=('zotero', 'mineru'), help='Validate and save an account; key arrives on stdin.')
+    parser.add_argument('--group-id', default='')
+    parser.add_argument('--group', action='store_true', default=None)
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args()
+    if args.connect:
+        import setup_connection
+        values = setup_connection.connect(args.connect, sys.stdin.read(), group=args.group, group_id=args.group_id)
+        setup_connection.save_account(values)
+        print('连接成功，已安全保存。')
+        return 0
     if args.check:
         return check(as_json=args.json)
     if args.verify:
@@ -145,7 +154,7 @@ if __name__ == '__main__':
     try:
         raise SystemExit(main())
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
-        print(f'配置未完成（{type(exc).__name__}）；已保存的项目会保留，请重跑向导。')
+        print(str(exc) if isinstance(exc, ValueError) else f'配置未完成（{type(exc).__name__}）；已保存的项目会保留，请重跑向导。')
         raise SystemExit(1)
     except (KeyboardInterrupt, EOFError):
         print('\n已保存填写的配置；重跑向导可继续。')

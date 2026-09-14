@@ -5,9 +5,58 @@ from pathlib import Path
 import subprocess
 import sys
 import zipfile
+import pytest
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import mineru_parse
 from http_fixture import server
 from test_cli import SCRIPTS, ROOT, run_script
 from test_workflow_resume import selected_run
+
+
+@pytest.mark.parametrize('remote', ['waiting-file', 'running', 'done', 'missing'])
+def test_parse_recovers_lost_upload_addresses_only_for_confirmed_empty_batch(tmp_path, monkeypatch, remote):
+    source = tmp_path / 'source.pdf'
+    source.write_bytes(b'%PDF-fixture')
+    monkeypatch.setenv('MINERU_TOKEN', 'fixture-token')
+    submissions, uploads = [], []
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, 'w') as output:
+        output.writestr('full.md', 'Recovered full text')
+    def respond(method, path, body, headers):
+        if path == '/api/v4/file-urls/batch':
+            submissions.append(json.loads(body)['files'])
+            return 200, {'code': 0, 'data': {'batch_id': str(len(submissions)), 'file_urls': [base + '/upload']}}, {}
+        if path == '/api/v4/extract-results/batch/1':
+            results = [] if remote == 'missing' else [dict(submissions[0][0], state=remote)]
+            return 200, {'code': 0, 'data': {'extract_result': results}}, {}
+        if path == '/upload':
+            uploads.append(body)
+            return 200, b'', {}
+        if path == '/api/v4/extract-results/batch/2':
+            return 200, {'code': 0, 'data': {'extract_result': [dict(submissions[1][0], state='done', full_zip_url=base + '/zip')]}}, {}
+        if path == '/zip':
+            return 200, archive.getvalue(), {}
+        return 404, {}, {}
+    original = Path.replace
+    def fail_private_write(path, target):
+        if str(target).endswith('.private.json'):
+            raise OSError('fixture interrupted private write')
+        return original(path, target)
+    with server(respond) as base:
+        request = mineru_parse.ParseRequest(pdfs=[source], consent_source='message:fixture', api_base=base, poll_timeout=1)
+        with monkeypatch.context() as fault:
+            fault.setattr(Path, 'replace', fail_private_write)
+            with pytest.raises(OSError):
+                mineru_parse.parse(request)
+        if remote == 'waiting-file':
+            result = mineru_parse.parse(request)
+            assert result['status'] == 'ok'
+            assert Path(result['files'][0]['markdown']).read_text() == 'Recovered full text'
+            assert len(submissions) == 2 and uploads == [source.read_bytes()]
+        else:
+            with pytest.raises(ValueError, match='upload URLs unavailable'):
+                mineru_parse.parse(request)
+            assert len(submissions) == 1 and not uploads
 
 
 def test_poll_failure_resumes_original_batch_and_keeps_images(tmp_path: Path):

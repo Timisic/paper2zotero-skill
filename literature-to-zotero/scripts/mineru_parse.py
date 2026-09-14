@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import hashlib
 import io
 import json
@@ -231,7 +231,16 @@ class Batch:
 
 
 def parse(request: ParseRequest) -> dict[str, Any]:
-    pdfs = sorted(set(Path(value).expanduser().resolve() for value in request.pdfs))
+    """Convert under one lock, including consent, checkpoint lookup and recovery."""
+    if not request.pdfs:
+        raise ValueError('PDF file missing')
+    request = replace(request, pdfs=tuple(sorted({Path(pdf).expanduser().resolve() for pdf in request.pdfs})))
+    with run_lock(request.lock_root(), 'conversion'):
+        return _parse(request)
+
+
+def _parse(request: ParseRequest) -> dict[str, Any]:
+    pdfs = list(request.pdfs)
     if any(not pdf.is_file() for pdf in pdfs):
         raise ValueError('PDF file missing')
     run = request.run_dir
@@ -315,13 +324,10 @@ def main() -> None:
     args = parser.parse_args()
     try:
         request = ParseRequest.from_args(args)
-        lock_root = request.lock_root()
-        lock_root.mkdir(parents=True, exist_ok=True)
-        with run_lock(lock_root, 'conversion'):
-            result = parse(request)
-            print(json.dumps(result, ensure_ascii=False))
-            if result['status'] != 'ok':
-                raise SystemExit(2)
+        result = parse(request)
+        print(json.dumps(result, ensure_ascii=False))
+        if result['status'] != 'ok':
+            raise SystemExit(2)
     except (RequestError, ValueError, OSError, zipfile.BadZipFile) as error:
         print(json.dumps({'status': 'pending', 'reason': str(error) if isinstance(error, (RequestError, ValueError)) else type(error).__name__}))
         raise SystemExit(2)

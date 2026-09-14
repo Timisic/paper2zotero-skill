@@ -245,6 +245,25 @@ persist() {
   fi
   export "$key=$value"
 }
+connect_account() {
+  local service="$1" value="$2"
+  if [[ "$DEMO" == 1 ]]; then
+    if [[ "$service" == zotero ]]; then
+      persist ZOTERO_API_KEY "$value"
+      persist ZOTERO_LIBRARY_ID "${ZOTERO_LIBRARY_ID:-12345678}"
+      persist ZOTERO_LIBRARY_TYPE "${ZOTERO_LIBRARY_TYPE:-user}"
+    else
+      persist MINERU_TOKEN "$value"
+    fi
+    note '[模拟检查通过，未连接服务]'
+    return 0
+  fi
+  local args=(--connect "$service")
+  if [[ "$service" == zotero && "$GROUP_LIBRARY" == 1 ]]; then
+    args+=(--group --group-id "${ZOTERO_LIBRARY_ID:-}")
+  fi
+  printf '%s' "$value" | "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" "${args[@]}"
+}
 verify_step() {
   if [[ "$DEMO" == 1 ]]; then note '[模拟检查通过，未连接服务]'; return 0; fi
   "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --verify "$1"
@@ -335,38 +354,17 @@ else
   step '4. 复制刚生成的 Key，粘贴到下方。'
   while true; do
     ask_authorization ZOTERO_API_KEY '粘贴 Zotero 授权码（没有则回车跳过）：'
-    persist ZOTERO_API_KEY "$ZOTERO_API_KEY"
-    ZOTERO_LIBRARY_TYPE="${ZOTERO_LIBRARY_TYPE:-$(_existing ZOTERO_LIBRARY_TYPE || true)}"
-    ZOTERO_LIBRARY_TYPE="${ZOTERO_LIBRARY_TYPE:-user}"
-    if [[ "$GROUP_LIBRARY" == 1 ]]; then ZOTERO_LIBRARY_TYPE=group; fi
-    [[ "$ZOTERO_LIBRARY_TYPE" == user || "$ZOTERO_LIBRARY_TYPE" == group ]] || { warn '已有文库类型无效，请检查配置。'; exit 1; }
-    persist ZOTERO_LIBRARY_TYPE "$ZOTERO_LIBRARY_TYPE"
-    if [[ "$ZOTERO_LIBRARY_TYPE" == user ]]; then note '默认保存到你自己的 Zotero。'; fi
     if [[ -n "$ZOTERO_API_KEY" ]]; then
-      LIBID=''
-      if [[ "$ZOTERO_LIBRARY_TYPE" == user ]]; then
-        if [[ "$DEMO" == 1 ]]; then
-          LIBID=12345678
-        else
-          LIBID="$(ZOTERO_API_KEY="$ZOTERO_API_KEY" "$PYTHON_BIN" "$SKILL_DIR/scripts/verify.py" self-id || true)"
-          [[ "$LIBID" =~ ^[0-9]+$ ]] || LIBID=''
-        fi
-      fi
-      if [[ -n "$LIBID" ]]; then
-        persist ZOTERO_LIBRARY_ID "$LIBID"
-        note '✓ 已自动找到你的个人文库。'
-      elif [[ "$ZOTERO_LIBRARY_TYPE" == group ]]; then
+      if [[ "$GROUP_LIBRARY" == 1 ]]; then
         ask ZOTERO_LIBRARY_ID '填写要保存到的群组文库 ID（数字；回车稍后配置）：'
-        [[ -z "$ZOTERO_LIBRARY_ID" || "$ZOTERO_LIBRARY_ID" =~ ^[0-9]+$ ]] || { warn '文库 ID 应为数字。'; exit 1; }
-        persist ZOTERO_LIBRARY_ID "$ZOTERO_LIBRARY_ID"
       else
-        warn '还未连接到你的个人文库，无需手动查找文库 ID。'
-        if retry_connection; then continue; fi
-        note '已保留填写内容；之后重跑向导即可继续连接。'
-        break
+        note '保留已有文库目标；首次配置自动识别个人文库。'
       fi
-      if ! verify_step zotero-key; then
-        warn '还未通过文库读写检查，请检查授权码权限和网络。'
+      if connect_account zotero "$ZOTERO_API_KEY"; then
+        unset ZOTERO_API_KEY ZOTERO_LIBRARY_ID ZOTERO_LIBRARY_TYPE
+      else
+        unset ZOTERO_API_KEY ZOTERO_LIBRARY_ID ZOTERO_LIBRARY_TYPE
+        warn '连接未完成；原有账号已保留，无需手动查找个人文库 ID。'
         if retry_connection; then continue; fi
       fi
     else
@@ -392,9 +390,11 @@ else
   note '页面上的 API / Token 是网站使用的名称，你不需要编写代码。'
   while true; do
     ask_authorization MINERU_TOKEN '粘贴全文阅读授权码（没有则回车跳过）：'
-    persist MINERU_TOKEN "$MINERU_TOKEN"
     if [[ -n "$MINERU_TOKEN" ]]; then
-      if ! verify_step mineru; then
+      if connect_account mineru "$MINERU_TOKEN"; then
+        unset MINERU_TOKEN
+      else
+        unset MINERU_TOKEN
         warn '还未连接全文阅读服务，请检查授权码和网络。'
         if retry_connection; then continue; fi
       fi

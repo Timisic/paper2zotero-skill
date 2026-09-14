@@ -14,12 +14,31 @@ import configure
 import setup_connection as connection
 
 
+def test_terminal_connection_failure_preserves_account_then_saves_verified_identity(tmp_path, monkeypatch, capsys):
+    path = tmp_path / 'env'
+    path.write_text('ZOTERO_API_KEY=old\nZOTERO_LIBRARY_ID=1\nUNRELATED=保留\n', encoding='utf-8')
+    monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', path)
+    monkeypatch.setattr(sys, 'argv', ['configure.py', '--connect', 'zotero'])
+    monkeypatch.setattr(sys, 'stdin', StringIO('fixture-new-key'))
+    response(monkeypatch, {'userID': 42, 'access': {'user': {'library': True}}})
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match='读写权限'):
+        configure.main()
+    assert path.read_bytes() == before
+    monkeypatch.setattr(sys, 'stdin', StringIO('fixture-new-key'))
+    response(monkeypatch, {'userID': 42, 'access': {'user': {'library': True, 'write': True}}})
+    assert configure.main() == 0
+    assert configure.credentials._skill_env()['ZOTERO_LIBRARY_ID'] == '42'
+    assert configure.credentials._skill_env()['UNRELATED'] == '保留'
+    assert 'fixture-new-key' not in capsys.readouterr().out
+
+
 def response(monkeypatch, payload):
     class Opener:
         def open(self, request, timeout):
             assert request.full_url == 'https://api.zotero.org/keys/current'
             return StringIO(json.dumps(payload))
-    monkeypatch.setattr(connection.urllib.request, 'build_opener', lambda *a: Opener())
+    monkeypatch.setattr(connection.capability.urllib.request, 'build_opener', lambda *a: Opener())
 
 
 def test_personal_identity_and_permissions_from_one_response(monkeypatch):
@@ -43,9 +62,19 @@ def test_group_uses_group_access_not_personal_id(monkeypatch):
         connection.connect('zotero', 'fixture-key', group=True, group_id='100')
 
 
+def test_account_repair_keeps_existing_group_unless_personal_is_explicit(tmp_path, monkeypatch):
+    path = tmp_path / 'env'
+    path.write_text('ZOTERO_API_KEY=old\nZOTERO_LIBRARY_ID=99\nZOTERO_LIBRARY_TYPE=group\n')
+    monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', path)
+    response(monkeypatch, {'userID': 42, 'access': {'user': {'library': True, 'write': True},
+                                                   'groups': {'99': {'library': True, 'write': True}}}})
+    assert connection.connect('zotero', 'fixture-key')['ZOTERO_LIBRARY_ID'] == '99'
+    assert connection.connect('zotero', 'fixture-key', group=False)['ZOTERO_LIBRARY_ID'] == '42'
+
+
 @pytest.mark.parametrize('bad', ['', '\x16', 'fixture\x16key', '[redacted]', 'key\nother'])
 def test_bad_input_never_reaches_network(monkeypatch, bad):
-    monkeypatch.setattr(connection.urllib.request, 'build_opener', lambda *a: pytest.fail('network used'))
+    monkeypatch.setattr(connection.capability.urllib.request, 'build_opener', lambda *a: pytest.fail('network used'))
     with pytest.raises(ValueError):
         connection.connect('zotero', bad)
 
@@ -55,7 +84,7 @@ def test_http_error_hints_do_not_expose_response_or_key(monkeypatch, code, hint)
     class Opener:
         def open(self, *a, **k):
             raise urllib.error.HTTPError('https://api.zotero.org', code, 'fixture-secret', {}, StringIO('private response'))
-    monkeypatch.setattr(connection.urllib.request, 'build_opener', lambda *a: Opener())
+    monkeypatch.setattr(connection.capability.urllib.request, 'build_opener', lambda *a: Opener())
     with pytest.raises(ValueError, match=hint) as caught:
         connection.connect('zotero', 'fixture-secret')
     assert 'fixture-secret' not in str(caught.value)

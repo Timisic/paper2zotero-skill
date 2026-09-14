@@ -39,6 +39,7 @@ def selected_roots(agent: str = "auto") -> list[Path]:
 
 
 def installed_paths(home: Path | None = None, agent: str = "auto") -> list[str]:
+    from install import runtime_ready
     if agent not in CHOICES:
         raise ValueError(f"未知安装目标：{agent}")
     roots = agent_roots(home)
@@ -48,7 +49,7 @@ def installed_paths(home: Path | None = None, agent: str = "auto") -> list[str]:
         base = home if home is not None else Path.home()
         candidates = list(roots.values()) + [base / ".agents/skills", base / ".hermes/skills"]
     return [str(root / SKILL_NAME) for root in candidates
-            if (root / SKILL_NAME / "SKILL.md").is_file()]
+            if runtime_ready(root / SKILL_NAME, (home / '.local/share/literature-to-zotero/skill') if home else None)]
 
 
 def installation_ok(agent: str = "auto") -> bool:

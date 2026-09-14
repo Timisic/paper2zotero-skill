@@ -303,8 +303,7 @@ def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, A
             workflow.Run.record(run, identity, warning="markdown_unavailable: no MinerU token")
         return {"converted": [], "failed": {}, "skipped": {**skipped, **{key: "markdown_unavailable: no MinerU token" for key in pending}}}
     try:
-        with workflow.run_lock(run, "conversion"):
-            result = mineru_parse.parse(request.parse_request(list(pending.values())))
+        result = mineru_parse.parse(request.parse_request(list(pending.values())))
     except (RequestError, ValueError, OSError) as error:
         reason = f"markdown_unavailable: {error}"
         for identity in pending:
