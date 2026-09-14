@@ -21,9 +21,13 @@ from pathlib import Path
 if os.name == 'nt':
     git = shutil.which('git.exe')
     if git:
-        bash_bin = Path(git).parent.parent / 'bin'
-        if (bash_bin / 'bash.exe').is_file():
-            os.environ['PATH'] = str(bash_bin) + os.pathsep + os.environ.get('PATH', '')
+        # Git may resolve from cmd/, bin/, or mingw64/bin/ on hosted Windows.
+        # Prefer its Bash over the unrelated System32 WSL launcher.
+        for parent in Path(git).parents[:3]:
+            bash_bin = parent / 'bin'
+            if (bash_bin / 'bash.exe').is_file():
+                os.environ['PATH'] = str(bash_bin) + os.pathsep + os.environ.get('PATH', '')
+                break
 
 # Unspecified install paths must never resolve to the developer's assistants.
 # Individual tests may override these with their own profile, but an omitted
