@@ -22,6 +22,19 @@ import sources
 import capability
 
 
+def test_standalone_mineru_cannot_enter_an_active_pipeline_conversion(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(sys, 'argv', ['mineru_parse.py', '--pdf', str(tmp_path / 'source.pdf'),
+                                     '--run-dir', str(tmp_path)])
+    def unexpected_parse(request):
+        pytest.fail('standalone entry bypassed the active pipeline conversion lock')
+    monkeypatch.setattr(mineru_parse, 'parse', unexpected_parse)
+    with workflow.run_lock(tmp_path, 'conversion'):
+        with pytest.raises(SystemExit) as stopped:
+            mineru_parse.main()
+    assert stopped.value.code == 2
+    assert 'active' in json.loads(capsys.readouterr().out)['reason']
+
+
 def test_run_lock_excludes_second_writer_and_releases(tmp_path):
     with workflow.run_lock(tmp_path):
         with pytest.raises(ValueError, match='active'):

@@ -317,7 +317,7 @@ def main() -> None:
         request = ParseRequest.from_args(args)
         lock_root = request.lock_root()
         lock_root.mkdir(parents=True, exist_ok=True)
-        with run_lock(lock_root):
+        with run_lock(lock_root, 'conversion'):
             result = parse(request)
             print(json.dumps(result, ensure_ascii=False))
             if result['status'] != 'ok':

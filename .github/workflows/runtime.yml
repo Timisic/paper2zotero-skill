@@ -18,6 +18,19 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install pytest
+      - name: Install PDF text tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: Install PDF text tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install poppler
+      - name: Install PDF text tools (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install poppler -y --no-progress
+          $pdfTool = Get-ChildItem C:\ProgramData\chocolatey\lib\poppler -Recurse -Filter pdftotext.exe | Select-Object -First 1
+          $pdfTool.DirectoryName >> $env:GITHUB_PATH
       - name: Pipeline, recovery, identity and local I/O regressions
         run: >-
           python -m pytest -q
