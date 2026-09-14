@@ -24,7 +24,12 @@ read_authorization_line() (
   local value='' char saved_tty=''
   trap 'if [[ -n "$saved_tty" ]]; then stty "$saved_tty" 2>/dev/null || true; fi' EXIT
   trap 'exit 130' INT TERM
-  if [[ -t 0 ]]; then saved_tty=$(stty -g); stty -echo; fi
+  # This reader is called in an if-condition, so Bash's errexit is disabled.
+  # Stop explicitly if we cannot save the terminal state or disable echo.
+  if [[ -t 0 ]]; then
+    saved_tty=$(stty -g) || exit 1
+    stty -echo || exit 1
+  fi
   while true; do
     IFS= read -r -s -n 1 char || exit 130
     case "$char" in

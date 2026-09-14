@@ -101,7 +101,7 @@ source "$(dirname "$0")/setup-input.sh"
 before=$(stty -g)
 count=0
 read() {
-  [[ "$(stty -g)" != "$before" ]]
+  [[ "$(stty -g)" != "$before" ]] || return 1
   count=$((count + 1))
   if [[ "$count" == 1 ]]; then printf -v char '%s' 'fixture-key'; else char=''; fi
 }
@@ -113,6 +113,15 @@ status=0
 value=$(read_authorization_line) || status=$?
 [[ "$status" == 130 ]]
 [[ "$(stty -g)" == "$before" ]]
+read() { printf 'unexpected read' > "$PAPER2ZOTERO_TEST_RESULT"; return 1; }
+stty() { [[ "$1" != "$failure" ]] || return 1; command stty "$@"; }
+for failure in -g -echo; do
+  status=0
+  value=$(read_authorization_line) || status=$?
+  [[ "$status" == 1 ]]
+  [[ ! -f "$PAPER2ZOTERO_TEST_RESULT" ]]
+  [[ "$(command stty -g)" == "$before" ]]
+done
 printf 'masked-input-restored' > "$PAPER2ZOTERO_TEST_RESULT"
 ''', encoding='utf-8', newline='\n')
             result = run_setup(package, env, '-Demo')
