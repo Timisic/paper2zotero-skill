@@ -59,7 +59,11 @@ def test_parse_recovers_lost_upload_addresses_only_for_confirmed_empty_batch(tmp
             assert len(submissions) == 1 and not uploads
 
 
-def test_poll_failure_resumes_original_batch_and_keeps_images(tmp_path: Path):
+@pytest.mark.parametrize('legacy_paths', [False, True], ids=['current-paths', 'legacy-deep-paths'])
+def test_poll_failure_resumes_original_batch_and_keeps_images(tmp_path: Path, legacy_paths: bool):
+    if legacy_paths:
+        tmp_path = tmp_path / ('project-' + 'b' * max(12, 195 - len(str(tmp_path))))
+        tmp_path.mkdir()
     run = selected_run(tmp_path)
     source = run / 'source.pdf'
     source.write_bytes((ROOT / 'tests/fixtures/probe.pdf').read_bytes())
@@ -70,7 +74,7 @@ def test_poll_failure_resumes_original_batch_and_keeps_images(tmp_path: Path):
     with zipfile.ZipFile(archive, 'w') as z:
         z.writestr('full.md', '# Paper\n![figure](images/1.png)')
         z.writestr('images/1.png', b'PNG')
-    submissions, uploads = [], []
+    submissions, uploads, zip_downloads = [], [], []
     fail_poll = True
     def respond(method, path, body, headers):
         if path == '/api/v4/file-urls/batch':
@@ -84,6 +88,7 @@ def test_poll_failure_resumes_original_batch_and_keeps_images(tmp_path: Path):
                 return 503, {}, {}
             return 200, {'code': 0, 'data': {'extract_result': [{'data_id': submissions[0]['files'][0]['data_id'], 'state': 'done', 'full_zip_url': base + '/zip?secret=signed'}]}}, {}
         if path.startswith('/zip'):
+            zip_downloads.append(path)
             return 200, archive.getvalue(), {}
         return 404, {}, {}
     def execute(base):
@@ -91,12 +96,37 @@ def test_poll_failure_resumes_original_batch_and_keeps_images(tmp_path: Path):
                               env={**os.environ, 'MINERU_TOKEN': 'test-token'}, text=True, capture_output=True)
     with server(respond) as base:
         first = execute(base)
+        if legacy_paths:
+            # A pre-update journal stores ordinary absolute paths. Keep the
+            # original batch/consent while simulating that on-disk format.
+            journals = list(run.glob('mineru-*.json'))
+            assert journals
+            for journal in journals:
+                value = journal.read_text(encoding='utf-8')
+                def ordinary(item):
+                    if isinstance(item, str):
+                        return item.removeprefix('\\\\?\\')
+                    if isinstance(item, list):
+                        return [ordinary(v) for v in item]
+                    if isinstance(item, dict):
+                        return {ordinary(k): ordinary(v) for k, v in item.items()}
+                    return item
+                journal.write_text(json.dumps(ordinary(json.loads(value))), encoding='utf-8')
         fail_poll = False
         second = execute(base)
+        if legacy_paths and second.returncode == 0:
+            # Completed old records must validate their existing Markdown
+            # and image hashes instead of downloading the ZIP again.
+            for journal in run.glob('mineru-*.json'):
+                journal.write_text(json.dumps(ordinary(json.loads(journal.read_text(encoding='utf-8')))),
+                                   encoding='utf-8')
+            third = execute(base)
+            assert third.returncode == 0, third.stdout + third.stderr
     assert first.returncode == 2
     assert second.returncode == 0, second.stdout + second.stderr
     assert len(submissions) == 1
     assert len(uploads) == 1
+    assert len(zip_downloads) == 1
     output = json.loads(second.stdout)['files'][0]['markdown']
     assert Path(output).read_text().startswith('# Paper')
     assert (Path(output).parent / 'images/1.png').read_bytes() == b'PNG'

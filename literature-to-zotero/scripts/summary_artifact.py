@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from runtime_io import absolute_path
 import re
 import shlex
 from typing import Any
@@ -64,16 +65,16 @@ def save_batch(batch_file: Path, provider: str) -> dict[str, Any]:
         if basis not in ('pdf', 'markdown'):
             raise ValueError('summary requires PDF or MinerU Markdown full text')
         source = paper.artifact(basis)
-        if (source is None or source.resolve() != Path(entry['source']).resolve()
+        if (source is None or source.resolve() != absolute_path(entry['source'])
                 or hashlib.sha256(source.read_bytes()).hexdigest() != entry['source_sha256']):
             raise ValueError('summary source changed; read the current full text before summarizing')
         body = Path(entry['content_file'])
         if not body.is_absolute():
             body = batch_file.parent / body
-        content = body.read_text(encoding='utf-8').strip()
+        content = absolute_path(body).read_text(encoding='utf-8').strip()
         if not content:
             raise ValueError('summary content is empty')
-        output = Path(entry['output']).resolve()
+        output = absolute_path(entry['output'])
         output.relative_to(package.directory / 'papers')
         if output.name != 'summary.md':
             raise ValueError('batch summary must target summary.md')
@@ -95,7 +96,7 @@ def save_batch(batch_file: Path, provider: str) -> dict[str, Any]:
             if paper.summary and paper.summary.resolve() != output:
                 raise ValueError('existing summary uses another path; preserve it')
             source = paper.artifact(entry['source_basis'])
-            if (source is None or source.resolve() != Path(entry['source']).resolve()
+            if (source is None or source.resolve() != absolute_path(entry['source'])
                     or hashlib.sha256(source.read_bytes()).hexdigest() != entry['source_sha256']):
                 raise ValueError('summary source changed during batch preparation')
             if output.exists() and output.read_text(encoding='utf-8') != rendered:

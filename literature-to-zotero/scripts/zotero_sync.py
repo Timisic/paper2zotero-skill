@@ -10,13 +10,22 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from runtime_io import absolute_path
+
+
+def storage_directory(root: str | Path) -> Path:
+    """Accept either the Zotero data folder or its visible storage folder."""
+    root = absolute_path(root)
+    if root.name.casefold() == 'storage' and not (root / 'zotero.sqlite').is_file():
+        return root
+    return root / 'storage'
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kind", choices=("item", "collection", "attachment-file"), required=True)
     parser.add_argument("--key", required=True)
-    parser.add_argument("--storage-root", help="Zotero data directory; required for attachment-file")
+    parser.add_argument("--storage-root", help="Zotero data or storage directory; required for attachment-file")
     parser.add_argument("--expected-sha256", help="Require this SHA-256 for attachment-file")
     parser.add_argument("--base-url", default="http://127.0.0.1:23119")
     parser.add_argument("--timeout", type=float, default=30.0)
@@ -39,7 +48,7 @@ def main() -> None:
                     if args.kind == "attachment-file":
                         payload = json.load(response)
                         filename = (payload.get("data") or {}).get("filename")
-                        local_path = Path(args.storage_root) / "storage" / args.key / str(filename)
+                        local_path = storage_directory(args.storage_root) / args.key / str(filename)
                         if local_path.is_file():
                             digest = hashlib.sha256(local_path.read_bytes()).hexdigest()
                             if args.expected_sha256 and digest != args.expected_sha256:

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import html
 import json
 from pathlib import Path
+from runtime_io import absolute_path
+from zotero_sync import storage_directory
 import secrets
 import sys
 import time
@@ -341,7 +343,7 @@ class Writer:
         for record in attachments:
             # `attach` verified this filename against the written object.
             filename = record['filename']
-            local = storage / 'storage' / record['key'] / filename if storage else None
+            local = storage_directory(storage) / record['key'] / filename if storage else None
             present = bool(local and local.is_file() and hashlib.sha256(local.read_bytes()).hexdigest() == record['sha256'])
             record['local_verified'] = present
             record['local_path'] = str(local) if local else None
@@ -470,6 +472,7 @@ def ingest(request: IngestRequest) -> dict[str, Any]:
     caller should retry this service, while `partial` is delivered work whose
     remaining artifacts are named per paper.
     """
+    request = replace(request, run_dir=absolute_path(request.run_dir))
     run = request.run_dir
     package = Run.open(run)
     package.require_confirmed()

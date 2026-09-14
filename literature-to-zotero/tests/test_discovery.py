@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+import time
 
 from http_fixture import server
 from test_cli import FIXTURES, run_script
@@ -137,7 +138,11 @@ def test_a_failed_source_never_looks_like_an_empty_shelf(tmp_path: Path) -> None
 
 def test_every_round_spends_the_one_run_budget_including_its_failures(tmp_path: Path) -> None:
     run = init_run(tmp_path)
-    with server(peer({}, status=500)) as broken:
+    def delayed_failure(*args):
+        # Cross the older Windows monotonic clock's ~15 ms resolution.
+        time.sleep(0.03)
+        return peer({}, status=500)(*args)
+    with server(delayed_failure) as broken:
         client = Sources(bases={"openalex": broken}, throttle_dir=tmp_path, browser=None, budget=0.4,
                          setting=lambda name: "")
         discovery.discover(DiscoveryRequest(query=Query("q"), output=tmp_path / "a.json",

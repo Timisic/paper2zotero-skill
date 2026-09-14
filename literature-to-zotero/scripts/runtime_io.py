@@ -11,8 +11,23 @@ import time
 from typing import Iterator
 
 
+def absolute_path(value: str | Path) -> Path:
+    """A native absolute path, including Windows without LongPathsEnabled.
+
+    Carry the extended prefix on the run root so later child paths also work.
+    This changes neither the directory nor the machine's registry settings.
+    """
+    path = Path(value).expanduser().resolve()
+    text = str(path)
+    if os.name == 'nt' and not text.startswith('\\\\?\\'):
+        text = ('\\\\?\\UNC\\' + text[2:]) if text.startswith('\\\\') else ('\\\\?\\' + text)
+        return Path(text)
+    return path
+
+
 @contextmanager
 def file_lock(path: Path, *, blocking: bool = False) -> Iterator[None]:
+    path = absolute_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open('a+b') as stream:
         if sys.platform == 'win32':
@@ -51,6 +66,7 @@ def file_lock(path: Path, *, blocking: bool = False) -> Iterator[None]:
 
 def private_text(path: Path, text: str) -> None:
     """Secure before writing; close before replacing or cleaning up on Windows."""
+    path = absolute_path(path)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd, name = tempfile.mkstemp(dir=path.parent, prefix='.' + path.name + '-', suffix='.tmp')
     temporary = Path(name)

@@ -97,5 +97,5 @@ def test_attachment_file_requires_local_storage_binary(tmp_path: Path) -> None:
         server.shutdown()
     payload = json.loads(result.stdout)
     assert payload["status"] == "local_file_present"
-    assert payload["path"] == str(target / "paper.md")
+    assert Path(payload["path"]).samefile(target / "paper.md")
     assert payload["sha256"] == hashlib.sha256(b"# Local attachment\n").hexdigest()

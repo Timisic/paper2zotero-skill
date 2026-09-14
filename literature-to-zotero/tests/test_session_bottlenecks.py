@@ -82,7 +82,7 @@ def test_selected_access_wall_can_be_recorded_and_resumed(tmp_path):
     run = selected_run(tmp_path)
     Run.record(run, "doi:10.1000/alpha", "partial", warning="challenge_unsolved")
     Run.record(run, "doi:10.1000/alpha", "pdf_acquired", artifact="pdf=" + str(PROBE))
-    assert Run.open(run).paper("doi:10.1000/alpha").pdf == PROBE
+    assert Run.open(run).paper("doi:10.1000/alpha").pdf.samefile(PROBE)
 
 
 def test_a_batch_scans_library_once_and_reuses_new_parent(tmp_path):
@@ -117,7 +117,7 @@ def test_network_write_does_not_lock_out_another_papers_progress(monkeypatch, tm
                         api_base=base, collection_key="COLLECT1", retry_budget=5))
     assert result["status"] == "complete", result
     assert recorded
-    assert Run.open(run).paper("openalex:W3").pdf == PROBE
+    assert Run.open(run).paper("openalex:W3").pdf.samefile(PROBE)
 
 
 @pytest.mark.parametrize("frame", ["https://other.example/paper.pdf", "http://publisher.example/paper.pdf",

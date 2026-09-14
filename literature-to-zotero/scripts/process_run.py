@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 import os
@@ -398,6 +398,7 @@ def ingestion_readiness(request: ProcessRequest) -> dict[str, Any]:
 
 
 def process(request: ProcessRequest) -> dict[str, Any]:
+    request = replace(request, run_dir=workflow.absolute_path(request.run_dir))
     # Advisory only. A refused or unreachable key does not gate local artifacts.
     if request.check_ingestion and not request.dry_run:
         started = time.monotonic()

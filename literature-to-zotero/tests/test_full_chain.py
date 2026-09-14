@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import pytest
 
 from http_fixture import server
 from mineru_peer import MineruService
@@ -65,7 +66,15 @@ def write_summaries(run: Path, handoff: list[dict]) -> None:
                    "--state", "summary_generated", "--artifact", "summary=" + entry["output"])
 
 
-def test_one_invocation_carries_a_confirmed_selection_to_read_back(tmp_path: Path) -> None:
+@pytest.mark.parametrize('deep_directory,attachment_directory', [(False, False), (True, False), (False, True)],
+                         ids=['ordinary-path', 'deep-path', 'storage-directory'])
+def test_one_invocation_carries_a_confirmed_selection_to_read_back(
+        tmp_path: Path, deep_directory: bool, attachment_directory: bool) -> None:
+    if deep_directory:
+        # A normal Documents/project layout can exceed MAX_PATH only after
+        # the selection hash, conversion assets or summary filename is added.
+        tmp_path = tmp_path / ('project-' + 'a' * max(12, 185 - len(str(tmp_path))))
+        tmp_path.mkdir()
     run = confirmed_run(tmp_path)
     storage = tmp_path / "Zotero"
     zotero, mineru = ZoteroLibrary(storage=storage), MineruService()
@@ -79,7 +88,7 @@ def test_one_invocation_carries_a_confirmed_selection_to_read_back(tmp_path: Pat
     with server(zotero.respond) as zotero_base, server(mineru.respond) as mineru_base:
         zotero.base, mineru.base = zotero_base, mineru_base
         common = ["--api-base", zotero_base, "--mineru-api-base", mineru_base,
-                  "--storage-root", str(storage), *browser]
+                  "--storage-root", str(storage / 'storage' if attachment_directory else storage), *browser]
         first = process(run, "--stages", "acquire,convert,ingest", *common, env=env)
         body = payload(first)
         assert body["status"] == "awaiting_summaries", body

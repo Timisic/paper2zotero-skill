@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Iterator, Sequence
-from runtime_io import file_lock, text_hash
+from runtime_io import absolute_path, file_lock, text_hash
 
 
 SCHEMA_VERSION = 2
@@ -92,10 +92,11 @@ def utc_now() -> str:
 
 
 def read_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(absolute_path(path).read_text(encoding="utf-8"))
 
 
 def write_json(path: Path, value: Any) -> None:
+    path = absolute_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -164,7 +165,7 @@ def fail(message: str) -> None:
 def resolve_artifact(run_dir: Path, value: str) -> Path:
     """A recorded artifact path, absolute or relative to its run. One rule."""
     path = Path(value).expanduser()
-    return (path if path.is_absolute() else run_dir / path).resolve()
+    return absolute_path(path if path.is_absolute() else run_dir / path)
 
 
 class Paper:
@@ -266,18 +267,18 @@ class Run:
     @classmethod
     def exists(cls, directory: str | Path) -> bool:
         """Whether this directory is an initialized run."""
-        return manifest_path(Path(directory).resolve()).is_file()
+        return manifest_path(absolute_path(directory)).is_file()
 
     @classmethod
     def open(cls, directory: str | Path) -> Run:
-        run_dir = Path(directory).resolve()
+        run_dir = absolute_path(directory)
         return cls(run_dir, load_manifest(run_dir))
 
     @classmethod
     @contextmanager
     def locked(cls, directory: str | Path) -> Iterator[Run]:
         """Serialize a mutation against every other writer of this run."""
-        run_dir = Path(directory).resolve()
+        run_dir = absolute_path(directory)
         with run_lock(run_dir):
             yield cls.open(run_dir)
 
@@ -396,7 +397,7 @@ def normalize_slug(value: str) -> str:
 
 def command_init(args: argparse.Namespace) -> None:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_dir = Path(args.run_root).expanduser().resolve() / f"{normalize_slug(args.slug)}-{stamp}"
+    run_dir = absolute_path(args.run_root) / f"{normalize_slug(args.slug)}-{stamp}"
     suffix = 1
     while run_dir.exists():
         run_dir = run_dir.with_name(f"{normalize_slug(args.slug)}-{stamp}-{suffix}")
@@ -440,7 +441,7 @@ def command_record_scope(args: argparse.Namespace) -> None:
     this writes down what the agent understood — it does not claim the user
     approved a plan, and it blocks nothing.
     """
-    run_dir = Path(args.run_dir).resolve()
+    run_dir = absolute_path(args.run_dir)
     manifest = load_manifest(run_dir)
     if manifest.get("search_scope") and manifest["search_scope"] != args.scope:
         manifest["gates"]["candidate_selection"] = "pending"
@@ -460,7 +461,7 @@ def command_record_search(args: argparse.Namespace) -> None:
 
 
 def command_import_candidates(args: argparse.Namespace) -> None:
-    run_dir = Path(args.run_dir).resolve()
+    run_dir = absolute_path(args.run_dir)
     manifest = load_manifest(run_dir)
     candidates = read_json(Path(args.file))
     if not isinstance(candidates, list):
@@ -480,7 +481,7 @@ def command_import_candidates(args: argparse.Namespace) -> None:
 
 
 def command_approve_candidates(args: argparse.Namespace) -> None:
-    run_dir = Path(args.run_dir).resolve()
+    run_dir = absolute_path(args.run_dir)
     manifest = load_manifest(run_dir)
     requested = [value.strip() for value in args.ids.split(",") if value.strip()]
     requested = list(dict.fromkeys(requested))
@@ -511,7 +512,7 @@ def command_approve_candidates(args: argparse.Namespace) -> None:
 
 
 def command_consent(args: argparse.Namespace) -> None:
-    run_dir = Path(args.run_dir).resolve()
+    run_dir = absolute_path(args.run_dir)
     manifest = load_manifest(run_dir)
     if manifest["gates"]["candidate_selection"] != "approved":
         fail("candidate selection is not approved")
@@ -651,7 +652,7 @@ def command_import_pdfs(args: argparse.Namespace) -> None:
 
 
 def command_record_paper(args: argparse.Namespace) -> None:
-    run_dir = Path(args.run_dir).resolve()
+    run_dir = absolute_path(args.run_dir)
     manifest = load_manifest(run_dir)
     apply_paper_update(run_dir, manifest, args.id, args.state,
                        artifact=args.artifact, warning=args.warning, verification=args.verification)
@@ -848,7 +849,7 @@ def main() -> None:
     args = build_parser().parse_args()
     try:
         if hasattr(args, 'run_dir') and args.command not in ('status', 'report'):
-            with run_lock(Path(args.run_dir).resolve()):
+            with run_lock(absolute_path(args.run_dir)):
                 args.func(args)
         else:
             args.func(args)

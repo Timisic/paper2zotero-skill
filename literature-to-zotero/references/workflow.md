@@ -37,7 +37,7 @@ python "$SKILL_DIR/scripts/workflow.py" init \
   --from-year <year> --to-year <year>
 ```
 
-Keep the returned absolute `run_dir`. Its manifest is the workflow's source of truth. The manifest carries exactly one gate, `candidate_selection`; a run created before this simplification is read without its retired plan gate.
+Keep the returned absolute `run_dir` verbatim. On Windows it may use the native `\\?\` prefix: pass it unchanged to the Python helpers, which support deep directories without registry changes. Its manifest is the workflow's source of truth. The manifest carries exactly one gate, `candidate_selection`; a run created before this simplification is read without its retired plan gate.
 
 Scripts reach run state through `workflow.Run` and `workflow.Paper` rather than the manifest's JSON: `Run.open(dir)` to read, `Run.locked(dir)` to mutate under the run lock, `Run.record(dir, id, ...)` for a single paper. A `Paper` answers `pdf` / `markdown` / `summary` (the artifact, only when the file is on disk), `path(field)` (what was recorded, present or not), `state`, `warnings` and `writable`. Anything writing its own manifest navigation is duplicating a rule that lives there.
 
@@ -104,7 +104,7 @@ One entry point for the normal path and for continuing: acquire → verify → c
 | `awaiting_summaries` | full text is ready and the agent owes the summaries in `pending_summaries` | 0 |
 | `pending` | a service or input error the caller must act on; re-run the same command | 2 |
 
-After recording summaries, execute the returned `resume_command` argument list or its quoted `resume_shell`. It preserves the collection, selected IDs and local storage options. Conversion alone does not persist the collection; manually written ingestion commands must carry it again.
+After recording summaries, execute the returned `resume_command` argument list or its quoted `resume_shell`. It preserves the collection, selected IDs and local storage options. `--storage-root` accepts either the Zotero data directory (containing `zotero.sqlite`) or its `storage` subdirectory. Conversion alone does not persist the collection; manually written ingestion commands must carry it again.
 
 Never wrap this in a shell loop that retries on any non-zero exit. Read the structured result.
 

@@ -169,7 +169,7 @@ def test_private_file_failure_preserves_original_and_closes_temporary(tmp_path, 
     path.write_text('original', encoding='utf-8')
     original_replace = Path.replace
     def fail(source, destination):
-        if destination == path:
+        if Path(destination).samefile(path):
             raise OSError('fixture disk failure')
         return original_replace(source, destination)
     monkeypatch.setattr(Path, 'replace', fail)

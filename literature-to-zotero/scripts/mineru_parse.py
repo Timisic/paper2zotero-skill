@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+from runtime_io import absolute_path
 import sys
 import time
 from typing import Any, Sequence
@@ -234,7 +235,9 @@ def parse(request: ParseRequest) -> dict[str, Any]:
     """Convert under one lock, including consent, checkpoint lookup and recovery."""
     if not request.pdfs:
         raise ValueError('PDF file missing')
-    request = replace(request, pdfs=tuple(sorted({Path(pdf).expanduser().resolve() for pdf in request.pdfs})))
+    request = replace(request, pdfs=tuple(sorted({absolute_path(pdf) for pdf in request.pdfs})),
+                      run_dir=absolute_path(request.run_dir) if request.run_dir else None,
+                      output=absolute_path(request.output) if request.output else None)
     with run_lock(request.lock_root(), 'conversion'):
         return _parse(request)
 
@@ -273,6 +276,14 @@ def _parse(request: ParseRequest) -> dict[str, Any]:
         if any(state.get(key) != value for key, value in config.items()):
             continue
         for record in state.get('files', []):
+            # Old checkpoints predate native Windows paths. Normalize at
+            # this boundary, including completed assets, before any lookup.
+            for field in ('path', 'markdown'):
+                if record.get(field):
+                    record[field] = str(absolute_path(record[field]))
+            if record.get('output_hashes'):
+                record['output_hashes'] = {str(absolute_path(path)): digest
+                                           for path, digest in record['output_hashes'].items()}
             if record.get('sha256'):
                 previous = known.get(record['sha256'])
                 if previous is None or artifact_valid(record):
