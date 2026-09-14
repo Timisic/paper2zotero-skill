@@ -87,7 +87,7 @@ def test_acl_failure_preserves_old_account(tmp_path, monkeypatch):
     with pytest.raises(subprocess.CalledProcessError):
         configure.save_many({'ZOTERO_API_KEY': 'new', 'ZOTERO_LIBRARY_ID': '2'})
     assert path.read_bytes() == before
-    assert list(tmp_path.iterdir()) == [path]
+    assert set(tmp_path.iterdir()) == {path, path.with_suffix('.lock')}
 
 
 @pytest.mark.skipif(os.name != 'nt', reason='Windows browser association')
@@ -148,9 +148,20 @@ def test_kimi_starts_only_installed_service_and_rechecks(tmp_path, monkeypatch):
 
 def test_unix_private_save_never_calls_powershell(tmp_path, monkeypatch):
     from types import SimpleNamespace
+    import runtime_io
     path = tmp_path / 'env'
     monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', path)
-    monkeypatch.setattr(configure, 'os', SimpleNamespace(name='posix', fdopen=os.fdopen, replace=os.replace))
+    # Exercise the private writer's Unix branch; the host's real lock stays native.
+    monkeypatch.setattr(configure, 'private_text', lambda path, text: runtime_io.private_text(path, text))
+    original_lock = configure.file_lock
+    from contextlib import contextmanager
+    @contextmanager
+    def lock(*args, **kwargs):
+        with original_lock(*args, **kwargs):
+            with monkeypatch.context() as patch:
+                patch.setattr(runtime_io, 'os', SimpleNamespace(name='posix', fdopen=os.fdopen))
+                yield
+    monkeypatch.setattr(configure, 'file_lock', lock)
     monkeypatch.setattr(configure.subprocess, 'run', lambda *a, **kw: pytest.fail('Unix save launched PowerShell'))
     configure.save_many({'SEMANTIC_SCHOLAR_API_KEY': 'fixture'})
     assert path.read_text() == 'SEMANTIC_SCHOLAR_API_KEY=fixture\n'

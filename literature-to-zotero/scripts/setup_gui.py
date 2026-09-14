@@ -7,6 +7,7 @@ import queue
 import threading
 import tkinter as tk
 from tkinter import ttk
+from typing import Any
 
 import agent_installation
 import configure
@@ -24,11 +25,11 @@ class Wizard:
         self.page = 4 if advanced else 0
         self.extra_service = 'kimi'
         self.busy = False
-        self.work = queue.Queue()
+        self.work: queue.Queue[tuple[Any, Any, str | None]] = queue.Queue()
         self.ready_file = ready_file
         self.prepared = False
-        self.connected = set()
-        self.controls = []
+        self.connected: set[str] = set()
+        self.controls: list[tk.Widget] = []
         self.root.title(TITLE + (' · 演示' if demo else ''))
         self.root.geometry('880x690')
         self.root.minsize(780, 660)
@@ -226,14 +227,25 @@ class Wizard:
         self.label('点击检查，确认工具和账号是否已就绪。未完成的项目可以返回对应步骤继续配置。')
         self.label('基础配置后，可继续连接 Kimi WebBridge、Semantic Scholar 等可选功能；也可以直接开始使用。', style='Muted.TLabel')
         self.button(self.body, '更多设置（可选）', lambda: self.goto(4)).pack(anchor='w', pady=(0, 10))
-        self.results = ttk.Frame(self.body)
-        self.results.pack(fill='both', expand=True)
+        result_frame = ttk.Frame(self.body)
+        result_frame.pack(fill='both', expand=True)
+        self.results = tk.Text(result_frame, height=7, wrap='word', state='disabled',
+                               font=('Microsoft YaHei UI', 10), bg='#f4f6fa', relief='flat')
+        scrollbar = ttk.Scrollbar(result_frame, command=self.results.yview)
+        scrollbar.pack(side='right', fill='y')
+        self.results.configure(yscrollcommand=scrollbar.set)
+        self.results.pack(side='left', fill='both', expand=True)
         def complete(report):
-            for child in self.results.winfo_children():
-                child.destroy()
+            self.results.configure(state='normal')
+            self.results.delete('1.0', 'end')
+            self.results.tag_configure('ok', foreground='#197247')
+            self.results.tag_configure('missing', foreground='#9b6515')
             for record in report['items']:
-                ttk.Label(self.results, text=('✓ ' if record['ok'] else '○ ') + record['name'],
-                          foreground='#197247' if record['ok'] else '#9b6515').pack(anchor='w', pady=5)
+                line = ('✓ ' if record['ok'] else '○ ') + record['name']
+                if not record['ok'] and record.get('action'):
+                    line += '：' + record['action']
+                self.results.insert('end', line + '\n', 'ok' if record['ok'] else 'missing')
+            self.results.configure(state='disabled')
             self.status.set('检查通过，可以开始使用。' if report['ready'] else '部分项目尚未完成。返回对应步骤继续即可，已保存内容会保留。')
         def check():
             self.run(lambda: {'ready': len(self.connected) == 2, 'items': [

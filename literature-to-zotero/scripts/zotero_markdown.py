@@ -65,7 +65,7 @@ def load_pyzotero() -> Any:
     executable = shutil.which("zotero-mcp")
     if executable and os.environ.get("LITERATURE_ZOTERO_REEXEC") != "1":
         probe = subprocess.run(
-            [executable, "setup-info"], text=True, capture_output=True, timeout=15
+            [executable, "setup-info"], text=True, encoding='utf-8', errors='replace', capture_output=True, timeout=15
         )
         match = re.search(r"Python path:\s*(.+)", probe.stdout)
         if match and Path(match.group(1).strip()).is_file():

@@ -140,7 +140,7 @@ def browser(request: ProcessRequest, *command: str) -> tuple[int, dict[str, Any]
     session = request.session or ("ltz-" + safe_name(request.run_dir.name))[:60]
     completed = subprocess.run(
         [*browser_adapter(request), "--session", session, *command],
-        text=True, capture_output=True, timeout=request.browser_timeout,
+        text=True, encoding='utf-8', errors='replace', capture_output=True, timeout=request.browser_timeout,
     )
     try:
         return completed.returncode, json.loads(completed.stdout.strip().splitlines()[-1])

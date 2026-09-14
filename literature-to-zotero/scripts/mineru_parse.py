@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 import hashlib
 import io
 import json
-import os
 from pathlib import Path
 import sys
 import time
@@ -17,6 +16,7 @@ import zipfile
 import credentials
 from http_client import Client, RequestError
 from workflow import Run, read_json, utc_now, write_json, run_lock
+from runtime_io import private_text
 
 
 @dataclass(frozen=True)
@@ -54,16 +54,7 @@ class ParseRequest:
 
 
 def private_write(path: Path, data: Any) -> None:
-    temporary = path.with_suffix('.tmp')
-    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, 'w') as stream:
-            json.dump(data, stream)
-        temporary.replace(path)
-    except BaseException:
-        temporary.unlink(missing_ok=True)
-        raise
+    private_text(path, json.dumps(data, ensure_ascii=False))
 
 
 def unpack(raw: bytes, target: Path) -> str:
@@ -147,6 +138,30 @@ class Batch:
         self.save()
         private_write(self.private, data['file_urls'])
 
+    def recover_empty_batch(self, requested: set[str]) -> None:
+        """Reconcile a saved identity whose private upload URLs never survived."""
+        records = self.state['files']
+        if requested != {r['data_id'] for r in records} or any(r['state'] != 'pending' for r in records):
+            raise ValueError('upload URLs unavailable; existing upload outcome requires reconciliation')
+        previous = self.state['batch_id']
+        results = self.api('GET', '/api/v4/extract-results/batch/' + previous).get('extract_result', [])
+        if not isinstance(results, list) or len(results) != len(records):
+            raise ValueError('upload URLs unavailable; MinerU has not confirmed every file is waiting')
+        matches = [next((item for item in results if isinstance(item, dict) and
+                         (item.get('data_id') == record['data_id'] or item.get('file_name') == record['name'])), {})
+                   for record in records]
+        if any(item.get('state') != 'waiting-file' for item in matches):
+            raise ValueError('upload URLs unavailable; existing MinerU work must be preserved')
+        self.state.setdefault('reconciliations', []).append({
+            'at': utc_now(), 'previous_batch_id': previous,
+            'finding': 'all consented files confirmed waiting-file; no local upload started',
+            'action': 'replace empty batch after private upload URLs were lost',
+        })
+        self.state.pop('batch_id')
+        self.state['submission'] = 'empty_batch_reconciled'
+        self.save()
+        self.submit()
+
     def resume(self, requested: set[str]) -> None:
         active = [record for record in self.state['files'] if record['data_id'] in requested]
         if all(artifact_valid(record) or record['state'] == 'failed' for record in active):
@@ -157,7 +172,14 @@ class Batch:
             if requested != {record['data_id'] for record in self.state['files']}:
                 raise ValueError('resume the consented prepared batch before changing its membership')
             self.submit()
-        urls = read_json(self.private) if self.private.exists() else []
+        try:
+            urls = read_json(self.private) if self.private.exists() else []
+        except (ValueError, UnicodeError):
+            urls = []
+        needs_upload = any(r['data_id'] in requested and r['state'] == 'pending' for r in self.state['files'])
+        if needs_upload and (not isinstance(urls, list) or len(urls) != len(self.state['files'])):
+            self.recover_empty_batch(requested)
+            urls = read_json(self.private)
         for i, record in enumerate(self.state['files']):
             if record['data_id'] not in requested or record['state'] in ('uploaded', 'done', 'failed'):
                 continue
@@ -167,6 +189,8 @@ class Batch:
             source = Path(record['path'])
             if hashlib.sha256(source.read_bytes()).hexdigest() != record['sha256']:
                 raise ValueError('source changed since batch submission')
+            record['state'] = 'uploading'
+            self.save()
             self.client.request('PUT', signed, body=source.read_bytes(), headers={'Content-Type': ''})
             record['state'] = 'uploaded'
             self.save()

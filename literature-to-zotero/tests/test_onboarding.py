@@ -12,6 +12,7 @@ SCRIPTS = ROOT / 'literature-to-zotero/scripts'
 sys.path.insert(0, str(SCRIPTS))
 import agent_installation
 import configure
+from test_cli import assert_private_file
 
 
 def environment(home):
@@ -110,7 +111,7 @@ def test_private_writer_preserves_unicode_and_literal_shell_text(tmp_path):
     assert result.returncode == 0, result.stderr
     assert config.read_text(encoding='utf-8') == f'UNRELATED=保留\nMINERU_TOKEN={value}\n'
     assert value not in result.stdout + result.stderr
-    assert config.stat().st_mode & 0o777 == 0o600
+    assert_private_file(config)
     before = config.read_bytes()
     result = subprocess.run([sys.executable, str(SCRIPTS / 'configure.py'), '--set', 'MINERU_TOKEN'],
                             input='bad\nINJECTED=value', text=True, capture_output=True, env=env)
@@ -122,7 +123,7 @@ def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):
     env = environment(tmp_path)
     tools = tmp_path / '工具 with spaces'
     tools.mkdir()
-    pdf = tools / 'pdftotext'
+    pdf = tools / ('pdftotext.exe' if os.name == 'nt' else 'pdftotext')
     pdf.write_text('#!/bin/sh\nexit 0\n')
     pdf.chmod(0o755)
     config = tmp_path / '.config/literature-to-zotero'
@@ -133,7 +134,7 @@ def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):
                              'import shutil; print(shutil.which("pdftotext"))'],
                             env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == str(pdf)
+    assert Path(result.stdout.strip()) == pdf
 
 
 def test_service_timeout_is_actionable_and_other_checks_continue(tmp_path, monkeypatch, capsys):
@@ -147,6 +148,7 @@ def test_service_timeout_is_actionable_and_other_checks_continue(tmp_path, monke
             raise subprocess.TimeoutExpired(command, 60)
         return subprocess.CompletedProcess(command, 0, '{"ok": true}', '')
     monkeypatch.setattr(configure.subprocess, 'run', run)
+    monkeypatch.setattr(configure.capability, 'probe_discovery_search', lambda: {'ok': True, 'detail': 'fixture'})
     assert configure.check(as_json=True) == 1
     report = json.loads(capsys.readouterr().out)
     assert not report['ready']

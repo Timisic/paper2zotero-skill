@@ -366,8 +366,9 @@ class Writer:
 
     def write_summary(self, identity: str, key: str, source: Path, result: dict[str, Any],
                       children: list[dict[str, Any]]) -> None:
-        summary = source.read_text()
-        summary_hash = hashlib.sha256(summary.encode()).hexdigest()
+        summary = source.read_text(encoding='utf-8')
+        from runtime_io import text_hash
+        summary_hash = text_hash(summary)
         marker = f'literature-to-zotero:{self.run.name}:{summary_hash}'
         note = '<p>' + marker + '</p><pre>' + html.escape(summary) + '</pre>'
         matches = [item for item in children if item.get('data', {}).get('note') == note]
@@ -404,7 +405,7 @@ def validate_artifacts(candidate: dict[str, Any], paper: Paper) -> None:
         return
     if not paper.summary:
         raise ValueError('summary artifact missing')
-    summary = paper.summary.read_text()
+    summary = paper.summary.read_text(encoding='utf-8')
     for field in ('provider: `', 'template_version: `', 'source_basis: `'):
         if field not in summary:
             raise ValueError('summary provider contract missing')

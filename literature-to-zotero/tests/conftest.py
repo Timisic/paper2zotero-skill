@@ -15,6 +15,16 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from pathlib import Path
+
+# Unspecified install paths must never resolve to the developer's assistants.
+# Individual tests may override these with their own profile, but an omitted
+# USERPROFILE on Windows now lands in a disposable test profile.
+profile = Path(tempfile.mkdtemp(prefix='literature-test-profile-'))
+os.environ['HOME'] = str(profile)
+os.environ['USERPROFILE'] = str(profile)
+os.environ['CODEX_HOME'] = str(profile / '.codex')
+os.environ['CLAUDE_CONFIG_DIR'] = str(profile / '.claude')
 
 CLOSED = "http://127.0.0.1:9"
 SOURCES = ("openalex", "semantic_scholar", "crossref", "unpaywall", "arxiv", "pmc")

@@ -114,7 +114,7 @@ def cmd_doctor() -> int:
     try:
         completed = subprocess.run(
             [sys.executable, str(SCRIPTS / "preflight.py"), "--json"],
-            text=True, capture_output=True, timeout=60,
+            text=True, encoding='utf-8', errors='replace', capture_output=True, timeout=60,
         )
         payload = json.loads(completed.stdout)
     except Exception as exc:  # noqa: BLE001

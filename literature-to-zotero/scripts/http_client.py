@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 import http.client
+import http.cookiejar
 import json
 import os
 from pathlib import Path
@@ -16,10 +17,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-try:  # POSIX only; without it the pacing file still works within one process.
-    import fcntl
-except ImportError:  # pragma: no cover - not exercised on this platform
-    fcntl = None  # type: ignore[assignment]
+from runtime_io import file_lock
 
 
 class RequestError(RuntimeError):
@@ -100,14 +98,9 @@ class Throttle:
     @contextmanager
     def _claim(self) -> Iterator[Any]:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.path, 'a+') as handle:
-            if fcntl is not None:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            try:
+        with file_lock(self.path.with_suffix('.lock'), blocking=True):
+            with open(self.path, 'a+', encoding='ascii') as handle:
                 yield handle
-            finally:
-                if fcntl is not None:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     @staticmethod
     def _read(handle: Any) -> float:
@@ -156,13 +149,19 @@ class Throttle:
 
 
 class Client:
-    def __init__(self, budget: float = 90, timeout: float = 20, throttle: Throttle | None = None):
+    def __init__(self, budget: float = 90, timeout: float = 20, throttle: Throttle | None = None, *, cookies: bool = False):
         self.budget, self.timeout = budget, min(timeout, 30)
         self.throttle = throttle
         self.routes = {
             'direct': urllib.request.build_opener(urllib.request.ProxyHandler({}), SafeRedirect()),
             'environment': urllib.request.build_opener(SafeRedirect()),
         }
+        if cookies:
+            # Only public-PDF acquisition opts in. Standard domain/path rules
+            # apply; no browser profile or persistent cookie storage is read.
+            jar = http.cookiejar.CookieJar()
+            for opener in self.routes.values():
+                opener.add_handler(urllib.request.HTTPCookieProcessor(jar))
         self.preferred: dict[str, tuple[str, float]] = {}
         self.not_before: dict[str, float] = {}
 

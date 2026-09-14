@@ -12,6 +12,20 @@ SCRIPTS = ROOT / "scripts"
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
+def assert_private_file(path: Path) -> None:
+    if os.name != 'nt':
+        assert path.stat().st_mode & 0o777 == 0o600
+        return
+    command = '''$acl=[IO.File]::GetAccessControl($env:TEST_PRIVATE_FILE)
+$rules=$acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])
+$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User
+if (-not $acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or $rules[0].IdentityReference -ne $sid -or $rules[0].FileSystemRights -ne 'FullControl') { exit 1 }
+'''
+    result = subprocess.run(['powershell.exe', '-NoProfile', '-Command', command],
+                            env={**os.environ, 'TEST_PRIVATE_FILE': str(path)}, capture_output=True)
+    assert result.returncode == 0, 'private file must allow only the current Windows user'
+
+
 def run_script(name: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(SCRIPTS / name), *args],

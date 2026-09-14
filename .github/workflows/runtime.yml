@@ -1,0 +1,31 @@
+name: Cross-platform runtime
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  pipeline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pytest
+      - name: Pipeline, recovery, identity and local I/O regressions
+        run: >-
+          python -m pytest -q
+          literature-to-zotero/tests/test_windows_pipeline.py
+          literature-to-zotero/tests/test_http_client.py
+          literature-to-zotero/tests/test_http_acquisition.py
+          literature-to-zotero/tests/test_mineru_resume.py
+          literature-to-zotero/tests/test_zotero_ingest.py
+          literature-to-zotero/tests/test_full_chain.py
+          literature-to-zotero/tests/test_process_run.py
+          literature-to-zotero/tests/test_workflow_resume.py

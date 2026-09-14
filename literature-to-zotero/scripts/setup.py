@@ -34,7 +34,7 @@ def run_preflight(codex_config: Path, skip_live: bool) -> dict[str, Any]:
                "--codex-config", str(codex_config), "--json"]
     if skip_live:
         command.append("--skip-live")
-    completed = subprocess.run(command, text=True, capture_output=True, timeout=60)
+    completed = subprocess.run(command, text=True, encoding='utf-8', errors='replace', capture_output=True, timeout=60)
     if completed.returncode != 0:
         print(json.dumps({"status": "failed", "reason": completed.stderr.strip() or "preflight failed"},
                          ensure_ascii=False))

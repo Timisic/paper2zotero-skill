@@ -8,10 +8,11 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
 
 import agent_installation
 import credentials
+import capability
+from runtime_io import private_text, file_lock
 
 SCRIPTS = Path(__file__).resolve().parent
 
@@ -30,20 +31,10 @@ def save_many(values: dict[str, str]) -> None:
         raise ValueError('输入含控制字符，请重新粘贴完整内容')
     path = credentials.SKILL_ENV_FILE
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    lines = path.read_text(encoding='utf-8').splitlines() if path.exists() else []
-    lines = [line for line in lines if line.partition('=')[0].strip() not in values]
-    fd, temporary = tempfile.mkstemp(dir=path.parent)
-    try:
-        with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as stream:
-            stream.write('\n'.join([*lines, *(f'{key}={value}' for key, value in values.items())]) + '\n')
-        if os.name == 'nt':
-            subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-                            '-File', str(SCRIPTS / 'protect-config.ps1'),
-                            '-ConfigPath', temporary], check=True, capture_output=True, timeout=20,
-                           creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-        os.replace(temporary, path)
-    finally:
-        Path(temporary).unlink(missing_ok=True)
+    with file_lock(path.with_suffix('.lock'), blocking=True):
+        lines = path.read_text(encoding='utf-8').splitlines() if path.exists() else []
+        lines = [line for line in lines if line.partition('=')[0].strip() not in values]
+        private_text(path, '\n'.join([*lines, *(f'{key}={value}' for key, value in values.items())]) + '\n')
 
 
 # Human labels/actions stay here; service semantics remain in capability.py.
@@ -71,7 +62,7 @@ def probe(command: str) -> dict[str, object]:
     else:
         try:
             result = subprocess.run([sys.executable, str(SCRIPTS / 'verify.py'), command],
-                                    capture_output=True, text=True, timeout=60)
+                                    capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60)
             payload = json.loads(result.stdout)
             ok = result.returncode == 0 and payload.get('ok') is True
             detail = str(payload.get('detail', ''))
@@ -107,6 +98,12 @@ def check(*, as_json: bool = False) -> int:
         records.append(record)
         if not as_json:
             render(record)
+    discovery = capability.probe_discovery_search()
+    search_record = {'name': '论文检索', **discovery, 'action': '' if discovery['ok'] else
+                     '打开“更多设置”配置 OpenAlex 或 Semantic Scholar 授权码，再检查；若已配置，请检查网络和服务额度。'}
+    records.append(search_record)
+    if not as_json:
+        render(search_record)
     ready = all(record['ok'] for record in records)
     if as_json:
         print(json.dumps({'ready': ready, 'items': records}, ensure_ascii=False))
@@ -114,7 +111,7 @@ def check(*, as_json: bool = False) -> int:
         for record in records[:2]:
             render(record)
         print('已通过检查，可以开始找论文、保存和生成阅读材料。' if ready else
-              '安装已保存；仍有未完成项，重跑向导可继续。可以先尝试找论文。')
+              '安装已保存；仍有未完成项，可在向导中继续修复。当前可用功能以上方检查为准。')
         print('额外检索来源按需使用；电脑上的附件是否已下载，在处理论文时单独检查。')
     return 0 if ready else 1
 

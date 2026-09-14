@@ -16,7 +16,8 @@ The manifest is the authority for selected IDs and MinerU consent. `zotero-state
 |---|---|
 | `retry_exhausted` | Shared HTTP reader exhausted its budget. Save the pending stage; continue unrelated work. Retry the same command after reachability improves. |
 | `outcome_unknown` | A write may have succeeded. Zotero reads its saved key before any replay. Never resend an unkeyed create blindly. |
-| MinerU submission outcome unknown without batch ID | Preserve its journal; reconcile the batch with the service before starting another. No automatic resubmission is safe here. |
+| MinerU submission outcome unknown without batch ID | Re-run the same command. The script only resubmits when no batch identity was received and no file upload started; it records that reconciliation. Any possible upload preserves the checkpoint. |
+| MinerU upload URLs unavailable | Re-run the same command. For the full previously consented batch, the script checks that every remote file is `waiting-file` and every local file is still pending before replacing the empty batch. Missing results, active uploads or completed work keep the old identity. No manual journal renaming is needed for the confirmed-empty case. |
 | `rate_limited` | Respect the returned wait; Zotero persists its retry time across command reruns. |
 | `invalid_request` | Fix payload/schema or input; changing proxy will not fix a 400. |
 | `authentication_required` / `permission_denied` | Check the credential, entitlement or signed-URL lifetime for this service. Request human login only when needed. |
@@ -29,6 +30,8 @@ The manifest is the authority for selected IDs and MinerU consent. `zotero-state
 Readers use bounded backoff, host-specific route preference and a default 90-second request budget. Writes are not automatically retried by the transport after an uncertain response. Proxy configuration comes from the environment, and loopback services always use direct access. OpenAlex may use the existing browser fallback for public metadata after reachability failures; private API writes never switch to a browser.
 
 During active work report the stage, recently completed work, blocking service and next attempt within about 60 seconds. Keep tool waits bounded. After a service budget is exhausted, avoid an external shell loop around the whole CLI; return a concrete pending checkpoint when no independent work remains. No promise of unattended future retries without an actual scheduler.
+
+If every discovery source fails, report their statuses together and open the normal configuration UI for missing account entries. One working source suffices; do not require every optional provider. A `rate_limited` source is not repaired by repeated naked curl requests, manually editing the env file, or rerunning full setup. After account entry, resume the same discovery run.
 
 ## Authorization boundaries
 

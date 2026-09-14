@@ -359,7 +359,7 @@ def acquire(request: AcquireRequest) -> dict[str, Any]:
     limits = request.limits
     deadline = time.monotonic() + limits.total_seconds
     trail: list[dict[str, Any]] = []
-    client = Client(budget=limits.per_url_seconds, timeout=min(30, limits.per_url_seconds))
+    client = Client(budget=limits.per_url_seconds, timeout=min(30, limits.per_url_seconds), cookies=True)
     locations = known_locations(candidate)
     kept: str | None = None
     unresolved: dict[str, Any] | None = None

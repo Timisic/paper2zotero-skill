@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Iterator, Sequence
+from runtime_io import file_lock, text_hash
 
 
 SCHEMA_VERSION = 2
@@ -80,14 +81,9 @@ ALLOWED_TRANSITIONS: dict[PaperState, set[PaperState]] = {
 
 @contextmanager
 def run_lock(run: Path, name: str = "workflow") -> Iterator[None]:
-    import fcntl
     if name not in {"workflow", "zotero", "conversion"}:
         raise ValueError("unknown run lock")
-    with (run / f'.{name}.lock').open('a') as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise ValueError('another operation is active for this run') from None
+    with file_lock(run / f'.{name}.lock'):
         yield
 
 
@@ -238,6 +234,7 @@ class Paper:
                 continue
             digest = hashlib.sha256(source.read_bytes()).hexdigest()
             if field == "summary":
+                digest = text_hash(source.read_text(encoding='utf-8'))
                 if digest != evidence.get("note_sha256"):
                     raise ValueError("summary evidence differs from source")
                 continue

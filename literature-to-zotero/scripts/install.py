@@ -5,7 +5,7 @@ import tempfile
 import os
 import argparse
 
-from agent_installation import CHOICES, selected_roots
+from agent_installation import CHOICES, selected_roots, agent_roots
 
 WINDOWS = os.name == "nt"
 MARKER = ".literature-to-zotero-managed"
@@ -19,6 +19,13 @@ def install(agent: str = "auto") -> None:
     roots = selected_roots(agent)
     if not roots:
         raise SystemExit('未找到已使用的 AI 助手。请运行 setup 并选择 Codex、Claude Code 或 Pi；Agent 可传 --agent。')
+    if WINDOWS:
+        # A shared runtime upgrade also updates existing managed copies. Never
+        # create an unselected assistant or absorb an independent installation.
+        for root in agent_roots().values():
+            marker = root / 'literature-to-zotero' / MARKER
+            if root not in roots and marker.is_file() and marker.read_text(encoding='utf-8') == 'v1':
+                roots.append(root)
     # Preflight all conflicts before changing any runtime.
     for root in roots:
         link = root / 'literature-to-zotero'

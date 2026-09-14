@@ -86,7 +86,7 @@ GUIDE: dict[str, dict[str, str]] = {
     "discovery_sources": {
         "label": "文献检索来源",
         "url": "https://www.semanticscholar.org/product/api",
-        "do": "可选增强：Semantic Scholar 申请 API key 后写入 SEMANTIC_SCHOLAR_API_KEY；Crossref/Unpaywall 只需一个真实联系邮箱（CROSSREF_MAILTO / UNPAYWALL_EMAIL）。写入 ~/.config/literature-to-zotero/env（0600）或环境变量。缺失只影响对应来源，OpenAlex 检索照常可用。",
+        "do": "在配置向导的“更多设置”填写 OpenAlex 或 Semantic Scholar 授权码，再点击“检查配置”。至少一个来源的检索请求通过才算可用；匿名额度、账号额度和网络状态以实际响应为准。Crossref/Unpaywall 的联系邮箱按需填写。",
     },
     "skill_links": {
         "label": "skill 安装",
@@ -174,6 +174,22 @@ def probe_zotero_local(timeout: int = 3) -> bool:
         return False
 
 
+def probe_discovery_search() -> dict[str, Any]:
+    """A tiny real search; one usable source suffices, optional peers may wait."""
+    from sources import Sources, Query, LABELS
+    client = Sources(timeout=3, budget=5, attempts=1)
+    statuses = {}
+    for source in ('openalex', 'semantic_scholar'):
+        try:
+            answer = client.search(source, Query(text='mental health', limit=1), budget=5)
+            statuses[LABELS[source]] = answer.status
+            if answer.ok:
+                return {'ok': True, 'detail': LABELS[source] + ' 检索请求通过', 'sources': statuses}
+        except (OSError, ValueError, TypeError, AttributeError):
+            statuses[LABELS[source]] = 'unavailable'
+    return {'ok': False, 'detail': '; '.join(f'{name}: {state}' for name, state in statuses.items()), 'sources': statuses}
+
+
 def probe_kimi(binary: Path | None = None, live: bool = True) -> dict[str, str | bool | None]:
     """Ask the Kimi WebBridge daemon whether it and the browser extension run.
 
@@ -192,7 +208,7 @@ def probe_kimi(binary: Path | None = None, live: bool = True) -> dict[str, str |
         return status
     try:
         completed = subprocess.run(
-            [str(executable), "status"], text=True, capture_output=True, timeout=15,
+            [str(executable), "status"], text=True, encoding='utf-8', errors='replace', capture_output=True, timeout=15,
             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
     except (OSError, subprocess.SubprocessError):
@@ -337,7 +353,7 @@ def zotero_key_access_via_runtime(
     result = {"reachable": False, "identity_match": False, "write_permission": False}
     try:
         setup = subprocess.run(
-            [command, "setup-info"], text=True, capture_output=True, timeout=15
+            [command, "setup-info"], text=True, encoding='utf-8', errors='replace', capture_output=True, timeout=15
         )
     except (OSError, subprocess.SubprocessError):
         return result
@@ -377,7 +393,7 @@ print(json.dumps({'reachable': True, 'identity_match': identity, 'write_permissi
     try:
         completed = subprocess.run(
             [match.group(1).strip(), "-c", probe, api_base_url, str(library_id), library_type],
-            text=True,
+            text=True, encoding='utf-8', errors='replace',
             capture_output=True,
             timeout=20,
             env=environment,

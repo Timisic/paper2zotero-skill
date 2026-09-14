@@ -5,11 +5,14 @@ import shutil
 import subprocess
 import sys
 import importlib.util
+import pytest
+from test_cli import assert_private_file
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / 'literature-to-zotero/scripts'
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX entry; Windows equivalent in test_windows_setup.py')
 def test_release_survives_download_removal_and_repeat_install(tmp_path):
     output = tmp_path / 'download folder'
     subprocess.run([sys.executable, str(ROOT / 'scripts/build-distribution.py'),
@@ -20,7 +23,7 @@ def test_release_survives_download_removal_and_repeat_install(tmp_path):
     assert (output / 'literature-to-zotero.zip').is_file()
     home = tmp_path / 'new home'
     home.mkdir()
-    env = {**os.environ, 'HOME': str(home), 'PYTHON_BIN': sys.executable, 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(home / '.codex')}
+    env = {**os.environ, 'HOME': str(home), 'USERPROFILE': str(home), 'PYTHON_BIN': sys.executable, 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(home / '.codex')}
     command = ['bash', str(release / 'install/setup.sh'), '--dependencies-only']
     for _ in range(2):
         result = subprocess.run(command, env=env, text=True, capture_output=True)
@@ -39,7 +42,7 @@ def test_conflict_preserves_existing_skill(tmp_path):
     existing.mkdir(parents=True)
     (existing / 'mine').write_text('user content')
     result = subprocess.run([sys.executable, str(SCRIPTS / 'install.py')],
-                            env={**os.environ, 'HOME': str(tmp_path), 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(tmp_path / '.codex')}, capture_output=True)
+                            env={**os.environ, 'HOME': str(tmp_path), 'USERPROFILE': str(tmp_path), 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(tmp_path / '.codex')}, capture_output=True)
     assert result.returncode != 0
     assert (existing / 'mine').read_text() == 'user content'
     assert not (tmp_path / '.local/share/literature-to-zotero/skill').exists()
@@ -56,13 +59,13 @@ def test_config_update_private_literal_and_preserves_other_values(tmp_path, monk
     module.save('MINERU_TOKEN', 'literal-$()-`command`')
     module.save('UNRELATED', '')
     assert config.read_text() == 'UNRELATED=keep\nMINERU_TOKEN=literal-$()-`command`\n'
-    assert config.stat().st_mode & 0o777 == 0o600
+    assert_private_file(config)
 
 
 def test_noninteractive_setup_stops_without_prompting_or_writing_secrets(tmp_path):
     result = subprocess.run([sys.executable, str(SCRIPTS / 'configure.py')],
                             input='', text=True, capture_output=True,
-                            env={**os.environ, 'HOME': str(tmp_path), 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(tmp_path / '.codex')}, timeout=5)
+                            env={**os.environ, 'HOME': str(tmp_path), 'USERPROFILE': str(tmp_path), 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(tmp_path / '.codex')}, timeout=5)
     assert result.returncode == 2
     assert not (tmp_path / '.config/literature-to-zotero/env').exists()
 
@@ -107,7 +110,7 @@ install('codex')
 install('codex')
 '''
     result = subprocess.run([sys.executable, '-c', code, str(SCRIPTS / 'install.py')],
-                            env={**os.environ, 'HOME': str(tmp_path), 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(tmp_path / '.codex')}, capture_output=True, text=True)
+                            env={**os.environ, 'HOME': str(tmp_path), 'USERPROFILE': str(tmp_path), 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(tmp_path / '.codex')}, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     skill = tmp_path / '.codex/skills/literature-to-zotero'
     assert not skill.is_symlink()
@@ -116,6 +119,7 @@ install('codex')
     assert (skill / 'scripts/run-python.cmd').is_file()
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX installer; Windows equivalent in test_windows_setup.py')
 def test_online_installer_fetches_then_runs_without_overwriting_dirty_cache(tmp_path):
     cache = tmp_path / 'source with spaces'
     bin_dir = tmp_path / 'bin'

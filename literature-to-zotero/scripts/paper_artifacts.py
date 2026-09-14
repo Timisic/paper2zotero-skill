@@ -159,14 +159,14 @@ def poppler_text(pdf: Path) -> str:
         return ""
     try:
         completed = subprocess.run(
-            [executable, "-f", "1", "-l", "3", str(pdf), "-"],
-            text=True,
+            [executable, "-enc", "UTF-8", "-f", "1", "-l", "3", str(pdf), "-"],
+            text=True, encoding='utf-8', errors='replace',
             capture_output=True,
             timeout=30,
         )
     except (OSError, subprocess.SubprocessError):
         return ""
-    return completed.stdout if completed.returncode == 0 else ""
+    return (completed.stdout or '') if completed.returncode == 0 else ""
 
 
 def has_words(text: str) -> bool:
