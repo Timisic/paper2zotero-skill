@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -81,7 +82,7 @@ def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_pa
     config.parent.mkdir(parents=True)
     config.write_text('MINERU_TOKEN=private-fixture\nSETUP_BROWSER=1\n')
     before = config.read_bytes()
-    command = ['bash', str(ROOT / 'install/setup.sh'), '--demo', '--agent', 'claude-code']
+    command = [shutil.which('bash') or 'bash', str(ROOT / 'install/setup.sh'), '--demo', '--agent', 'claude-code']
     if advanced:
         command.append('--advanced')
     prompt_before = (SCRIPTS.parent / 'references/paper-summary.md').read_bytes()
@@ -130,7 +131,7 @@ def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):
     config.mkdir(parents=True)
     (config / 'python-path').write_text(sys.executable + '\n')
     (config / 'pdf-bin').write_text(str(tools) + '\n')
-    result = subprocess.run(['bash', str(SCRIPTS / 'run-python.sh'), '-c',
+    result = subprocess.run([shutil.which('bash') or 'bash', str(SCRIPTS / 'run-python.sh'), '-c',
                              'import shutil; print(shutil.which("pdftotext"))'],
                             env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr

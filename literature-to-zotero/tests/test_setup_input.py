@@ -17,9 +17,6 @@ import verify
 
 def bash_executable():
     bash = shutil.which('bash')
-    if os.name == 'nt':
-        git = shutil.which('git.exe')
-        bash = str(Path(git).parent.parent / 'bin/bash.exe') if git else None
     if not bash:
         pytest.skip('Bash required')
     return bash

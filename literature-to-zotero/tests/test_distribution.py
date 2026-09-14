@@ -24,14 +24,14 @@ def test_release_survives_download_removal_and_repeat_install(tmp_path):
     home = tmp_path / 'new home'
     home.mkdir()
     env = {**os.environ, 'HOME': str(home), 'USERPROFILE': str(home), 'PYTHON_BIN': sys.executable, 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(home / '.codex')}
-    command = ['bash', str(release / 'install/setup.sh'), '--dependencies-only']
+    command = [shutil.which('bash') or 'bash', str(release / 'install/setup.sh'), '--dependencies-only']
     for _ in range(2):
         result = subprocess.run(command, env=env, text=True, capture_output=True)
         assert result.returncode == 0, result.stderr
     shutil.rmtree(output)
     installed = home / '.codex/skills/literature-to-zotero'
     assert installed.is_symlink() and (installed / 'SKILL.md').is_file()
-    result = subprocess.run(['bash', str(installed / 'scripts/run-python.sh'),
+    result = subprocess.run([shutil.which('bash') or 'bash', str(installed / 'scripts/run-python.sh'),
                              str(installed / 'scripts/workflow.py'), '--help'],
                             env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
@@ -141,7 +141,7 @@ exit 9
     git.chmod(0o755)
     env = {**os.environ, 'PATH': str(bin_dir) + os.pathsep + os.environ['PATH'],
            'PAPER2ZOTERO_SOURCE_DIR': str(cache)}
-    command = ['bash', str(ROOT / 'install/install.sh'), '--dependencies-only']
+    command = [shutil.which('bash') or 'bash', str(ROOT / 'install/install.sh'), '--dependencies-only']
     first = subprocess.run(command, input='', capture_output=True, text=True, env=env)
     assert first.returncode == 0, first.stderr
     assert 'setup reached' in first.stdout
