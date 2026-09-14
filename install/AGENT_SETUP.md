@@ -28,7 +28,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Agent claude
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<仓库绝对路径>\install\setup.ps1' -Agent claude-code -LaunchWizard
 ```
 
-`-LaunchWizard` 等待终端就绪后返回；`-DependenciesOnly` 只准备依赖和 skill。向导窗口标题为 `literature-to-zotero`，授权码可右键粘贴或 Shift+Insert，隐藏输入不显示字符。WinGet 缺失时按安装器打开的 Microsoft Store 页面补齐“应用安装程序”。后续重跑同一入口，已有有效依赖和配置会被复用。
+`-LaunchWizard` 等待终端就绪后返回；`-DependenciesOnly` 只准备依赖和 skill。向导窗口标题为 `literature-to-zotero`，授权码可按 Ctrl+V、右键菜单“粘贴”或 Shift+Insert，收到输入显示固定星号，回车后验证连接。仅这个向导窗口映射 Ctrl+V，Ctrl+C 仍可退出。误输入会在当前步骤重新提示，个人文库 ID 自动获取失败会显示原因并提供重试。WinGet 缺失时按安装器打开的 Microsoft Store 页面补齐“应用安装程序”。后续重跑同一入口，已有有效依赖和配置会被复用。
 
 ### macOS / Debian / Ubuntu
 

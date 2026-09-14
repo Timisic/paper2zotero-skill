@@ -55,8 +55,13 @@ function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
     if (-not (Test-Path -LiteralPath $terminal)) { throw "Git terminal missing: $terminal. Repair Git for Windows and retry." }
     # Start-Process joins its argument array into one Windows command line.
     # Quote each path explicitly; use a one-word title so it cannot become a command.
-    $arguments = @('--hold', 'error', '--title', 'literature-to-zotero', '-e', '/usr/bin/bash', ('"' + $entry.Replace('\', '/') + '"')) + $WizardArgs
-    Write-Host '正在打开配置向导。请在新窗口填写账号授权；粘贴时可按 Shift+Insert。' -ForegroundColor Cyan
+    # Only this wizard maps Ctrl+V to paste. Keep Ctrl+C as interrupt and leave
+    # the user's global mintty settings untouched.
+    $arguments = @('--hold', 'error', '--title', 'literature-to-zotero',
+        '-o', 'ShootFoot=yes', '-o', 'KeyFunctions=C+v:paste',
+        '-o', 'CtrlExchangeShift=no', '-o', 'ClipShortcuts=yes',
+        '-e', '/usr/bin/bash', ('"' + $entry.Replace('\', '/') + '"')) + $WizardArgs
+    Write-Host '正在打开配置向导。在新窗口按 Ctrl+V 粘贴授权码，看到星号后按回车继续。' -ForegroundColor Cyan
     if ($LaunchWizard) {
         # Agent tool calls must be able to return while the human enters keys.
         $startup = Join-Path ([IO.Path]::GetTempPath()) ('paper2zotero-start-' + [guid]::NewGuid().ToString('N'))

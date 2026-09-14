@@ -86,6 +86,39 @@ class WindowsSetupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             check_native_terminal_has_tty_and_verified_poppler(Path(folder))
 
+    def test_masked_input_restores_real_terminal_after_success_and_interrupt(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)
+            package = release(path)
+            env = environment(path / '用户 home')
+            marker = path / 'input-result.txt'
+            env['PAPER2ZOTERO_TEST_RESULT'] = str(marker)
+            # Use a real mintty TTY and production reader. Only the keystrokes
+            # are synthetic; no clipboard or user credentials are accessed.
+            (package / 'literature-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/setup-input.sh"
+before=$(stty -g)
+count=0
+read() {
+  [[ "$(stty -g)" != "$before" ]]
+  count=$((count + 1))
+  if [[ "$count" == 1 ]]; then printf -v char '%s' 'fixture-key'; else char=''; fi
+}
+value=$(read_authorization_line)
+[[ "$value" == fixture-key ]]
+[[ "$(stty -g)" == "$before" ]]
+read() { kill -s TERM "$BASHPID"; }
+status=0
+value=$(read_authorization_line) || status=$?
+[[ "$status" == 130 ]]
+[[ "$(stty -g)" == "$before" ]]
+printf 'masked-input-restored' > "$PAPER2ZOTERO_TEST_RESULT"
+''', encoding='utf-8', newline='\n')
+            result = run_setup(package, env, '-Demo')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(marker.read_text(), 'masked-input-restored')
+
     def test_real_demo_stages(self):
         with tempfile.TemporaryDirectory() as folder:
             env = environment(Path(folder) / '用户 home')

@@ -20,8 +20,8 @@ def save(key: str, value: str) -> None:
     """Atomic, private update preserving unrelated configuration."""
     if not value:
         return
-    if any(c in value for c in '\r\n'):
-        raise ValueError('配置必须为单行')
+    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ValueError('输入含控制字符，请重新粘贴完整内容')
     path = credentials.SKILL_ENV_FILE
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     lines = path.read_text(encoding='utf-8').splitlines() if path.exists() else []

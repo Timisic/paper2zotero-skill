@@ -186,6 +186,7 @@ finish() {
 
 TOTAL_STAGES=4
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SKILL_DIR/scripts/setup-input.sh"
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 WINDOWS=0
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WINDOWS=1 ;; esac
@@ -267,7 +268,7 @@ _clear
 printf '\n%s%s  把论文和阅读笔记放进 Zotero%s\n\n' "$BOLD" "$BLUE" "$RESET"
 say '工具由安装器准备；你只需要登录账号，复制网页上的授权码。'
 say '第一次主要连接两个账号。暂时没有也可以跳过，之后继续。'
-note '输入授权码时屏幕不会显示字符，这是正常的。Ctrl-C 可退出，已保存内容会保留。'
+note '输入授权码时会显示星号作为提示。Ctrl-C 可退出，已保存内容会保留。'
 if [[ "$ADVANCED" == 1 ]]; then note '已打开更多设置：检索来源、电脑同步、浏览器全文。'; fi
 pause '按回车开始'
 
@@ -323,36 +324,47 @@ else
   step '3. 个人文库勾选 Allow library access、Allow notes access、Allow write access，然后保存。'
   if [[ "$GROUP_LIBRARY" == 1 ]]; then step '你选择了群组文库：还需要允许目标群组的读取和写入。'; fi
   step '4. 复制刚生成的 Key，粘贴到下方。'
-  ask_secret ZOTERO_API_KEY '粘贴 Zotero 授权码（回车保留已有值；没有则稍后再配）：'
-  persist ZOTERO_API_KEY "$ZOTERO_API_KEY"
-  ZOTERO_LIBRARY_TYPE="${ZOTERO_LIBRARY_TYPE:-$(_existing ZOTERO_LIBRARY_TYPE || true)}"
-  ZOTERO_LIBRARY_TYPE="${ZOTERO_LIBRARY_TYPE:-user}"
-  if [[ "$GROUP_LIBRARY" == 1 ]]; then ZOTERO_LIBRARY_TYPE=group; fi
-  [[ "$ZOTERO_LIBRARY_TYPE" == user || "$ZOTERO_LIBRARY_TYPE" == group ]] || { warn '已有文库类型无效，请检查配置。'; exit 1; }
-  persist ZOTERO_LIBRARY_TYPE "$ZOTERO_LIBRARY_TYPE"
-  if [[ "$ZOTERO_LIBRARY_TYPE" == user ]]; then note '默认保存到你自己的 Zotero。'; fi
-  if [[ -n "$ZOTERO_API_KEY" ]]; then
-    LIBID=''
-    if [[ "$ZOTERO_LIBRARY_TYPE" == user ]]; then
-      if [[ "$DEMO" == 1 ]]; then
-        LIBID=12345678
-      else
-        LIBID="$(ZOTERO_API_KEY="$ZOTERO_API_KEY" "$PYTHON_BIN" "$SKILL_DIR/scripts/verify.py" self-id 2>/dev/null || true)"
-        [[ "$LIBID" =~ ^[0-9]+$ ]] || LIBID=''
+  while true; do
+    ask_authorization ZOTERO_API_KEY '粘贴 Zotero 授权码（没有则回车跳过）：'
+    persist ZOTERO_API_KEY "$ZOTERO_API_KEY"
+    ZOTERO_LIBRARY_TYPE="${ZOTERO_LIBRARY_TYPE:-$(_existing ZOTERO_LIBRARY_TYPE || true)}"
+    ZOTERO_LIBRARY_TYPE="${ZOTERO_LIBRARY_TYPE:-user}"
+    if [[ "$GROUP_LIBRARY" == 1 ]]; then ZOTERO_LIBRARY_TYPE=group; fi
+    [[ "$ZOTERO_LIBRARY_TYPE" == user || "$ZOTERO_LIBRARY_TYPE" == group ]] || { warn '已有文库类型无效，请检查配置。'; exit 1; }
+    persist ZOTERO_LIBRARY_TYPE "$ZOTERO_LIBRARY_TYPE"
+    if [[ "$ZOTERO_LIBRARY_TYPE" == user ]]; then note '默认保存到你自己的 Zotero。'; fi
+    if [[ -n "$ZOTERO_API_KEY" ]]; then
+      LIBID=''
+      if [[ "$ZOTERO_LIBRARY_TYPE" == user ]]; then
+        if [[ "$DEMO" == 1 ]]; then
+          LIBID=12345678
+        else
+          LIBID="$(ZOTERO_API_KEY="$ZOTERO_API_KEY" "$PYTHON_BIN" "$SKILL_DIR/scripts/verify.py" self-id || true)"
+          [[ "$LIBID" =~ ^[0-9]+$ ]] || LIBID=''
+        fi
       fi
-    fi
-    if [[ -n "$LIBID" ]]; then
-      persist ZOTERO_LIBRARY_ID "$LIBID"
-      note '✓ 已自动找到你的个人文库。'
+      if [[ -n "$LIBID" ]]; then
+        persist ZOTERO_LIBRARY_ID "$LIBID"
+        note '✓ 已自动找到你的个人文库。'
+      elif [[ "$ZOTERO_LIBRARY_TYPE" == group ]]; then
+        ask ZOTERO_LIBRARY_ID '填写要保存到的群组文库 ID（数字；回车稍后配置）：'
+        [[ -z "$ZOTERO_LIBRARY_ID" || "$ZOTERO_LIBRARY_ID" =~ ^[0-9]+$ ]] || { warn '文库 ID 应为数字。'; exit 1; }
+        persist ZOTERO_LIBRARY_ID "$ZOTERO_LIBRARY_ID"
+      else
+        warn '还未连接到你的个人文库，无需手动查找文库 ID。'
+        if retry_connection; then continue; fi
+        note '已保留填写内容；之后重跑向导即可继续连接。'
+        break
+      fi
+      if ! verify_step zotero-key; then
+        warn '还未通过文库读写检查，请检查授权码权限和网络。'
+        if retry_connection; then continue; fi
+      fi
     else
-      ask ZOTERO_LIBRARY_ID '未自动取得文库 ID，可填写或回车稍后配置：'
-      [[ -z "$ZOTERO_LIBRARY_ID" || "$ZOTERO_LIBRARY_ID" =~ ^[0-9]+$ ]] || { warn '文库 ID 应为数字。'; exit 1; }
-      persist ZOTERO_LIBRARY_ID "$ZOTERO_LIBRARY_ID"
+      note '已跳过 Zotero 凭据；检索仍可使用，写入文库需稍后补齐。'
     fi
-    verify_step zotero-key || warn '凭据尚未通过验证；已填写内容保留，可重跑修复。'
-  else
-    note '已跳过 Zotero 凭据；检索仍可使用，写入文库需稍后补齐。'
-  fi
+    break
+  done
 fi
 pause '按回车继续'
 
@@ -369,13 +381,19 @@ else
   step '2. 在 API 管理页面创建 Token（授权码），名称可填 paper2zotero。'
   step '3. 复制刚生成的完整授权码，粘贴到下方。'
   note '页面上的 API / Token 是网站使用的名称，你不需要编写代码。'
-  ask_secret MINERU_TOKEN '粘贴全文阅读授权码（回车保留已有值；没有则稍后再配）：'
-  persist MINERU_TOKEN "$MINERU_TOKEN"
-  if [[ -n "$MINERU_TOKEN" ]]; then
-    verify_step mineru || warn '授权尚未通过验证；可以稍后重试。'
-  else
-    note '已跳过；需要格式化阅读材料时，再来连接这个账号。'
-  fi
+  while true; do
+    ask_authorization MINERU_TOKEN '粘贴全文阅读授权码（没有则回车跳过）：'
+    persist MINERU_TOKEN "$MINERU_TOKEN"
+    if [[ -n "$MINERU_TOKEN" ]]; then
+      if ! verify_step mineru; then
+        warn '还未连接全文阅读服务，请检查授权码和网络。'
+        if retry_connection; then continue; fi
+      fi
+    else
+      note '已跳过；需要格式化阅读材料时，再来连接这个账号。'
+    fi
+    break
+  done
 fi
 pause '按回车继续'
 
@@ -387,13 +405,13 @@ if confirm '现在填写检索增强配置'; then
   if confirm '已有 OpenAlex 授权码，或需要打开申请页面'; then
     note 'OpenAlex 提供论文题录；服务额度以账号页面为准。'
     open_url 'https://openalex.org'
-    ask_secret OPENALEX_API_KEY 'OpenAlex 授权码（可留空）：'
+    ask_authorization OPENALEX_API_KEY 'OpenAlex 授权码（可留空）：'
     persist OPENALEX_API_KEY "$OPENALEX_API_KEY"
   fi
   if confirm '已有 Semantic Scholar 授权码，或需要打开申请页面'; then
     note 'Semantic Scholar 是另一个学术搜索服务，可补充论文与引用信息。申请可能需要等待。'
     open_url 'https://www.semanticscholar.org/product/api'
-    ask_secret SEMANTIC_SCHOLAR_API_KEY 'Semantic Scholar 授权码（可留空）：'
+    ask_authorization SEMANTIC_SCHOLAR_API_KEY 'Semantic Scholar 授权码（可留空）：'
     persist SEMANTIC_SCHOLAR_API_KEY "$SEMANTIC_SCHOLAR_API_KEY"
   fi
   if confirm '用联系邮箱启用 Crossref 的友好访问'; then
