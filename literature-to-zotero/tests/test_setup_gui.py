@@ -17,7 +17,7 @@ def test_demo_validation_and_navigation_never_use_accounts_or_save(monkeypatch, 
     root.withdraw()
     def forbidden(*a, **k):
         pytest.fail('Demo accessed accounts or saved a key')
-    for name in ('connect', 'prepare', 'check', 'existing_key'):
+    for name in ('connect', 'prepare', 'check', 'existing_key', 'extra_value', 'enable_kimi', 'enable_desktop'):
         monkeypatch.setattr(setup_gui.connection, name, forbidden)
     monkeypatch.setattr(setup_gui.configure, 'save_many', forbidden)
     marker = tmp_path / 'ready'
@@ -52,5 +52,21 @@ def test_demo_validation_and_navigation_never_use_accounts_or_save(monkeypatch, 
         buttons[0].invoke()
         finish()
         assert '检查通过' in app.status.get()
+        next(w for w in app.controls if w.cget('text') == '更多设置（可选）').invoke()
+        assert app.page == 4
+        for service in setup_gui.connection.EXTRAS:
+            app.extra_service = service
+            app.render()
+            if service in ('kimi', 'desktop'):
+                label = '启动并检查' if service == 'kimi' else '检查本机 Zotero'
+                next(w for w in app.controls if w.cget('text') == label).invoke()
+                finish()
+                assert '没有连接服务或保存' in app.status.get()
+            else:
+                app.key.set('person@example.org' if service in ('crossref', 'unpaywall') else 'fixture-key')
+                next(w for w in app.controls if w.cget('text') == '保存设置').invoke()
+                assert '没有写入配置' in app.status.get()
+        app.goto(3)
+        assert app.connected == {'zotero', 'mineru'}
     finally:
         root.destroy()

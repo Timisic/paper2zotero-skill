@@ -98,3 +98,72 @@ def test_browser_uses_windows_url_association(monkeypatch):
     assert opened == ['https://www.zotero.org/settings/keys']
     with pytest.raises(ValueError):
         connection.open_page('file:///arbitrary')
+
+
+@pytest.mark.parametrize('service,value,setting', [
+    ('semantic_scholar', 'fixture-key', 'SEMANTIC_SCHOLAR_API_KEY'),
+    ('openalex', 'fixture-key', 'OPENALEX_API_KEY'),
+    ('crossref', 'name@example.org', 'CROSSREF_MAILTO'),
+    ('unpaywall', 'name@example.org', 'UNPAYWALL_EMAIL'),
+])
+def test_optional_settings_use_runtime_credential_names(service, value, setting):
+    assert connection.extra_settings(service, value) == {setting: value}
+
+
+@pytest.mark.parametrize('service,value', [('kimi', 'key'), ('crossref', 'no-email'),
+                                          ('unpaywall', 'a@b c.org'), ('openalex', '\x16'),
+                                          ('semantic_scholar', 'bad\nkey')])
+def test_optional_bad_input_rejected(service, value):
+    with pytest.raises(ValueError):
+        connection.extra_settings(service, value)
+
+
+def test_kimi_not_enabled_until_extension_is_connected(tmp_path, monkeypatch):
+    binary = tmp_path / 'kimi-webbridge.exe'
+    binary.touch()
+    monkeypatch.setattr(connection.capability, 'KIMI_BINARY', binary)
+    monkeypatch.setattr(connection.capability, 'probe_kimi', lambda *a: {'running': True, 'extension_connected': False})
+    with pytest.raises(ValueError, match='扩展尚未连接'):
+        connection.enable_kimi()
+    monkeypatch.setattr(connection.capability, 'probe_kimi', lambda *a: {'running': True, 'extension_connected': True})
+    assert connection.enable_kimi() == {'SETUP_BROWSER': '1'}
+
+
+def test_kimi_starts_only_installed_service_and_rechecks(tmp_path, monkeypatch):
+    binary = tmp_path / 'kimi-webbridge.exe'
+    monkeypatch.setattr(connection.capability, 'KIMI_BINARY', binary)
+    with pytest.raises(ValueError, match='尚未找到'):
+        connection.enable_kimi()
+    binary.touch()
+    states = iter([{'running': False}, {'running': True, 'extension_connected': True}])
+    monkeypatch.setattr(connection.capability, 'probe_kimi', lambda *a: next(states))
+    calls = []
+    def run(args, **kw):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0)
+    monkeypatch.setattr(connection.subprocess, 'run', run)
+    assert connection.enable_kimi() == {'SETUP_BROWSER': '1'}
+    assert calls == [[str(binary), 'start']]
+
+
+def test_unix_private_save_never_calls_powershell(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    path = tmp_path / 'env'
+    monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', path)
+    monkeypatch.setattr(configure, 'os', SimpleNamespace(name='posix', fdopen=os.fdopen, replace=os.replace))
+    monkeypatch.setattr(configure.subprocess, 'run', lambda *a, **kw: pytest.fail('Unix save launched PowerShell'))
+    configure.save_many({'SEMANTIC_SCHOLAR_API_KEY': 'fixture'})
+    assert path.read_text() == 'SEMANTIC_SCHOLAR_API_KEY=fixture\n'
+
+
+def test_kimi_status_uses_platform_executable_and_parses_connection(tmp_path, monkeypatch):
+    expected_name = 'kimi-webbridge.exe' if os.name == 'nt' else 'kimi-webbridge'
+    assert connection.capability.KIMI_BINARY.name == expected_name
+    binary = tmp_path / expected_name
+    binary.touch()
+    def run(args, **kw):
+        assert args == [str(binary), 'status']
+        return subprocess.CompletedProcess(args, 0, '{"running": true, "extension_connected": true}', '')
+    monkeypatch.setattr(connection.capability.subprocess, 'run', run)
+    state = connection.capability.probe_kimi(binary)
+    assert state['running'] and state['extension_connected']

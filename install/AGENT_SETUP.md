@@ -10,6 +10,8 @@
 
 普通配置是四步：准备工具、连接 Zotero、启用全文阅读、检查结果。首次使用默认走这条路径。用户要求更多设置时加 `--advanced` / `-Advanced`；群组文库加 `--group` / `-Group`（使用本地 setup 入口）。
 
+Windows 完成页提供“更多设置（可选）”，`-Advanced` 也可直接打开原生进阶页，不会重复要求填写基础账号。内容包括 Kimi WebBridge、Semantic Scholar、OpenAlex、Crossref、Unpaywall 和 Zotero Desktop；来源“已保存”不代表在线验证成功。macOS/Linux 保持 Bash 进阶流程。需要 Windows 备用终端进阶入口时使用 `-Terminal -Advanced`。
+
 ## 2. 准备依赖并打开向导
 
 ### Windows 原生环境

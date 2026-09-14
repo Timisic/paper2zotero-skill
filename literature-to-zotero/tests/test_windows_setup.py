@@ -79,27 +79,36 @@ printf 'tty-and-poppler-ok' > "$PAPER2ZOTERO_TEST_RESULT"
 @unittest.skipUnless(os.name == 'nt', 'native Windows launcher')
 class WindowsSetupTests(unittest.TestCase):
     def test_default_launch_uses_native_gui_with_unicode_paths(self):
+        self.check_native_gui_launch()
+
+    def test_advanced_launch_uses_native_gui_with_unicode_paths(self):
+        self.check_native_gui_launch(advanced=True)
+
+    def check_native_gui_launch(self, advanced=False):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder)
             package = release(path)
             env = environment(path / '用户 home')
             marker = path / 'native-complete.txt'
             env['PAPER2ZOTERO_TEST_RESULT'] = str(marker)
+            env['PAPER2ZOTERO_TEST_ADVANCED'] = '1' if advanced else '0'
             (package / 'literature-to-zotero/scripts/setup_gui.py').write_text('''import argparse, os, time
 from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument('--demo', action='store_true')
+parser.add_argument('--advanced', action='store_true')
 parser.add_argument('--agent')
 parser.add_argument('--ready-file')
 args = parser.parse_args()
 assert args.demo and args.agent == 'claude-code'
+assert args.advanced == (os.environ['PAPER2ZOTERO_TEST_ADVANCED'] == '1')
 Path(args.ready_file).write_text('ready')
 time.sleep(2)
 Path(os.environ['PAPER2ZOTERO_TEST_RESULT']).write_text('native-ok')
 ''', encoding='utf-8')
             result = subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
                                      '-File', str(package / 'install/setup.ps1'), '-Demo',
-                                     '-Agent', 'claude-code', '-LaunchWizard'], env=env,
+                                     '-Agent', 'claude-code', '-LaunchWizard', *(['-Advanced'] if advanced else [])], env=env,
                                     capture_output=True, text=True, encoding='utf-8', timeout=30)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn('Native setup window is ready', result.stdout)

@@ -22,7 +22,9 @@ The wizard sends configuration values to the Python writer through stdin. Empty 
 
 ## Windows constraints
 
-PowerShell prepares native Python, Poppler and Git Bash. Basic interactive setup launches a Tk window through pythonw.exe; check and dependency-only modes stay with the caller. `-Terminal` and advanced setup retain mintty. A temporary marker confirms that the selected UI is ready, not that account setup is complete. Both paths are tested with Chinese and spaced download paths.
+PowerShell prepares native Python, Poppler and Git Bash. Basic interactive setup launches a Tk window through pythonw.exe; its completion page links to optional settings. `-Advanced` opens those settings directly in the same GUI. Check and dependency-only modes stay with the caller; `-Terminal` retains mintty, including `-Terminal -Advanced`. A temporary marker confirms that the selected UI is ready, not that account setup is complete. Both paths are tested with Chinese and spaced download paths.
+
+Optional settings explain Kimi WebBridge, Semantic Scholar, OpenAlex, Crossref, Unpaywall and Zotero Desktop. Source credentials are privately saved with an explicit unverified status, then exercised by real discovery; Kimi/Desktop are enabled only after connection checks. Skipping does not write flags or change existing credentials. Demo covers every optional pane without touching services or configuration. macOS/Linux keep the Bash entry and do not import Tk; Unix private writes do not call PowerShell.
 
 Native entry fields use the OS clipboard shortcuts and an explicit Paste button. Keys remain in memory until remote validation succeeds. Personal Zotero identity and write access come from one key-info response. Only the live UI accepts the result and invokes `configure.save_many`, which secures a temporary file before atomically replacing account settings. Closing during a request cannot save a late result. Windows ACL protection uses .NET Framework directly, avoiding a PS7-inherited module path breaking PS5 Set-Acl. Browser launch uses Windows URL association rather than Explorer's process exit code.
 

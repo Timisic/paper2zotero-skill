@@ -41,7 +41,7 @@ Record = dict[str, str | bool]
 
 ZOTERO_LOCAL_API = "http://127.0.0.1:23119/api/users/0/items?limit=1"
 ZOTERO_API_BASE = "https://api.zotero.org"
-KIMI_BINARY = Path.home() / ".kimi-webbridge" / "bin" / "kimi-webbridge"
+KIMI_BINARY = Path.home() / ".kimi-webbridge" / "bin" / ("kimi-webbridge.exe" if os.name == "nt" else "kimi-webbridge")
 
 # One canonical human fix per capability (single source for install
 # knowledge, C3). The setup doctor renders `do` for a missing item; the setup
@@ -192,7 +192,8 @@ def probe_kimi(binary: Path | None = None, live: bool = True) -> dict[str, str |
         return status
     try:
         completed = subprocess.run(
-            [str(executable), "status"], text=True, capture_output=True, timeout=15
+            [str(executable), "status"], text=True, capture_output=True, timeout=15,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
         )
     except (OSError, subprocess.SubprocessError):
         status["error"] = "daemon status call failed"

@@ -512,7 +512,8 @@ else
     say '✓ 配置完成。回到你的 AI 助手，试着说：'
     say '“帮我找近三年 AI 心理健康干预的研究，先给我一份候选清单。”'
     note '如果暂时找不到技能，新开一个助手会话再试。'
-    note '以后需要更多设置，可以让助手“打开文献工具的更多设置”。'
+    note '更多设置（可选）：Kimi WebBridge 浏览器全文、Semantic Scholar / OpenAlex 检索授权、Crossref / Unpaywall 联系邮箱。'
+    note '需要时让助手“打开文献工具的更多设置”，或运行 bash install/setup.sh --advanced；可跳过任何项目。'
   else
     warn '部分配置尚未完成；已填写内容保留，重跑 setup 即可继续。'
     exit 1

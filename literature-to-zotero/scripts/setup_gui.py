@@ -18,10 +18,11 @@ PAGES = ('准备工具', '连接 Zotero', '启用全文阅读', '检查结果')
 
 
 class Wizard:
-    def __init__(self, root: tk.Tk, *, agent='auto', demo=False, group=False, ready_file=None):
+    def __init__(self, root: tk.Tk, *, agent='auto', demo=False, group=False, ready_file=None, advanced=False):
         self.root, self.demo, self.group = root, demo, group
         self.agent = agent
-        self.page = 0
+        self.page = 4 if advanced else 0
+        self.extra_service = 'kimi'
         self.busy = False
         self.work = queue.Queue()
         self.ready_file = ready_file
@@ -82,7 +83,7 @@ class Wizard:
         self.controls = []
         self.status.set('演示模式：不会连接服务、安装工具或保存授权码。' if self.demo else '')
         self.step.configure(text='  →  '.join(f'{i + 1}. {name}' for i, name in enumerate(PAGES)))
-        self.heading.configure(text=f'{self.page + 1}/4  {PAGES[self.page]}')
+        self.heading.configure(text='更多设置 · 按需选择' if self.page == 4 else f'{self.page + 1}/4  {PAGES[self.page]}')
         if self.page == 0:
             self.label('配置一次，以后直接让 AI 帮你找论文、整理阅读笔记。')
             self.label('选择你使用的 AI 助手。接下来只需要复制网页上的授权码，无需输入命令或查找个人文库 ID。', style='Muted.TLabel')
@@ -111,8 +112,10 @@ class Wizard:
             self.button(self.footer, '开始配置', prepare, True).pack(side='right')
         elif self.page in (1, 2):
             self.account_page('zotero' if self.page == 1 else 'mineru')
-        else:
+        elif self.page == 3:
             self.result_page()
+        else:
+            self.advanced_page()
         if self.page:
             self.button(self.footer, '上一步', lambda: self.goto(self.page - 1)).pack(side='left')
 
@@ -221,6 +224,8 @@ class Wizard:
 
     def result_page(self):
         self.label('点击检查，确认工具和账号是否已就绪。未完成的项目可以返回对应步骤继续配置。')
+        self.label('基础配置后，可继续连接 Kimi WebBridge、Semantic Scholar 等可选功能；也可以直接开始使用。', style='Muted.TLabel')
+        self.button(self.body, '更多设置（可选）', lambda: self.goto(4)).pack(anchor='w', pady=(0, 10))
         self.results = ttk.Frame(self.body)
         self.results.pack(fill='both', expand=True)
         def complete(report):
@@ -242,6 +247,80 @@ class Wizard:
         if paths:
             self.label('如需更换总结要求，可修改：\n' + str(Path(paths[0]) / 'references/paper-summary.md') +
                        '\n保留 “## Save and continue” 及其后的保存说明。', style='Muted.TLabel')
+
+    def advanced_page(self):
+        self.label('这些功能可随时回来配置。选择需要的一项；不需要的项目直接跳过即可。', style='Muted.TLabel')
+        names = {record[0]: service for service, record in connection.EXTRAS.items()}
+        choice = ttk.Combobox(self.body, values=list(names), state='readonly', width=47)
+        choice.set(connection.EXTRAS[self.extra_service][0])
+        choice.pack(anchor='w', pady=(0, 15))
+        self.controls.append(choice)
+        def select(_):
+            self.extra_service = names[choice.get()]
+            self.render()
+        choice.bind('<<ComboboxSelected>>', select)
+        service = self.extra_service
+        title, url, setting, instructions = connection.EXTRAS[service]
+        self.label(instructions)
+        row = ttk.Frame(self.body)
+        row.pack(fill='x', pady=(0, 15))
+        self.button(row, '打开说明 / 申请页面', lambda: self.open_page(url)).pack(side='left')
+        link = ttk.Entry(row)
+        link.insert(0, url)
+        link.configure(state='readonly')
+        link.pack(side='left', fill='x', expand=True, padx=(10, 0))
+        if setting:
+            self.key = tk.StringVar()
+            row = ttk.Frame(self.body)
+            row.pack(fill='x', pady=(0, 8))
+            secret = service not in ('crossref', 'unpaywall')
+            entry = ttk.Entry(row, textvariable=self.key, show='●' if secret else '')
+            entry.pack(side='left', fill='x', expand=True)
+            self.controls.append(entry)
+            def paste():
+                try:
+                    self.key.set(self.root.clipboard_get().strip())
+                except tk.TclError:
+                    self.status.set('剪贴板没有文字，请先复制授权码或邮箱。')
+            self.button(row, '粘贴', paste).pack(side='left', padx=(10, 0))
+            self.input_note = tk.StringVar(value='请填写授权码。' if secret else '请填写联系邮箱。')
+            self.key.trace_add('write', lambda *_: self.input_note.set(
+                '已收到输入，点击“保存设置”。' if self.key.get() else '留空保留已有设置。'))
+            if not self.demo and connection.extra_value(service):
+                self.input_note.set('已有设置；留空保留，粘贴新内容可替换。')
+            ttk.Label(self.body, textvariable=self.input_note, style='Muted.TLabel').pack(anchor='w', pady=(0, 8))
+            self.label('此处保存配置，不验证服务额度或授权是否有效；实际检索会报告该来源的可用情况。', style='Muted.TLabel')
+            def save():
+                if not self.key.get().strip():
+                    self.status.set('没有填写新内容，已有设置未改变。')
+                    return
+                try:
+                    values = connection.extra_settings(service, self.key.get())
+                    if not self.demo:
+                        configure.save_many(values)
+                except ValueError as error:
+                    self.status.set(str(error))
+                    return
+                except Exception:
+                    self.status.set('保存未完成，请重试；原有设置已保留。')
+                    return
+                self.key.set('')
+                self.status.set('演示保存成功（没有写入配置）。' if self.demo else '已保存。可继续选择其他项目；该来源将在实际检索时检查。')
+            self.button(self.footer, '保存设置', save, True).pack(side='right')
+        else:
+            def complete(values):
+                if not self.demo:
+                    try:
+                        configure.save_many(values)
+                    except Exception:
+                        self.status.set('检查通过，但保存未完成，请重试。')
+                        return
+                self.status.set('演示检查通过（没有连接服务或保存）。' if self.demo else '连接检查通过，已启用；可以选择其他项目或返回基础配置。')
+            def check():
+                job = connection.enable_kimi if service == 'kimi' else connection.enable_desktop
+                self.run(lambda: {} if self.demo else job(), complete, '正在检查连接，请稍候……')
+            self.button(self.footer, '启动并检查' if service == 'kimi' else '检查本机 Zotero', check, True).pack(side='right')
+        self.button(self.footer, '完成并关闭', self.root.destroy).pack(side='right', padx=10)
 
     def run(self, job, complete, message):
         if self.busy:
@@ -283,10 +362,11 @@ def main():
     parser.add_argument('--agent', default='auto', choices=agent_installation.CHOICES)
     parser.add_argument('--demo', action='store_true')
     parser.add_argument('--group', action='store_true')
+    parser.add_argument('--advanced', action='store_true')
     parser.add_argument('--ready-file')
     args = parser.parse_args()
     root = tk.Tk()
-    Wizard(root, agent=args.agent, demo=args.demo, group=args.group, ready_file=args.ready_file)
+    Wizard(root, agent=args.agent, demo=args.demo, group=args.group, ready_file=args.ready_file, advanced=args.advanced)
     root.mainloop()
 
 

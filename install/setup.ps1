@@ -50,13 +50,14 @@ function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
         & $BashPath $entry.Replace('\', '/') @WizardArgs | Out-Host
         return $LASTEXITCODE
     }
-    if (-not $Terminal -and -not $Advanced) {
+    if (-not $Terminal) {
         $gui = Join-Path $PSScriptRoot '..\literature-to-zotero\scripts\setup_gui.py'
         $pythonw = Join-Path (Split-Path $pythonPath) 'pythonw.exe'
         if (-not (Test-Path -LiteralPath $pythonw)) { $pythonw = $pythonPath }
         $guiArgs = @(('"' + $gui + '"'), '--agent', $Agent)
         if ($Demo) { $guiArgs += '--demo' }
         if ($Group) { $guiArgs += '--group' }
+        if ($Advanced) { $guiArgs += '--advanced' }
         Write-Host '正在打开 Windows 图形向导 v2。请在输入框中按 Ctrl+V，或点击“粘贴”。' -ForegroundColor Cyan
         if ($LaunchWizard) {
             $startup = Join-Path ([IO.Path]::GetTempPath()) ('paper2zotero-gui-' + [guid]::NewGuid().ToString('N'))
@@ -139,7 +140,7 @@ try {
     if ($Demo -or $Check) {
         if (-not $bashPath) { throw 'Git Bash is needed to display the Wizard. Run setup.cmd once first; this preview/check installed nothing.' }
         if ($Check -and -not $pythonPath) { throw 'Python 3.11+ is missing; run setup.cmd to install it.' }
-        if ($Demo -and -not $Terminal -and -not $Advanced -and -not $pythonPath) { throw '图形演示需要 Python；请先运行 setup.cmd。' }
+        if ($Demo -and -not $Terminal -and -not $pythonPath) { throw '图形演示需要 Python；请先运行 setup.cmd。' }
     } else {
         if (-not $pythonPath) { Install-Tool 'Python.Python.3.13'; $pythonPath = Find-Python }
         if (-not $popplerReady) { Install-Tool 'oschwartz10612.Poppler'; $popplerReady = Test-Poppler }

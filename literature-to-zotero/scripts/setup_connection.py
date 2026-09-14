@@ -19,6 +19,63 @@ import configure
 import credentials
 from http_client import SafeRedirect
 
+EXTRAS = {
+    'kimi': ('Kimi WebBridge · 浏览器全文', 'https://www.kimi.com/products/kimi-webbridge', '',
+             '需要从已登录的学校或机构网页获取全文时使用。\n① 打开页面，选择“搭配本地 Agent”，按 Windows 说明安装本地连接服务。\n② 安装并启用浏览器扩展，按扩展提示授权连接。\n③ 点击下方“启动并检查”。机构账号需要你自己在浏览器中登录。'),
+    'semantic_scholar': ('Semantic Scholar · 补充学术检索', 'https://www.semanticscholar.org/product/api', 'SEMANTIC_SCHOLAR_API_KEY',
+                         '补充论文、摘要和引用信息。\n① 打开官网，找到 API Key 申请入口并提交申请。\n② 申请可能需要等待；收到授权码后再回来粘贴。\n③ 点击“保存设置”。没有授权码可先跳过。'),
+    'openalex': ('OpenAlex · 文献来源授权', 'https://openalex.org', 'OPENALEX_API_KEY',
+                '为 OpenAlex 文献检索提供账号授权。\n① 打开官网，登录并进入账号/API 设置。\n② 复制 API Key，粘贴到下方后保存。使用额度以官网说明为准。'),
+    'crossref': ('Crossref · 题录查询联系邮箱', 'https://www.crossref.org/documentation/retrieve-metadata/rest-api/', 'CROSSREF_MAILTO',
+                '为 Crossref 题录查询提供联系邮箱。\n填写你可收信的邮箱即可，不需要授权码或邮箱密码。\n查询时邮箱会发送给 Crossref，用于服务方联系。'),
+    'unpaywall': ('Unpaywall · 查找开放全文', 'https://unpaywall.org/products/api', 'UNPAYWALL_EMAIL',
+                 '帮助查找合法开放的论文全文。\n填写你可收信的邮箱即可，不需要授权码或邮箱密码。\n查询时邮箱会发送给 Unpaywall；全文是否可得取决于论文。'),
+    'desktop': ('Zotero Desktop · 本机附件', 'https://www.zotero.org/download', '',
+                '希望在电脑上的 Zotero 阅读附件时使用。\n① 安装并打开 Zotero，登录账号。\n② 在高级设置开启本地 API。\n③ 在同步设置启用附件同步与自动下载，再点击“检查本机 Zotero”。'),
+}
+
+
+def extra_value(service: str) -> str:
+    return credentials.source_setting(service)
+
+
+def extra_settings(service: str, value: str) -> dict[str, str]:
+    if service not in EXTRAS or not EXTRAS[service][2]:
+        raise ValueError('请选择一个文献来源。')
+    value = normalize_key(value)
+    if service in ('crossref', 'unpaywall'):
+        import re
+        if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', value):
+            raise ValueError('请输入可收信的完整邮箱地址，例如 name@example.org。')
+    return {EXTRAS[service][2]: value}
+
+
+def enable_kimi() -> dict[str, str]:
+    binary = capability.KIMI_BINARY
+    if not binary.is_file():
+        raise ValueError('尚未找到本地连接服务。请先按官网的本地 Agent 安装说明完成安装，再重试。')
+    state = capability.probe_kimi(binary)
+    if not state.get('running'):
+        try:
+            result = subprocess.run([str(binary), 'start'], capture_output=True, timeout=30,
+                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        except (OSError, subprocess.SubprocessError):
+            raise ValueError('连接服务未能启动。请按官网说明修复后重试。') from None
+        if result.returncode:
+            raise ValueError('连接服务未能启动。请按官网说明修复后重试。')
+        state = capability.probe_kimi(binary)
+    if not state.get('running') or not state.get('extension_connected'):
+        raise ValueError('浏览器扩展尚未连接。请启用扩展并按提示授权，等待约 30 秒后重试。')
+    return {'SETUP_BROWSER': '1'}
+
+
+def enable_desktop() -> dict[str, str]:
+    for name in ('zotero-local', 'zotero-sync'):
+        record = configure.probe(name)
+        if not record['ok']:
+            raise ValueError(str(record['action']))
+    return {'SETUP_DESKTOP': '1'}
+
 
 def normalize_key(value: str) -> str:
     value = value.strip()
@@ -116,7 +173,8 @@ def check(agent: str) -> dict:
 
 
 def open_page(url: str) -> None:
-    if url not in {'https://www.zotero.org/settings/keys', 'https://mineru.net/apiManage/token'}:
+    if url not in {'https://www.zotero.org/settings/keys', 'https://mineru.net/apiManage/token',
+                   *(record[1] for record in EXTRAS.values())}:
         raise ValueError('未知的授权页面。')
     if os.name == 'nt':
         os.startfile(url)
