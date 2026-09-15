@@ -42,31 +42,41 @@ def test_demo_validation_and_navigation_never_use_accounts_or_save(monkeypatch, 
         finish()
         assert '12345678' in app.status.get() and '没有保存' in app.status.get()
         app.goto(2)
+        app.key.set('demo-openalex-key')
+        app.verify('openalex')
+        finish()
+        app.goto(3)
         app.key.set('demo-fixture-token')
         app.verify('mineru')
         finish()
-        assert app.connected == {'zotero', 'mineru'}
-        app.goto(3)
+        assert app.connected == {'zotero', 'openalex', 'mineru'}
+        app.goto(setup_gui.RESULT_PAGE)
         buttons = [w for w in app.controls if w.cget('text') == '检查配置']
         assert len(buttons) == 1
         buttons[0].invoke()
         finish()
         assert '检查通过' in app.status.get()
-        next(w for w in app.controls if w.cget('text') == '更多设置（可选）').invoke()
-        assert app.page == 4
+        next(w for w in app.controls if w.cget('text') == '更多配置（可选）').invoke()
+        assert app.page == setup_gui.MORE_PAGE
+        assert set(app.extra_actions) == set(setup_gui.connection.EXTRAS)
+        assert not any(isinstance(w, setup_gui.ttk.Combobox) for w in app.controls)
+        app.extra_inputs['crossref'].set('draft@example.org')
         for service in setup_gui.connection.EXTRAS:
-            app.extra_service = service
-            app.render()
             if service in ('kimi', 'desktop'):
-                label = '启动并检查' if service == 'kimi' else '检查本机 Zotero'
-                next(w for w in app.controls if w.cget('text') == label).invoke()
+                app.extra_actions[service].invoke()
                 finish()
                 assert '没有连接服务或保存' in app.status.get()
             else:
-                app.key.set('person@example.org' if service in ('crossref', 'unpaywall') else 'fixture-key')
-                next(w for w in app.controls if w.cget('text') == '保存设置').invoke()
+                app.extra_inputs[service].set('person@example.org' if service in ('crossref', 'unpaywall') else 'fixture-key')
+                app.extra_actions[service].invoke()
                 assert '没有写入配置' in app.status.get()
-        app.goto(3)
-        assert app.connected == {'zotero', 'mineru'}
+                if service == 'semantic_scholar':
+                    assert app.extra_inputs['crossref'].get() == 'draft@example.org'
+        app.goto(setup_gui.RESULT_PAGE)
+        assert app.connected == {'zotero', 'openalex', 'mineru'}
+        app.connected.remove('openalex')
+        next(w for w in app.controls if w.cget('text') == '检查配置').invoke()
+        finish()
+        assert '部分项目尚未完成' in app.status.get()
     finally:
         root.destroy()

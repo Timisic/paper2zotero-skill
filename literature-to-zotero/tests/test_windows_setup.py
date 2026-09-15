@@ -172,7 +172,7 @@ printf 'masked-input-restored' > "$PAPER2ZOTERO_TEST_RESULT"
             git = shutil.which('git.exe')
             self.assertIsNotNone(git)
             bash = Path(git).parent.parent / 'bin/bash.exe'
-            for extra, stage in [([], '4/4'), (['--advanced'], '7/7')]:
+            for extra, stage in [([], '6/6'), (['--advanced'], '2/2')]:
                 result = subprocess.run([str(bash), str(ROOT / 'install/windows-wizard.sh'),
                                          '--demo', *extra], env=env, input='\n' * 40, capture_output=True,
                                         text=True, encoding='utf-8', errors='replace', timeout=20)

@@ -86,7 +86,7 @@ GUIDE: dict[str, dict[str, str]] = {
     "discovery_sources": {
         "label": "文献检索来源",
         "url": "https://www.semanticscholar.org/product/api",
-        "do": "在配置向导的“更多设置”填写 OpenAlex 或 Semantic Scholar 授权码，再点击“检查配置”。至少一个来源的检索请求通过才算可用；匿名额度、账号额度和网络状态以实际响应为准。Crossref/Unpaywall 的联系邮箱按需填写。",
+        "do": "在配置向导的“连接 OpenAlex（必配）”填写授权码并验证。Semantic Scholar、Crossref 和 Unpaywall 在最后的“更多配置”中按需填写。实际检索仍按各来源的响应报告可用情况。",
     },
     "skill_links": {
         "label": "skill 安装",
@@ -174,20 +174,35 @@ def probe_zotero_local(timeout: int = 3) -> bool:
         return False
 
 
-def probe_discovery_search() -> dict[str, Any]:
-    """A tiny real search; one usable source suffices, optional peers may wait."""
-    from sources import Sources, Query, LABELS
-    client = Sources(timeout=3, budget=5, attempts=1)
-    statuses = {}
-    for source in ('openalex', 'semantic_scholar'):
-        try:
-            answer = client.search(source, Query(text='mental health', limit=1), budget=5)
-            statuses[LABELS[source]] = answer.status
-            if answer.ok:
-                return {'ok': True, 'detail': LABELS[source] + ' 检索请求通过', 'sources': statuses}
-        except (OSError, ValueError, TypeError, AttributeError):
-            statuses[LABELS[source]] = 'unavailable'
-    return {'ok': False, 'detail': '; '.join(f'{name}: {state}' for name, state in statuses.items()), 'sources': statuses}
+def probe_discovery_search(key: str | None = None) -> dict[str, Any]:
+    """Setup requires an explicit OpenAlex key and a successful real query.
+
+    Runtime source fallback remains independent of onboarding completeness.
+    A candidate key is scoped to this probe, never saved or put in the process env.
+    """
+    import credentials
+    from sources import Sources, Query
+    key = credentials.source_setting('openalex') if key is None else key
+    if not credentials.usable_secret(key):
+        return {'ok': False, 'detail': '请先配置 OpenAlex 授权码，基础论文检索尚未完成。',
+                'sources': {'OpenAlex': 'not_configured'}}
+    client = Sources(timeout=10, budget=15, attempts=1,
+                     setting=lambda source: key if source == 'openalex' else '')
+    try:
+        answer = client.search('openalex', Query(text='mental health', limit=1), budget=15)
+        status, ok = answer.status, answer.ok
+    except (OSError, ValueError, TypeError, AttributeError):
+        status, ok = 'unavailable', False
+    hints = {'authentication_required': 'OpenAlex 未接受授权码，请检查是否复制完整或已过期。',
+             'rate_limited': 'OpenAlex 请求次数或账号额度暂时受限，请稍后重试或查看账号额度。'}
+    detail = ('OpenAlex 授权检索通过' if ok else
+              hints.get(status, 'OpenAlex 暂时无法完成检索，请检查网络和账号授权后重试；已保存配置保留。'))
+    return {'ok': ok, 'detail': detail, 'sources': {'OpenAlex': status}}
+
+
+def kimi_binary() -> Path:
+    """Resolve both the standard installation and an existing PATH install."""
+    return KIMI_BINARY if KIMI_BINARY.is_file() else Path(shutil.which('kimi-webbridge') or KIMI_BINARY)
 
 
 def probe_kimi(binary: Path | None = None, live: bool = True) -> dict[str, str | bool | None]:
@@ -195,7 +210,7 @@ def probe_kimi(binary: Path | None = None, live: bool = True) -> dict[str, str |
 
     When live is False only the binary's presence is measured (--skip-live).
     """
-    executable = binary if binary is not None else KIMI_BINARY
+    executable = binary if binary is not None else kimi_binary()
     installed = executable.is_file()
     status: dict[str, str | bool | None] = {
         "installed": installed,

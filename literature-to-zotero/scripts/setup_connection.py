@@ -16,20 +16,26 @@ import capability
 import configure
 import credentials
 
-EXTRAS = {
+BASIC_SERVICES = ('zotero', 'openalex', 'mineru')
+SERVICES = {
+    'zotero': ('连接 Zotero', 'https://www.zotero.org/settings/keys', 'ZOTERO_API_KEY',
+               'Zotero 用来保存论文和笔记。\n① 登录后创建授权码，勾选 Library access、Notes access 和 Write access。\n② 复制完整 Key，粘贴后验证。个人文库 ID 会自动识别。'),
+    'openalex': ('连接 OpenAlex（必配）', 'https://openalex.org/settings/api', 'OPENALEX_API_KEY',
+                'OpenAlex 是基础论文检索来源，本工具要求配置授权码。\n① 免费注册或登录，进入 Settings → API key。\n② 复制 API Key，粘贴后验证。无需填写账号密码，额度以账号页面为准。'),
+    'mineru': ('启用全文阅读', 'https://mineru.net/apiManage/token', 'MINERU_TOKEN',
+               'MinerU 将 PDF 转成便于阅读的文字；配置时不会上传论文。\n① 登录或注册，在 API 管理页面创建 Token。\n② 复制完整 Token，粘贴后验证。'),
     'kimi': ('Kimi WebBridge · 浏览器全文', 'https://www.kimi.com/products/kimi-webbridge', '',
-             '需要从已登录的学校或机构网页获取全文时使用。\n① 打开页面，选择“搭配本地 Agent”，按 Windows 说明安装本地连接服务。\n② 安装并启用浏览器扩展，按扩展提示授权连接。\n③ 点击下方“启动并检查”。机构账号需要你自己在浏览器中登录。'),
+             '需要从已登录的学校或机构网页获取全文时使用。\n① 打开页面，选择“搭配本地 Agent”，按当前系统（macOS / Windows / Linux）的说明安装本地连接服务。\n② 安装并启用浏览器扩展，按扩展提示授权连接。\n③ 完成后启动并检查连接。机构账号需要你自己在浏览器中登录；只下载公开全文可跳过。'),
     'semantic_scholar': ('Semantic Scholar · 补充学术检索', 'https://www.semanticscholar.org/product/api', 'SEMANTIC_SCHOLAR_API_KEY',
-                         '补充论文、摘要和引用信息。\n① 打开官网，找到 API Key 申请入口并提交申请。\n② 申请可能需要等待；收到授权码后再回来粘贴。\n③ 点击“保存设置”。没有授权码可先跳过。'),
-    'openalex': ('OpenAlex · 文献来源授权', 'https://openalex.org', 'OPENALEX_API_KEY',
-                '为 OpenAlex 文献检索提供账号授权。\n① 打开官网，登录并进入账号/API 设置。\n② 复制 API Key，粘贴到下方后保存。使用额度以官网说明为准。'),
+                         '补充论文、摘要和引用信息。\n① 打开官网，找到 API Key 申请入口并提交申请。\n② 申请可能需要等待；收到授权码后再回来粘贴并保存。\n③ 实际检索会报告来源可用性。没有授权码可先跳过。'),
     'crossref': ('Crossref · 题录查询联系邮箱', 'https://www.crossref.org/documentation/retrieve-metadata/rest-api/', 'CROSSREF_MAILTO',
                 '为 Crossref 题录查询提供联系邮箱。\n填写你可收信的邮箱即可，不需要授权码或邮箱密码。\n查询时邮箱会发送给 Crossref，用于服务方联系。'),
     'unpaywall': ('Unpaywall · 查找开放全文', 'https://unpaywall.org/products/api', 'UNPAYWALL_EMAIL',
                  '帮助查找合法开放的论文全文。\n填写你可收信的邮箱即可，不需要授权码或邮箱密码。\n查询时邮箱会发送给 Unpaywall；全文是否可得取决于论文。'),
     'desktop': ('Zotero Desktop · 本机附件', 'https://www.zotero.org/download', '',
-                '希望在电脑上的 Zotero 阅读附件时使用。\n① 安装并打开 Zotero，登录账号。\n② 在高级设置开启本地 API。\n③ 在同步设置启用附件同步与自动下载，再点击“检查本机 Zotero”。'),
+                '希望在电脑上的 Zotero 阅读附件时使用。\n① 安装并打开 Zotero，登录账号。\n② 在高级设置开启本地 API。\n③ 在同步设置启用附件同步与自动下载，完成后检查本机连接。'),
 }
+EXTRAS = {name: record for name, record in SERVICES.items() if name not in BASIC_SERVICES}
 
 
 def extra_value(service: str) -> str:
@@ -37,18 +43,18 @@ def extra_value(service: str) -> str:
 
 
 def extra_settings(service: str, value: str) -> dict[str, str]:
-    if service not in EXTRAS or not EXTRAS[service][2]:
+    if service not in SERVICES or not SERVICES[service][2]:
         raise ValueError('请选择一个文献来源。')
     value = normalize_key(value)
     if service in ('crossref', 'unpaywall'):
         import re
         if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', value):
             raise ValueError('请输入可收信的完整邮箱地址，例如 name@example.org。')
-    return {EXTRAS[service][2]: value}
+    return {SERVICES[service][2]: value}
 
 
 def enable_kimi() -> dict[str, str]:
-    binary = capability.KIMI_BINARY
+    binary = capability.kimi_binary()
     if not binary.is_file():
         raise ValueError('尚未找到本地连接服务。请先按官网的本地 Agent 安装说明完成安装，再重试。')
     state = capability.probe_kimi(binary)
@@ -83,6 +89,7 @@ def normalize_key(value: str) -> str:
 
 def existing_key(service: str) -> str:
     value = (credentials.zotero_credentials()['api_key'] if service == 'zotero'
+             else credentials.source_setting('openalex') if service == 'openalex'
              else credentials.mineru_token())
     try:
         return normalize_key(value)
@@ -100,6 +107,11 @@ def library_target(group: bool | None = None, group_id: str = '') -> tuple[bool,
 
 def connect(service: str, value: str, *, group_id: str = '', group: bool | None = None) -> dict:
     key = normalize_key(value)
+    if service == 'openalex':
+        record = capability.probe_discovery_search(key)
+        if not record['ok']:
+            raise ValueError(str(record['detail']))
+        return {'OPENALEX_API_KEY': key}
     if service == 'mineru':
         record = capability.probe_mineru(key)
         if not record.get('valid'):
@@ -160,7 +172,7 @@ def check(agent: str) -> dict:
 
 def open_page(url: str) -> None:
     if url not in {'https://www.zotero.org/settings/keys', 'https://mineru.net/apiManage/token',
-                   *(record[1] for record in EXTRAS.values())}:
+                   *(record[1] for record in SERVICES.values())}:
         raise ValueError('未知的授权页面。')
     if os.name == 'nt':
         os.startfile(url)

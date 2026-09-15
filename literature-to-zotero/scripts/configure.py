@@ -42,6 +42,7 @@ CHECKS = {
     'skill-links': ('连接 AI 助手', '重新运行安装，并指定你使用的助手。'),
     'zotero-key': ('保存到 Zotero', '重新运行向导的“连接 Zotero”，检查授权码及文库权限。'),
     'mineru': ('全文阅读材料', '重新运行向导的“启用全文阅读”，检查 MinerU 授权码。'),
+    'openalex': ('论文检索（OpenAlex 必配）', '返回“连接 OpenAlex（必配）”填写并验证授权码；若已配置，请检查网络和服务额度。'),
     'zotero-local': ('连接电脑上的 Zotero', '打开 Zotero，在设置的高级选项中开启本地接口。'),
     'zotero-sync': ('下载 Zotero 附件', '在 Zotero 的同步设置中开启附件同步和自动下载。'),
     'kimi': ('浏览器获取全文', '打开已安装扩展的浏览器，确认连接服务已启动。'),
@@ -55,6 +56,9 @@ SETTINGS = {
 
 def probe(command: str) -> dict[str, object]:
     label, action = CHECKS[command]
+    if command == 'openalex':
+        record = capability.probe_discovery_search()
+        return {'name': label, **record, 'action': '' if record['ok'] else action}
     if command == 'skill-links':
         agent = os.environ.get('PAPER2ZOTERO_AGENT', 'auto')
         ok = agent_installation.installation_ok(agent)
@@ -99,8 +103,8 @@ def check(*, as_json: bool = False) -> int:
         if not as_json:
             render(record)
     discovery = capability.probe_discovery_search()
-    search_record = {'name': '论文检索', **discovery, 'action': '' if discovery['ok'] else
-                     '打开“更多设置”配置 OpenAlex 或 Semantic Scholar 授权码，再检查；若已配置，请检查网络和服务额度。'}
+    search_record = {'name': CHECKS['openalex'][0], **discovery,
+                     'action': '' if discovery['ok'] else CHECKS['openalex'][1]}
     records.append(search_record)
     if not as_json:
         render(search_record)
@@ -122,11 +126,25 @@ def main() -> int:
     modes.add_argument('--check', action='store_true')
     modes.add_argument('--verify', choices=CHECKS)
     modes.add_argument('--set', dest='setting', choices=sorted(SETTINGS), help='Read value from stdin, never from arguments.')
-    modes.add_argument('--connect', choices=('zotero', 'mineru'), help='Validate and save an account; key arrives on stdin.')
+    import setup_connection
+    modes.add_argument('--connect', choices=setup_connection.BASIC_SERVICES, help='Validate and save an account; key arrives on stdin.')
+    modes.add_argument('--guide', choices=setup_connection.SERVICES, help='Show shared setup instructions; no credentials.')
+    modes.add_argument('--extra', choices=setup_connection.EXTRAS, help='Save an optional setting from stdin or check a local connection.')
     parser.add_argument('--group-id', default='')
     parser.add_argument('--group', action='store_true', default=None)
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args()
+    if args.guide:
+        title, url, _, instructions = setup_connection.SERVICES[args.guide]
+        print(f'{title}\n{instructions}\n{url}')
+        return 0
+    if args.extra:
+        values = (setup_connection.enable_kimi() if args.extra == 'kimi' else
+                  setup_connection.enable_desktop() if args.extra == 'desktop' else
+                  setup_connection.extra_settings(args.extra, sys.stdin.read()))
+        setup_connection.save_account(values)
+        print('设置已保存。' if setup_connection.EXTRAS[args.extra][2] else '连接检查通过，已启用。')
+        return 0
     if args.connect:
         import setup_connection
         values = setup_connection.connect(args.connect, sys.stdin.read(), group=args.group, group_id=args.group_id)

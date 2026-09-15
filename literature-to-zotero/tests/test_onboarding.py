@@ -32,7 +32,7 @@ def test_targeted_install_survives_other_agent_conflict(tmp_path, agent, folder)
     (conflict / 'my-note').write_text('keep')
     for _ in range(2):
         result = subprocess.run([sys.executable, str(SCRIPTS / 'install.py'), '--agent', agent],
-                                env=env, capture_output=True, text=True)
+                                env=env, capture_output=True, text=True, encoding='utf-8')
         assert result.returncode == 0, result.stdout + result.stderr
     assert (tmp_path / folder / 'skills/literature-to-zotero/SKILL.md').is_file()
     assert (conflict / 'my-note').read_text() == 'keep'
@@ -74,7 +74,7 @@ def test_target_verification_rejects_empty_directory_and_other_agent(tmp_path, m
     assert agent_installation.installed_paths(tmp_path) == [str(codex)]
 
 
-@pytest.mark.parametrize('advanced,last_stage', [(False, '4/4'), (True, '7/7')])
+@pytest.mark.parametrize('advanced,last_stage', [(False, '6/6'), (True, '2/2')])
 @pytest.mark.parametrize('customize', [False, True])
 def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_path, advanced, last_stage, customize):
     env = environment(tmp_path)
@@ -87,10 +87,13 @@ def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_pa
         command.append('--advanced')
     prompt_before = (SCRIPTS.parent / 'references/paper-summary.md').read_bytes()
     replies = ('y\n' if customize else '\n') * 50
-    result = subprocess.run(command, input=replies, env=env, text=True, capture_output=True, timeout=20)
+    result = subprocess.run(command, input=replies, env=env, text=True, encoding='utf-8', capture_output=True, timeout=20)
     assert result.returncode == 0, result.stderr
     assert f'Stage {last_stage}' in result.stdout
-    assert ('更多设置：补充检索来源' in result.stdout) == advanced
+    assert '更多配置（可选）' in result.stdout
+    assert 'Kimi WebBridge' in result.stdout and 'Semantic Scholar' in result.stdout
+    assert ('连接 OpenAlex（必配）：检索论文' in result.stdout) != advanced
+    assert ('连接 Zotero：保存你的论文' in result.stdout) != advanced
     assert 'private-fixture' not in result.stdout + result.stderr
     assert config.read_bytes() == before
     assert ('[演示路径]' in result.stdout) == customize
@@ -108,16 +111,37 @@ def test_private_writer_preserves_unicode_and_literal_shell_text(tmp_path):
     config.write_text('UNRELATED=保留\nMINERU_TOKEN=old\n', encoding='utf-8')
     value = 'literal-中文-$()-`touch sentinel`'
     result = subprocess.run([sys.executable, str(SCRIPTS / 'configure.py'), '--set', 'MINERU_TOKEN'],
-                            input=value, text=True, capture_output=True, env=env)
+                            input=value, text=True, encoding='utf-8', capture_output=True, env=env)
     assert result.returncode == 0, result.stderr
     assert config.read_text(encoding='utf-8') == f'UNRELATED=保留\nMINERU_TOKEN={value}\n'
     assert value not in result.stdout + result.stderr
     assert_private_file(config)
     before = config.read_bytes()
     result = subprocess.run([sys.executable, str(SCRIPTS / 'configure.py'), '--set', 'MINERU_TOKEN'],
-                            input='bad\nINJECTED=value', text=True, capture_output=True, env=env)
+                            input='bad\nINJECTED=value', text=True, encoding='utf-8', capture_output=True, env=env)
     assert result.returncode != 0
     assert config.read_bytes() == before
+
+
+@pytest.mark.parametrize('advanced', [False, True])
+def test_terminal_demo_reaches_more_configuration_without_python(tmp_path, advanced):
+    env = environment(tmp_path)
+    env['PYTHON_BIN'] = str(tmp_path / 'absent-python')
+    # The bootstrap probe may look for these alternatives. All are unavailable.
+    script = '''python3.13() { return 127; }
+python3.12() { return 127; }
+python3.11() { return 127; }
+export -f python3.13 python3.12 python3.11
+exec bash "$@"
+'''
+    args = [shutil.which('bash') or 'bash', '-c', script, '--', str(ROOT / 'install/setup.sh'), '--demo-missing']
+    if advanced:
+        args.append('--advanced')
+    result = subprocess.run(args, env=env, input='\n' * 50, capture_output=True, text=True, encoding='utf-8', timeout=20)
+    assert result.returncode == 0, result.stderr
+    assert '待安装：Python' in result.stdout
+    assert '更多配置（可选）' in result.stdout and 'Semantic Scholar' in result.stdout
+    assert not (tmp_path / '.config/literature-to-zotero/env').exists()
 
 
 def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):
@@ -133,7 +157,7 @@ def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):
     (config / 'pdf-bin').write_text(str(tools) + '\n')
     result = subprocess.run([shutil.which('bash') or 'bash', str(SCRIPTS / 'run-python.sh'), '-c',
                              'import shutil; print(shutil.which("pdftotext"))'],
-                            env=env, text=True, capture_output=True)
+                            env=env, text=True, encoding='utf-8', capture_output=True)
     assert result.returncode == 0, result.stderr
     assert Path(result.stdout.strip()) == pdf
 

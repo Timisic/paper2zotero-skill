@@ -118,7 +118,7 @@ def test_setup_does_not_claim_search_ready_when_all_sources_fail(tmp_path, monke
     assert configure.check(as_json=True) == 1
     result = json.loads(capsys.readouterr().out)
     missing = [row for row in result['items'] if not row['ok']]
-    assert len(missing) == 1 and missing[0]['name'] == '论文检索'
+    assert len(missing) == 1 and missing[0]['name'] == '论文检索（OpenAlex 必配）'
     assert 'OpenAlex' in missing[0]['action']
 
 

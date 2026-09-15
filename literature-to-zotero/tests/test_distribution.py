@@ -90,13 +90,13 @@ def test_requested_optional_feature_failure_is_not_ready(tmp_path, monkeypatch, 
 def test_wizard_keeps_template_library_and_isolates_demo():
     import hashlib
     wizard = (SCRIPTS / 'setup-wizard.sh').read_text()
-    library = wizard.split('TOTAL_STAGES=4\n')[0]
+    library = wizard.split('TOTAL_STAGES=6\n')[0]
     assert hashlib.sha256(library.encode()).hexdigest() == 'c9459b25a3584a9117a0a946843e07c7754b03e8e0b84d49dd69d3c67f773616'
     assert 'ENV_FILE="$DEMO_DIR/env"' in wizard
     assert "trap 'rm -rf \"$DEMO_DIR\"' EXIT" in wizard
     assert 'open_url() { note "[模拟打开网页] $1"; }' in wizard
     assert 'bootstrap.sh" --probe' in wizard
-    assert wizard.count('\nstage "') == 7
+    assert wizard.count('\nstage "') == 6
 
 
 def test_windows_install_uses_managed_copies_without_symlink_permission(tmp_path):

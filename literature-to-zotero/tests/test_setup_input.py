@@ -25,7 +25,7 @@ def bash_executable():
 def prompt(tmp_path, replies, existing=''):
     bash = bash_executable()
     # Execute the real template and setup helper without starting account setup.
-    library = (SCRIPTS / 'setup-wizard.sh').read_text(encoding='utf-8').split('TOTAL_STAGES=4\n')[0]
+    library = (SCRIPTS / 'setup-wizard.sh').read_text(encoding='utf-8').split('TOTAL_STAGES=6\n')[0]
     script = tmp_path / 'input.sh'
     script.write_text(library + '\n' + (SCRIPTS / 'setup-input.sh').read_text(encoding='utf-8') + '''
 WINDOWS=1
@@ -126,15 +126,16 @@ def test_control_key_never_reaches_network(monkeypatch, capsys):
     assert not result.out and '重新复制' in result.err
 
 
-@pytest.mark.parametrize('service', ['zotero', 'mineru'])
+@pytest.mark.parametrize('service', ['zotero', 'openalex', 'mineru'])
 @pytest.mark.parametrize('retry', [True, False])
 def test_real_stage_retries_or_defers_without_manual_personal_id(tmp_path, service, retry):
     wizard = (SCRIPTS / 'setup-wizard.sh').read_text(encoding='utf-8')
-    library = wizard.split('TOTAL_STAGES=4\n')[0]
+    library = wizard.split('TOTAL_STAGES=6\n')[0]
     first = wizard.index('stage "连接 Zotero：')
+    openalex = wizard.index('stage "连接 OpenAlex（必配）：')
     second = wizard.index('stage "启用全文阅读：')
-    third = wizard.index('if [[ "$ADVANCED" == 1 ]]; then\nstage "更多设置')
-    stage = wizard[first:second] if service == 'zotero' else wizard[second:third]
+    third = wizard.index('stage "检查结果，开始使用"')
+    stage = {'zotero': wizard[first:openalex], 'openalex': wizard[openalex:second], 'mineru': wizard[second:third]}[service]
     stub = '''
 WINDOWS=1
 DEMO=0
@@ -142,6 +143,7 @@ GROUP_LIBRARY=0
 SKILL_DIR=.
 PYTHON_BIN=identity_fixture
 open_setup_url() { :; }
+shared_guide() { :; }
 existing_ok() { return 1; }
 pause() { :; }
 persist() { write_env "$1" "$2" >/dev/null; printf '%s\\n' "$1" >> persisted; export "$1=$2"; }
@@ -159,7 +161,7 @@ connect_account() {
                       + stub + stage, encoding='utf-8', newline='\n')
     replies = b'fixture-private-key\n' + (b'1\nfixture-private-key\n' if retry else b'2\n')
     env = dict(os.environ)
-    for key in ('ENV_FILE', 'ZOTERO_API_KEY', 'ZOTERO_LIBRARY_ID', 'ZOTERO_LIBRARY_TYPE', 'MINERU_TOKEN'):
+    for key in ('ENV_FILE', 'ZOTERO_API_KEY', 'ZOTERO_LIBRARY_ID', 'ZOTERO_LIBRARY_TYPE', 'MINERU_TOKEN', 'OPENALEX_API_KEY'):
         env.pop(key, None)
     result = subprocess.run([bash_executable(), str(script)], input=replies, cwd=tmp_path,
                             capture_output=True, env=env, timeout=10)

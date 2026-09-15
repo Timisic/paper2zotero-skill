@@ -8,9 +8,9 @@
 
 安装与验证共用 `scripts/agent_installation.py`。Codex 使用 `~/.codex/skills`（尊重 `CODEX_HOME`）；Claude Code 使用 `~/.claude/skills`（尊重 `CLAUDE_CONFIG_DIR`）；Pi 使用 `~/.pi/agent/skills`。共享目录中的已有安装可以被识别，但不会被默认改写。
 
-普通配置是四步：准备工具、连接 Zotero、启用全文阅读、检查结果。首次使用默认走这条路径。用户要求更多设置时加 `--advanced` / `-Advanced`；群组文库加 `--group` / `-Group`（使用本地 setup 入口）。
+普通配置依次为：准备工具、连接 Zotero、连接 OpenAlex（必配）、启用全文阅读、检查结果、更多配置（可选）。OpenAlex 必须填写授权码并通过小型检索验证，才能通过基础配置检查。首次使用默认走这条路径。用户要求更多设置时加 `--advanced` / `-Advanced`；群组文库加 `--group` / `-Group`（使用本地 setup 入口）。
 
-Windows 完成页提供“更多设置（可选）”，`-Advanced` 也可直接打开原生进阶页，不会重复要求填写基础账号。内容包括 Kimi WebBridge、Semantic Scholar、OpenAlex、Crossref、Unpaywall 和 Zotero Desktop；来源“已保存”不代表在线验证成功。macOS/Linux 保持 Bash 进阶流程。需要 Windows 备用终端进阶入口时使用 `-Terminal -Advanced`。
+Windows 完成页提供“更多配置（可选）”，`-Advanced` 也可直接打开原生进阶页，不会重复要求填写基础账号。所有可选项目直接展开，包括 Kimi WebBridge、Semantic Scholar、Crossref、Unpaywall 和 Zotero Desktop；Semantic Scholar“已保存”不代表在线验证成功。macOS/Linux 和 Windows 备用终端在最后依次展示相同项目，`--advanced` 直接跳过基础账号步骤。两种界面共享服务说明、验证和保存逻辑。需要 Windows 备用终端进阶入口时使用 `-Terminal -Advanced`。
 
 ## 2. 准备依赖并打开向导
 
@@ -30,7 +30,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Agent claude
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<仓库绝对路径>\install\setup.ps1' -Agent claude-code -LaunchWizard
 ```
 
-`-LaunchWizard` 等待图形窗口就绪后返回；`-DependenciesOnly` 只准备依赖和 skill。标题必须包含 `Windows 图形向导 v2`。输入框支持 Ctrl+V 和“粘贴”按钮，以圆点隐藏内容；点击“验证并保存”后检查授权和读写权限，成功才原子保存整个账号。个人文库 ID 自动识别，错误留在当前页，用户可以重试或跳过。`-Terminal` 保留备用终端向导；`-Advanced` 仍使用终端的更多设置。WinGet 缺失时按安装器打开的 Microsoft Store 页面补齐“应用安装程序”。
+`-LaunchWizard` 等待图形窗口就绪后返回；`-DependenciesOnly` 只准备依赖和 skill。标题必须包含 `Windows 图形向导 v2`。输入框支持 Ctrl+V 和“粘贴”按钮，以圆点隐藏内容；点击“验证并保存”后检查授权和读写权限，成功才原子保存整个账号。个人文库 ID 自动识别，错误留在当前页，用户可以重试或跳过。`-Terminal` 保留备用终端向导；`-Advanced` 打开更多配置；与 `-Terminal` 合用时打开终端更多配置。WinGet 缺失时按安装器打开的 Microsoft Store 页面补齐“应用安装程序”。
 
 发布 GitHub 不会自动更新本机已有下载或助手目录。用户报告旧文案时，检查实际启动文件、安装缓存及目标助手副本；`setup.cmd` 不负责拉取更新。更新官方干净缓存应运行 `install.ps1`；缓存有本地改动时先保留备份，不要 reset/clean 覆盖。依赖安装后确认目标助手里的 `scripts/setup_gui.py` 存在且与当前来源一致，再报告本机已更新。保留一条指向明确来源的继续配置入口。
 
@@ -72,7 +72,7 @@ bash "$HOME/.local/share/paper2zotero-source/install/setup.sh" --agent claude-co
 
 需要结构化诊断时，通过安装好的 `scripts/run-python.sh`（Bash）或 `scripts/run-python.ps1`（PowerShell）运行 `scripts/configure.py --check --json`。将 `PAPER2ZOTERO_AGENT` 设为已选目标，才能检查该目标，而不是其他已安装助手。`scripts/setup.py` 是开发诊断入口，会展示更多可选集成；它的整机结果不代替上述面向用户的完成检查。
 
-完成条件：运行工具、PDF 工具、选定助手的 `SKILL.md`、Zotero 身份与读写权限、全文阅读授权，以及此前启用的可选功能，均按实际探测通过。报告缺失项及一个继续配置入口。终端就绪、文件安装成功或演示检查通过，均不等于账号配置完成；总检也不证明论文已处理或桌面附件已下载。
+完成条件：运行工具、PDF 工具、选定助手的 `SKILL.md`、Zotero 身份与读写权限、OpenAlex 授权检索、全文阅读授权，以及此前启用的可选功能，均按实际探测通过。报告缺失项及一个继续配置入口。终端就绪、文件安装成功或演示检查通过，均不等于账号配置完成；总检也不证明论文已处理或桌面附件已下载。
 
 最后请当前助手确认可以发现 `literature-to-zotero`。Claude Code 可用 `/literature-to-zotero`，Codex 可用 `$literature-to-zotero`；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。
 

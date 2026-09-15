@@ -47,7 +47,7 @@ The command records its round, reason and elapsed time in the run and refuses a 
 
 ## Provider roles
 
-- OpenAlex: default discovery source and one citation-count observer. Needs no credential.
+- OpenAlex: default discovery source and one citation-count observer. Setup requires a verified OpenAlex API key. Runtime requests still report their actual source status and can continue with available sources when configuration is incomplete.
 - Semantic Scholar: second discovery source and identifier backfill (arXiv, PubMed, Corpus ID). Its key is one request per second across *every* endpoint; without the key the source reports `not_configured` and the round continues without it.
 - Crossref: DOI metadata and the publisher's registered full-text links. A contact address (`CROSSREF_MAILTO`) buys the polite pool.
 - Unpaywall: open copies of a known DOI. Requires `UNPAYWALL_EMAIL`.

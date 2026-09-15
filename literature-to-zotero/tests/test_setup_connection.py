@@ -5,13 +5,69 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 import urllib.error
+import urllib.parse
+from http_fixture import server
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import configure
 import setup_connection as connection
+
+
+@pytest.mark.parametrize('status,hint', [(200, ''), (401, '未接受'), (429, '额度'), (503, '网络')])
+def test_openalex_connection_checks_candidate_key_before_replacing_saved_key(tmp_path, monkeypatch, capsys, status, hint):
+    path = tmp_path / 'env'
+    path.write_text('OPENALEX_API_KEY=old-key\nUNRELATED=keep\n')
+    monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', path)
+    monkeypatch.setenv('OPENALEX_API_KEY', 'inherited-old-key')
+    calls = []
+    def reply(method, url, body, headers):
+        calls.append(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query))
+        return status, {'results': []} if status == 200 else {'error': 'fixture-secret'}, {}
+    before = path.read_bytes()
+    with server(reply) as base:
+        monkeypatch.setenv('LITERATURE_SOURCE_BASES', json.dumps({'openalex': base}))
+        monkeypatch.setattr(sys, 'argv', ['configure.py', '--connect', 'openalex'])
+        monkeypatch.setattr(sys, 'stdin', StringIO('fixture-secret'))
+        if status == 200:
+            assert configure.main() == 0
+            assert configure.credentials.source_setting('openalex') == 'fixture-secret'
+            assert configure.credentials._skill_env()['UNRELATED'] == 'keep'
+        else:
+            with pytest.raises(ValueError, match=hint) as caught:
+                configure.main()
+            assert 'fixture-secret' not in str(caught.value)
+            assert path.read_bytes() == before
+    assert len(calls) == 1 and calls[0]['api_key'] == ['fixture-secret']
+    output = capsys.readouterr()
+    assert 'fixture-secret' not in output.out + output.err
+
+
+def test_setup_requires_openalex_even_when_other_search_sources_work(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', tmp_path / 'absent')
+    monkeypatch.delenv('OPENALEX_API_KEY', raising=False)
+    monkeypatch.setenv('SEMANTIC_SCHOLAR_API_KEY', 'other-key')
+    monkeypatch.setattr(configure, 'probe', lambda _: {'ok': True, 'name': 'fixture'})
+    monkeypatch.setattr(configure.subprocess, 'run', lambda *a, **k: subprocess.CompletedProcess([], 0))
+    import sources
+    monkeypatch.setattr(sources.Sources, 'search', lambda *a, **k: pytest.fail('missing key must not use anonymous/fallback search'))
+    assert configure.check(as_json=True) == 1
+    result = json.loads(capsys.readouterr().out)
+    missing = [row for row in result['items'] if not row['ok']]
+    assert len(missing) == 1 and missing[0]['sources'] == {'OpenAlex': 'not_configured'}
+    assert '连接 OpenAlex' in missing[0]['action']
+
+
+def test_openalex_setup_allows_a_slow_successful_response(monkeypatch):
+    def reply(*args):
+        time.sleep(3.2)  # A normal cross-region response exceeded the old 3s socket timeout.
+        return 200, {'results': []}, {}
+    with server(reply) as base:
+        monkeypatch.setenv('LITERATURE_SOURCE_BASES', json.dumps({'openalex': base}))
+        assert connection.connect('openalex', 'fixture-key') == {'OPENALEX_API_KEY': 'fixture-key'}
 
 
 def test_terminal_connection_failure_preserves_account_then_saves_verified_identity(tmp_path, monkeypatch, capsys):
@@ -156,6 +212,21 @@ def test_kimi_not_enabled_until_extension_is_connected(tmp_path, monkeypatch):
         connection.enable_kimi()
     monkeypatch.setattr(connection.capability, 'probe_kimi', lambda *a: {'running': True, 'extension_connected': True})
     assert connection.enable_kimi() == {'SETUP_BROWSER': '1'}
+
+
+def test_kimi_accepts_existing_path_install_for_setup_and_preflight(tmp_path, monkeypatch):
+    binary = tmp_path / 'kimi-webbridge'
+    binary.touch()
+    monkeypatch.setattr(connection.capability, 'KIMI_BINARY', tmp_path / 'missing')
+    monkeypatch.setattr(connection.capability.shutil, 'which', lambda _: str(binary))
+    calls = []
+    def run(args, **kw):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, '{"running": true, "extension_connected": true}', '')
+    monkeypatch.setattr(connection.capability.subprocess, 'run', run)
+    assert connection.enable_kimi() == {'SETUP_BROWSER': '1'}
+    assert connection.capability.probe_kimi()['installed']
+    assert calls == [[str(binary), 'status'], [str(binary), 'status']]
 
 
 def test_kimi_starts_only_installed_service_and_rechecks(tmp_path, monkeypatch):

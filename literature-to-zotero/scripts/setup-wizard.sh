@@ -184,7 +184,7 @@ finish() {
 # Replace the example below. Set TOTAL_STAGES to match the stages you write.
 # ──────────────────────────────────────────────────────────────────────────
 
-TOTAL_STAGES=4
+TOTAL_STAGES=6
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SKILL_DIR/scripts/setup-input.sh"
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -215,7 +215,7 @@ case "$PAPER2ZOTERO_AGENT" in auto|codex|claude-code|pi|all) ;; *) echo 'Unknown
 if [[ "$MODE" == --dependencies-only || "$MODE" == --check ]]; then
   exec bash "$SKILL_DIR/scripts/bootstrap.sh" "$MODE"
 fi
-if [[ "$ADVANCED" == 1 ]]; then TOTAL_STAGES=7; fi
+if [[ "$ADVANCED" == 1 ]]; then TOTAL_STAGES=2; fi
 # The library remains verbatim. Setup-specific behavior lives below STAGES.
 umask 077
 ENV_FILE="$HOME/.config/literature-to-zotero/env"
@@ -230,6 +230,7 @@ ZOTERO_API_KEY=demo-zotero-key
 ZOTERO_LIBRARY_TYPE=user
 ZOTERO_LIBRARY_ID=12345678
 MINERU_TOKEN=demo-mineru-token
+OPENALEX_API_KEY=demo-openalex-key
 DEMOENV
   open_url() { note "[模拟打开网页] $1"; }
 else
@@ -252,6 +253,8 @@ connect_account() {
       persist ZOTERO_API_KEY "$value"
       persist ZOTERO_LIBRARY_ID "${ZOTERO_LIBRARY_ID:-12345678}"
       persist ZOTERO_LIBRARY_TYPE "${ZOTERO_LIBRARY_TYPE:-user}"
+    elif [[ "$service" == openalex ]]; then
+      persist OPENALEX_API_KEY "$value"
     else
       persist MINERU_TOKEN "$value"
     fi
@@ -264,23 +267,60 @@ connect_account() {
   fi
   printf '%s' "$value" | "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" "${args[@]}"
 }
-verify_step() {
-  if [[ "$DEMO" == 1 ]]; then note '[模拟检查通过，未连接服务]'; return 0; fi
-  "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --verify "$1"
-}
 existing_ok() {
   [[ "$DEMO" == 0 ]] || return 1
+  if [[ "$1" == openalex ]]; then
+    "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --verify openalex >/dev/null 2>&1
+    return $?
+  fi
   "$PYTHON_BIN" "$SKILL_DIR/scripts/verify.py" "$1" >/dev/null 2>&1
 }
-guide() {
-  if [[ "$DEMO" == 0 ]]; then
-    "$PYTHON_BIN" - "$SKILL_DIR/scripts" "$1" <<'PY'
-import sys
-sys.path.insert(0, sys.argv[1])
-import capability
-print(capability.GUIDE[sys.argv[2]]['do'])
-PY
+
+shared_guide() {
+  if [[ "$DEMO" == 1 ]]; then
+    case "$1" in
+      openalex) say 'OpenAlex（必配）：注册或登录，在 API 设置复制授权码。' ;;
+      kimi) say 'Kimi WebBridge（可选）：连接本地服务和浏览器扩展，获取机构全文。' ;;
+      semantic_scholar) say 'Semantic Scholar（可选）：申请 API Key，申请未完成可稍后回来。' ;;
+      crossref) say 'Crossref（可选）：填写题录查询的联系邮箱。' ;;
+      unpaywall) say 'Unpaywall（可选）：填写开放全文查询的联系邮箱。' ;;
+      desktop) say 'Zotero Desktop（可选）：开启本地 API 和附件自动下载。' ;;
+    esac
+    note '[模拟说明；正式向导提供官网及详细步骤]'
+  else
+    "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --guide "$1"
   fi
+}
+
+# Preserve the existing platform installers; acceptance and saving are shared
+# with the GUI through configure.py --extra after the user finishes login.
+prepare_extra() {
+  if [[ "$1" == desktop ]]; then
+    if [[ "$(uname -s)" == Darwin ]]; then
+      if [[ ! -d /Applications/Zotero.app && ! -d "$HOME/Applications/Zotero.app" ]]; then
+        if command -v brew >/dev/null 2>&1; then brew install --cask zotero || warn '请按网页说明安装 Zotero。'; else open_setup_url 'https://www.zotero.org/download'; fi
+      fi
+      open -a Zotero || true
+    elif [[ "$WINDOWS" == 1 ]]; then
+      powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$SKILL_DIR/scripts/windows-zotero.ps1")" || warn '请从开始菜单打开 Zotero，或重跑安装。'
+    else
+      open_setup_url 'https://www.zotero.org/download'
+    fi
+  else
+    local kimi_bin installer
+    kimi_bin="$(command -v kimi-webbridge || true)"
+    kimi_bin="${kimi_bin:-$HOME/.kimi-webbridge/bin/kimi-webbridge}"
+    if [[ "$WINDOWS" == 1 ]]; then
+      if [[ -x "$HOME/.kimi-webbridge/bin/kimi-webbridge.exe" ]]; then kimi_bin="$HOME/.kimi-webbridge/bin/kimi-webbridge.exe"; fi
+    elif [[ ! -x "$kimi_bin" ]]; then
+      installer="$(mktemp)"
+      if curl -fsSL https://cdn.kimi.com/webbridge/install.sh -o "$installer"; then bash "$installer" || warn '连接服务安装未完成，请按网页说明继续。'; fi
+      rm -f "$installer"
+    fi
+    if [[ -x "$kimi_bin" ]]; then "$kimi_bin" start || warn '连接服务尚未启动。'; fi
+    open_setup_url 'https://www.kimi.com/products/kimi-webbridge'
+  fi
+  pause '按网页说明完成安装、登录或扩展授权后，回车检查'
 }
 
 open_setup_url() {
@@ -295,7 +335,7 @@ open_setup_url() {
 _clear
 printf '\n%s%s  把论文和阅读笔记放进 Zotero%s\n\n' "$BOLD" "$BLUE" "$RESET"
 say '工具由安装器准备；你只需要登录账号，复制网页上的授权码。'
-say '第一次主要连接两个账号。暂时没有也可以跳过，之后继续。'
+say '基础配置连接 Zotero、OpenAlex 和 MinerU。OpenAlex 是必配检索来源；暂时跳过会保留进度，补齐后才算完成。'
 note '输入授权码时会显示星号作为提示。Ctrl-C 可退出，已保存内容会保留。'
 if [[ "$ADVANCED" == 1 ]]; then note '已打开更多设置：检索来源、电脑同步、浏览器全文。'; fi
 pause '按回车开始'
@@ -338,6 +378,7 @@ else
   fi
   bash "$SKILL_DIR/scripts/install-skill.sh"
 fi
+if [[ "$ADVANCED" == 0 ]]; then
 pause '准备完成，回车连接 Zotero'
 
 stage "连接 Zotero：保存你的论文"
@@ -375,6 +416,30 @@ else
 fi
 pause '按回车继续'
 
+stage "连接 OpenAlex（必配）：检索论文"
+if existing_ok openalex; then
+  note '✓ 已有 OpenAlex 授权通过验证，跳过填写。'
+else
+shared_guide openalex
+open_setup_url 'https://openalex.org/settings/api'
+while true; do
+  ask_authorization OPENALEX_API_KEY '粘贴 OpenAlex API Key（回车保留已有值；没有则暂存进度）：'
+  if [[ -n "$OPENALEX_API_KEY" ]]; then
+    if connect_account openalex "$OPENALEX_API_KEY"; then
+      unset OPENALEX_API_KEY
+    else
+      unset OPENALEX_API_KEY
+      warn 'OpenAlex 尚未连接，基础检索配置未完成；原有授权会保留。'
+      if retry_connection; then continue; fi
+    fi
+  else
+    note 'OpenAlex 为必配项。已保留进度，补齐并验证后基础配置才算完成。'
+  fi
+  break
+done
+fi
+pause '按回车继续'
+
 stage "启用全文阅读：整理 PDF"
 say '这一步使用 MinerU，把论文 PDF 转成适合阅读和总结的文字，也能识别扫描页。'
 say '它是独立的在线服务，需要另一个账号；下面会打开注册和授权页面。'
@@ -406,98 +471,6 @@ else
 fi
 pause '按回车继续'
 
-if [[ "$ADVANCED" == 1 ]]; then
-stage "更多设置：补充检索来源"
-say '默认跳过，直接回车即可；仍可检索，部分来源覆盖或请求额度可能减少。'
-if confirm '现在填写检索增强配置'; then
-  say '这些都是额外的文献来源。没有授权码就跳过，不用现在逐个注册。'
-  if confirm '已有 OpenAlex 授权码，或需要打开申请页面'; then
-    note 'OpenAlex 提供论文题录；服务额度以账号页面为准。'
-    open_setup_url 'https://openalex.org'
-    ask_authorization OPENALEX_API_KEY 'OpenAlex 授权码（可留空）：'
-    persist OPENALEX_API_KEY "$OPENALEX_API_KEY"
-  fi
-  if confirm '已有 Semantic Scholar 授权码，或需要打开申请页面'; then
-    note 'Semantic Scholar 是另一个学术搜索服务，可补充论文与引用信息。申请可能需要等待。'
-    open_setup_url 'https://www.semanticscholar.org/product/api'
-    ask_authorization SEMANTIC_SCHOLAR_API_KEY 'Semantic Scholar 授权码（可留空）：'
-    persist SEMANTIC_SCHOLAR_API_KEY "$SEMANTIC_SCHOLAR_API_KEY"
-  fi
-  if confirm '用联系邮箱启用 Crossref 的友好访问'; then
-    note 'Crossref 提供论文题录；邮箱随查询发送给 Crossref，用于联系，不需要邮箱密码。'
-    ask CROSSREF_MAILTO '联系邮箱（可留空）：'
-    persist CROSSREF_MAILTO "$CROSSREF_MAILTO"
-  fi
-  if confirm '用联系邮箱启用 Unpaywall 免费全文查找'; then
-    note 'Unpaywall 帮助定位合法开放的全文；邮箱随查询发送给该服务。'
-    ask UNPAYWALL_EMAIL '联系邮箱（可留空）：'
-    persist UNPAYWALL_EMAIL "$UNPAYWALL_EMAIL"
-  fi
-else
-  note '已跳过；已有配置保留。'
-fi
-pause '按回车继续'
-
-stage "更多设置：在电脑上阅读附件"
-if confirm '现在配置电脑上的 Zotero，让附件自动下载'; then
-  persist SETUP_DESKTOP 1
-  if [[ "$DEMO" == 1 ]]; then
-    note '[模拟] 检查/安装 Zotero Desktop 并启动。'
-  elif [[ "$(uname -s)" == Darwin ]]; then
-    if [[ ! -d /Applications/Zotero.app && ! -d "$HOME/Applications/Zotero.app" ]]; then
-      if command -v brew >/dev/null 2>&1; then brew install --cask zotero; else open_url 'https://www.zotero.org/download'; fi
-    fi
-    open -a Zotero || true
-  elif [[ "$WINDOWS" == 1 ]]; then
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$SKILL_DIR/scripts/windows-zotero.ps1")" || warn '请从开始菜单打开 Zotero，或重跑安装。'
-  else
-    open_url 'https://www.zotero.org/download'
-  fi
-  step '登录 Zotero；在设置中开启本地 API、附件同步与自动下载。'
-  guide zotero_local
-  guide zotero_sync
-  pause '完成后回车检查'
-  verify_step zotero-local || warn 'Desktop 尚未连接。'
-  verify_step zotero-sync || warn '附件同步尚未就绪。'
-else
-  note '跳过本次配置；云端写入不依赖 Desktop。'
-fi
-pause '按回车继续'
-
-stage "更多设置：通过学校或机构获取全文"
-say '如果需要在已登录的浏览器中下载论文，可以连接浏览器扩展。'
-note '只下载直接公开的全文，可以跳过。'
-if confirm '现在连接浏览器（使用 Kimi 扩展）'; then
-  persist SETUP_BROWSER 1
-  if [[ "$DEMO" == 1 ]]; then
-    note '[模拟] 检查 daemon，缺失则安装，然后启动。'
-  else
-    KIMI_BIN="$(command -v kimi-webbridge || true)"
-    KIMI_BIN="${KIMI_BIN:-$HOME/.kimi-webbridge/bin/kimi-webbridge}"
-    if [[ "$WINDOWS" == 1 && -x "$HOME/.kimi-webbridge/bin/kimi-webbridge.exe" ]]; then KIMI_BIN="$HOME/.kimi-webbridge/bin/kimi-webbridge.exe"; fi
-    if [[ "$WINDOWS" == 1 && ! -x "$KIMI_BIN" ]]; then
-      open_url 'https://www.kimi.com/products/kimi-webbridge'
-      step '按页面的 Windows 安装说明安装连接服务。'
-      pause '安装完成后回车'
-      KIMI_BIN="$HOME/.kimi-webbridge/bin/kimi-webbridge.exe"
-    elif [[ ! -x "$KIMI_BIN" ]]; then
-      installer="$(mktemp)"
-      if curl -fsSL https://cdn.kimi.com/webbridge/install.sh -o "$installer"; then bash "$installer"; fi
-      rm -f "$installer"
-    fi
-    "$KIMI_BIN" start || warn '连接服务尚未启动，稍后可重跑配置。'
-  fi
-  open_url 'https://www.kimi.ai/products/kimi-webbridge'
-  step '安装并启用浏览器扩展，授权连接；机构访问还需登录机构账号。'
-  pause '完成后回车检查'
-  verify_step kimi || warn '浏览器尚未连接。'
-else
-  note '已跳过；可直接下载的全文不需要浏览器。'
-fi
-pause '按回车继续'
-
-fi
-
 stage "检查结果，开始使用"
 if [[ "$DEMO" == 1 ]]; then
   note '[模拟检查通过] 正式版会验证核心服务及选中的可选功能。'
@@ -512,13 +485,48 @@ else
     say '✓ 配置完成。回到你的 AI 助手，试着说：'
     say '“帮我找近三年 AI 心理健康干预的研究，先给我一份候选清单。”'
     note '如果暂时找不到技能，新开一个助手会话再试。'
-    note '更多设置（可选）：Kimi WebBridge 浏览器全文、Semantic Scholar / OpenAlex 检索授权、Crossref / Unpaywall 联系邮箱。'
-    note '需要时让助手“打开文献工具的更多设置”，或运行 bash install/setup.sh --advanced；可跳过任何项目。'
+    note '接下来直接展示更多配置；不需要的项目可跳过。'
   else
     warn '部分配置尚未完成；已填写内容保留，重跑 setup 即可继续。'
-    exit 1
+    SETUP_RESULT=1
   fi
 fi
+fi
+
+stage "更多配置（可选）"
+say 'Kimi WebBridge、Semantic Scholar 及其他可选项目已依次展开。留空或跳过会保留已有配置。'
+for service in kimi semantic_scholar crossref unpaywall desktop; do
+  shared_guide "$service"
+  if [[ "$service" == kimi || "$service" == desktop ]]; then
+    if confirm '现在准备并连接这项功能'; then
+      if [[ "$DEMO" == 1 ]]; then
+        note '[模拟检查通过，不连接服务或保存]'
+      else
+        prepare_extra "$service"
+        if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra "$service"; then
+          warn '尚未启用，已保存的配置保留；可在准备完成后回来检查。'
+        fi
+      fi
+    fi
+  else
+    case "$service" in
+      semantic_scholar) setting=SEMANTIC_SCHOLAR_API_KEY; ask_authorization "$setting" 'Semantic Scholar API Key（可留空，申请未完成可稍后回来）：' ;;
+      crossref) setting=CROSSREF_MAILTO; ask "$setting" 'Crossref 联系邮箱（可留空）：' ;;
+      unpaywall) setting=UNPAYWALL_EMAIL; ask "$setting" 'Unpaywall 联系邮箱（可留空）：' ;;
+    esac
+    value="${!setting}"
+    if [[ -n "$value" ]]; then
+      if [[ "$DEMO" == 1 ]]; then
+        persist "$setting" "$value"
+      elif ! printf '%s' "$value" | "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra "$service"; then
+        warn '本项未保存，原有设置保留；请按提示修正后重试。'
+      fi
+    fi
+    unset "$setting" value
+  fi
+  printf '\n'
+done
+note '更多配置可随时重新打开：bash install/setup.sh --advanced。无需重填基础账号。'
 
 say '总结提示词可以换成你更熟悉的版本，保留默认也可以直接使用。'
 if confirm '想换用自己的总结提示词？查看需要修改的文件位置'; then
@@ -544,3 +552,5 @@ PY
   note '保存后在新文献任务中使用；已有笔记不会自动重写。更新或重装可能覆盖文件，请自行保留自定义提示词副本。'
   note '这里只提供修改位置，不打开编辑器、不修改文件。'
 fi
+
+exit "${SETUP_RESULT:-0}"

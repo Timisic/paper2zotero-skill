@@ -46,3 +46,6 @@ jobs:
           literature-to-zotero/tests/test_setup_connection.py
           literature-to-zotero/tests/test_setup_input.py
           literature-to-zotero/tests/test_onboarding.py
+      - name: Windows graphical wizard controls
+        if: runner.os == 'Windows'
+        run: python -m pytest -q literature-to-zotero/tests/test_setup_gui.py
