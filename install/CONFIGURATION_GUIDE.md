@@ -9,13 +9,11 @@
 
 ### 首次完整配置三个服务
 
-| 配置项 | 解决什么问题 | 需要准备 | 没配置会怎样 |
-| --- | --- | --- | --- |
-| **Zotero · 必配** | 把论文和笔记保存到你的文库 | Zotero 账号和文库读写 API Key | 不能完成自动入库；已取得的本地材料仍可保留 |
-| **OpenAlex · 必配** | 根据研究问题找到候选论文 | OpenAlex 账号和 API Key | 本工具的基础配置检查不通过；已有 DOI 或 PDF 的处理按自身依赖进行 |
-| **MinerU · 必配** | 将 PDF 转成 Markdown，供后续阅读 | MinerU 账号和 Token | 基础配置检查不通过，且不能生成 Markdown；PDF 仍可保留，可读时仍可生成笔记 |
-
-Zotero 按已有教程完成即可。另确认：**本工具自动入库需要 Zotero Web API 的读写授权**
+| 配置项 | 解决什么问题 | 需要准备 |
+| --- | --- | --- |
+| Zotero Web API | 把论文和笔记保存到你的文库 | Zotero 账号和文库读写 API Key |
+| OpenAlex | 根据研究问题找到候选论文 | OpenAlex 账号和 API Key |
+| MinerU | 将PDF转成Markdown，方便AI读取 | MinerU 账号和 Token |
 
 ### 有需要时再补充
 
@@ -25,7 +23,6 @@ Zotero 按已有教程完成即可。另确认：**本工具自动入库需要 Z
 | 按 DOI 寻找开放获取的全文 | Unpaywall | 可收信的联系邮箱 |
 | 为 DOI 题录查询提供联系信息 | Crossref | 可收信的联系邮箱；不填也不等于完全停用 Crossref 查询 |
 | 通过已登录的学校、机构或出版社网页获取全文 | Kimi WebBridge | 按已有教程连接扩展，并登录有访问权限的账号 |
-| 让助手直接查询已有 Zotero 文库 | Zotero MCP | 按已有教程连接当前助手，选择云端或本地访问方式 |
 
 ## 2. 开始配置
 
@@ -35,40 +32,36 @@ Zotero 按已有教程完成即可。另确认：**本工具自动入库需要 Z
 
 > 请按照 https://github.com/Timisic/paper2zotero-skill/blob/main/install/AGENT_SETUP.md ，帮我安装并配置这个文献工具，安装到我当前使用的助手中。
 
-助手会安装技能和运行工具，再打开配置向导。Python 和 PDF 工具由安装流程准备，你不需要为它们注册账号。
+助手会安装技能和运行工具，再打开配置向导。Python 和 PDF 工具由安装流程准备。API KEY从官网复制，直接粘贴到本机配置向导。**windows上配置向导为可视化界面。
 
-**从官网复制，粘贴到本机配置向导；不要发到聊天里。**windows上配置向导为可视化界面。
+### 第二步：连接 OpenAlex
 
-### 第二步：连接 OpenAlex，让助手能找论文
-
-1. 打开 [OpenAlex API 设置页](https://openalex.org/settings/api)，注册或登录。
+1. 打开 [OpenAlex API 设置页](https://openalex.org/settings/api)，注册登录。
 2. 找到 API Key，复制完整内容。
 3. 回到向导的「连接 OpenAlex（必配）」，粘贴并验证。
 
 <img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20260921204702998.png" alt="image-20260921204702998" style="zoom:20%;" />
 
-### 第三步：连接 MinerU，让 PDF 能转成文字
+### 第三步：连接 MinerU
 
-1. 打开 [MinerU API 管理页](https://mineru.net/apiManage/token)，注册或登录。
+1. 打开 [MinerU API 管理页](https://mineru.net/apiManage/token)，注册登录。
 2. 在 API 管理中创建 Token，复制完整内容。
 3. 回到向导的「启用全文阅读」（MinerU）步骤，粘贴并验证。
 
 <img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20260921205059443.png" alt="image-20260921205059443" style="zoom:20%;" />
 
-### 第四步：补齐 Zotero 连接与可选项目
-
-#### Zotero：确认授权与桌面设置
+### 第四步：Zotero 连接与可选项目
 
 已有 Zotero 和 MCP 配置可以沿用，重点检查以下三项：
 
-1. **Web API：允许工具保存论文。** 在 [Zotero 授权页](https://www.zotero.org/settings/keys)创建 API Key，允许目标文库读取、笔记访问和写入，再粘贴到文献工具向导的 Zotero 步骤并验证。**这项是自动入库必需的，MCP 已连接不能代替它。**
+1. **Web API：允许工具保存论文。** 在 [Zotero 授权页](https://www.zotero.org/settings/keys)创建 API Key，允许目标文库读取、笔记访问和写入，再粘贴到文献工具向导的 Zotero 步骤并验证。
 
 <img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20260921210120747.png" alt="image-20260921210120747" style="zoom:20%;" />
 
 <img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20260921210344722.png" alt="image-20260921210344722" style="zoom:25%;" />
 
-1. **MCP：让助手访问已有文库。** 按已有教程连接当前助手。云端模式使用 Web API 凭据；本地模式需要桌面应用运行并开启本地 API。配置后，让助手实际查询一条已有文献，确认能读到正确文库。
-2. **桌面应用：开启本地连接与附件同步。** 在 Zotero「设置 → 高级」勾选允许本机其他应用与 Zotero 通信，开启本地 API；在「设置 → 同步」登录同一账号，开启自动同步和附件文件同步，将「下载文件」设为「同步时」。使用本机联动时保持 Zotero 运行。
+1. **MCP：让助手访问已有文库。** 云端模式使用 Web API 凭据；本地模式需要桌面应用运行并开启本地 API。配置后，让助手实际查询一条已有文献，确认能读到正确文库。MCP保证后续智能体能够直接读取论文数据及笔记，可以直接插入预设文献引用格式。
+2. **桌面应用：开启本地连接与附件同步。** 在「设置 → 同步」登录同一账号，开启自动同步和附件文件同步，将「下载文件」设为「同步时」。使用本机联动时保持 Zotero 运行。
 
 <img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20260921210453347.png" alt="image-20260921210453347" style="zoom:25%;" />
 
@@ -76,7 +69,7 @@ Zotero 按已有教程完成即可。另确认：**本工具自动入库需要 Z
 
 ### 第五步：可选项目：按需要补充
 
-打开向导中的「更多配置（可选）」。
+打开向导中的「更多配置（可选）」
 
 | 项目 | 操作 | 完成后如何判断 |
 | --- | --- | --- |
