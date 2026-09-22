@@ -121,9 +121,9 @@ def test_mineru_presence_is_ok_but_live_probe_failure_is_not() -> None:
 
 def test_skill_links_ok_when_at_least_one_runtime_has_the_skill() -> None:
     assert MODULE.skill_links([])["ok"] is False
-    ok = MODULE.skill_links(["/tmp/.codex/skills/literature-to-zotero"])
+    ok = MODULE.skill_links(["/tmp/.codex/skills/paper-to-zotero"])
     assert ok["ok"] is True
-    assert "literature-to-zotero" in str(ok["detail"])
+    assert "paper-to-zotero" in str(ok["detail"])
 
 
 def test_ready_is_conjunction_of_only_live_readiness_capabilities() -> None:
@@ -221,7 +221,7 @@ def test_kimi_probe_skips_daemon_call_when_live_is_false(tmp_path: Path) -> None
 
 def test_skill_link_roots_discovers_symlinks_under_agent_roots(tmp_path: Path, monkeypatch: object) -> None:
     home = tmp_path / "home"
-    link = home / ".codex" / "skills" / "literature-to-zotero"
+    link = home / ".codex" / "skills" / "paper-to-zotero"
     link.parent.mkdir(parents=True)
     try:
         link.symlink_to(tmp_path / "target", target_is_directory=True)

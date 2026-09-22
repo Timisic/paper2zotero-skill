@@ -1,7 +1,7 @@
 interface:
-  display_name: "Literature to Zotero"
+  display_name: "Paper to Zotero"
   short_description: "Find, verify, summarize, and save research papers"
-  default_prompt: "Use $literature-to-zotero to find recent papers for my research question and save my approved selections to Zotero."
+  default_prompt: "Use $paper-to-zotero to find recent papers for my research question and save my approved selections to Zotero."
 dependencies:
   tools:
     - type: "mcp"

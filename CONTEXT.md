@@ -1,6 +1,6 @@
 # Architecture and working context
 
-`literature-to-zotero/` is the distributable skill. [README.md](README.md) covers user configuration and use; [SKILL.md](literature-to-zotero/SKILL.md) and its references define Agent execution. Public validation scope and platform limitations are documented in [docs/README.md](docs/README.md).
+`paper-to-zotero/` and `discussion-drafter/` are the distributable skills. [README.md](README.md) covers user configuration and use; [SKILL.md](paper-to-zotero/SKILL.md) and its references define literature ingestion. [Discussion Drafter](discussion-drafter/SKILL.md) defines collection-scoped discussion writing through Zotero MCP. Public validation scope and platform limitations are documented in [docs/README.md](docs/README.md).
 
 ## Workflow
 
@@ -66,7 +66,7 @@ Stage preflight checks only that stage's dependencies. Network failure leaves id
 Read the relevant [ADRs](docs/README.md#architecture-decisions) before changing boundaries. Add meaningful tests around consent, recovery, identity and read-back behavior. Fixture tests are not live service acceptance.
 
 ```bash
-cd literature-to-zotero
+cd paper-to-zotero
 python3 -m pytest tests -q
 python3 -m mypy scripts
 ```

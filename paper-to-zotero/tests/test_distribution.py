@@ -9,7 +9,7 @@ import pytest
 from test_cli import assert_private_file
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ROOT / 'literature-to-zotero/scripts'
+SCRIPTS = ROOT / 'paper-to-zotero/scripts'
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='POSIX entry; Windows equivalent in test_windows_setup.py')
@@ -17,10 +17,10 @@ def test_release_survives_download_removal_and_repeat_install(tmp_path):
     output = tmp_path / 'download folder'
     subprocess.run([sys.executable, str(ROOT / 'scripts/build-distribution.py'),
                     '--output', str(output)], check=True, capture_output=True)
-    release = output / 'literature-to-zotero'
+    release = output / 'paper-to-zotero'
     paths = [p.relative_to(release) for p in release.rglob('*')]
     assert not any({'tests', 'docs', '__pycache__', '.git'} & set(p.parts) for p in paths)
-    assert (output / 'literature-to-zotero.zip').is_file()
+    assert (output / 'paper-to-zotero.zip').is_file()
     home = tmp_path / 'new home'
     home.mkdir()
     env = {**os.environ, 'HOME': str(home), 'USERPROFILE': str(home), 'PYTHON_BIN': sys.executable, 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(home / '.codex')}
@@ -29,23 +29,29 @@ def test_release_survives_download_removal_and_repeat_install(tmp_path):
         result = subprocess.run(command, env=env, text=True, capture_output=True)
         assert result.returncode == 0, result.stderr
     shutil.rmtree(output)
-    installed = home / '.codex/skills/literature-to-zotero'
+    installed = home / '.codex/skills/paper-to-zotero'
     assert installed.is_symlink() and (installed / 'SKILL.md').is_file()
+    discussion = home / '.codex/skills/discussion-drafter'
+    assert discussion.is_symlink() and (discussion / 'SKILL.md').is_file()
     result = subprocess.run([shutil.which('bash') or 'bash', str(installed / 'scripts/run-python.sh'),
                              str(installed / 'scripts/workflow.py'), '--help'],
                             env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
+    # The installed bundle is itself a complete reinstall source.
+    result = subprocess.run([sys.executable, str(installed / 'scripts/install.py'), '--agent', 'codex'],
+                            env=env, text=True, capture_output=True)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_conflict_preserves_existing_skill(tmp_path):
-    existing = tmp_path / '.codex/skills/literature-to-zotero'
+    existing = tmp_path / '.codex/skills/paper-to-zotero'
     existing.mkdir(parents=True)
     (existing / 'mine').write_text('user content')
     result = subprocess.run([sys.executable, str(SCRIPTS / 'install.py')],
                             env={**os.environ, 'HOME': str(tmp_path), 'USERPROFILE': str(tmp_path), 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(tmp_path / '.codex')}, capture_output=True)
     assert result.returncode != 0
     assert (existing / 'mine').read_text() == 'user content'
-    assert not (tmp_path / '.local/share/literature-to-zotero/skill').exists()
+    assert not (tmp_path / '.local/share/paper-to-zotero/skill').exists()
 
 
 def test_config_update_private_literal_and_preserves_other_values(tmp_path, monkeypatch):
@@ -112,11 +118,14 @@ install('codex')
     result = subprocess.run([sys.executable, '-c', code, str(SCRIPTS / 'install.py')],
                             env={**os.environ, 'HOME': str(tmp_path), 'USERPROFILE': str(tmp_path), 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(tmp_path / '.codex')}, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    skill = tmp_path / '.codex/skills/literature-to-zotero'
+    skill = tmp_path / '.codex/skills/paper-to-zotero'
     assert not skill.is_symlink()
     assert (skill / 'SKILL.md').is_file()
     assert (skill / '.literature-to-zotero-managed').read_text() == 'v1'
     assert (skill / 'scripts/run-python.cmd').is_file()
+    discussion = skill.parent / 'discussion-drafter'
+    assert not discussion.is_symlink()
+    assert (discussion / 'SKILL.md').is_file()
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='POSIX installer; Windows equivalent in test_windows_setup.py')

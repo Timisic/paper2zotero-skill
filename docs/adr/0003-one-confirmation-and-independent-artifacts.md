@@ -10,4 +10,4 @@ The normal flow presents one candidate list and asks together for the paper sele
 
 A verified PDF, derived Markdown and a summary can arrive separately. Missing artifacts yield `partial`; verified cloud content awaiting local attachment files yields `sync_pending`. Neither is a reason to repeat completed writes. Complete delivery still requires the corresponding artifact and read-back evidence.
 
-Discovery has a shared budget across sources and retries. A short, supported list is preferable to padding; source failure is reported separately from an empty search result. Preflight checks only what the requested stage uses. The detailed states and commands live in [workflow.md](../../literature-to-zotero/references/workflow.md).
+Discovery has a shared budget across sources and retries. A short, supported list is preferable to padding; source failure is reported separately from an empty search result. Preflight checks only what the requested stage uses. The detailed states and commands live in [workflow.md](../../paper-to-zotero/references/workflow.md).

@@ -16,4 +16,4 @@ Routing every paper through the browser added interaction overhead and blocked o
 - Lookup time and request size are bounded; one failing service must not stall every paper.
 - An unreachable source must not replace an approved candidate file with an empty result.
 - Pacing is shared across processes on this machine; it does not coordinate other machines using the same account.
-- Current route order and browser handoff instructions live in [acquisition-and-artifacts.md](../../literature-to-zotero/references/acquisition-and-artifacts.md), rather than in historical timing reports.
+- Current route order and browser handoff instructions live in [acquisition-and-artifacts.md](../../paper-to-zotero/references/acquisition-and-artifacts.md), rather than in historical timing reports.

@@ -1,0 +1,9 @@
+interface:
+  display_name: "Discussion 撰写助手"
+  short_description: "依据指定 Zotero 集合撰写论文讨论，并核对论断依据与 APA 引用"
+  default_prompt: "使用 $discussion-drafter，根据我的研究结果和指定 Zotero 分类集合撰写讨论，附 APA 第七版参考文献表。"
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "zotero"
+      description: "读取指定集合的文献、笔记及原文，并通过 Zotero 引用引擎生成引用。"

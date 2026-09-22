@@ -21,7 +21,7 @@ The setup window is only the entry point. Regression coverage must also exercise
 ## Regression entry
 
 ```bash
-python -m pytest literature-to-zotero/tests/test_windows_pipeline.py -q
+python -m pytest paper-to-zotero/tests/test_windows_pipeline.py -q
 ```
 
 The original five platform failures went red together before their fixes. Additional tests exercise lost checkpoint recovery, cookie redirects, ambiguous remote states, real competing processes, failure cleanup, search readiness and managed-copy upgrades.

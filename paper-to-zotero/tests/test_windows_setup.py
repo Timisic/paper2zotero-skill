@@ -25,7 +25,7 @@ def release(tmp_path):
     subprocess.run([sys.executable, str(ROOT / 'scripts/build-distribution.py'),
                     '--output', str(path)], check=True, capture_output=True,
                    env={**os.environ, 'PYTHONUTF8': '1'})
-    return path / 'literature-to-zotero'
+    return path / 'paper-to-zotero'
 
 
 def run_setup(package, env, *modes):
@@ -43,7 +43,7 @@ def check_native_repeat_install_and_removed_download(tmp_path):
         result = run_setup(package, env, '-DependenciesOnly')
         assert result.returncode == 0, result.stdout + result.stderr
     skill_root = home / '.codex/skills'
-    assert list(skill_root.rglob('SKILL.md')) == [skill_root / 'literature-to-zotero/SKILL.md']
+    assert list(skill_root.rglob('SKILL.md')) == [skill_root / 'paper-to-zotero/SKILL.md']
     assert not list(home.rglob('.literature-backup-*')), 'identical reinstall should not publish another copy'
     result = run_setup(package, env, '-Check')
     assert result.returncode == 1, result.stdout + result.stderr
@@ -51,7 +51,7 @@ def check_native_repeat_install_and_removed_download(tmp_path):
     assert '安装已保存' in result.stdout
     shutil.rmtree(package)
     result = subprocess.run([sys.executable,
-                             str(skill_root / 'literature-to-zotero/scripts/workflow.py'),
+                             str(skill_root / 'paper-to-zotero/scripts/workflow.py'),
                              '--help'], env=env, capture_output=True, timeout=15)
     assert result.returncode == 0, result.stderr
 
@@ -63,7 +63,7 @@ def check_native_terminal_has_tty_and_verified_poppler(tmp_path):
     env['PAPER2ZOTERO_TEST_RESULT'] = str(marker)
     # Replace only the test package's account wizard; never prompt for or access keys.
     # The production PowerShell -> mintty -> Bash launcher remains unchanged.
-    (package / 'literature-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
+    (package / 'paper-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
 set -euo pipefail
 [[ -t 0 && -t 1 ]]
 [[ "$1" == --demo ]]
@@ -91,7 +91,7 @@ class WindowsSetupTests(unittest.TestCase):
             marker = path / 'native-complete.txt'
             env['PAPER2ZOTERO_TEST_RESULT'] = str(marker)
             env['PAPER2ZOTERO_TEST_ADVANCED'] = '1' if advanced else '0'
-            (package / 'literature-to-zotero/scripts/setup_gui.py').write_text('''import argparse, os, time
+            (package / 'paper-to-zotero/scripts/setup_gui.py').write_text('''import argparse, os, time
 from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument('--demo', action='store_true')
@@ -133,7 +133,7 @@ Path(os.environ['PAPER2ZOTERO_TEST_RESULT']).write_text('native-ok')
             env['PAPER2ZOTERO_TEST_RESULT'] = str(marker)
             # Use a real mintty TTY and production reader. Only the keystrokes
             # are synthetic; no clipboard or user credentials are accessed.
-            (package / 'literature-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
+            (package / 'paper-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname "$0")/setup-input.sh"
 before=$(stty -g)
@@ -187,7 +187,7 @@ printf 'masked-input-restored' > "$PAPER2ZOTERO_TEST_RESULT"
             env = environment(path / '用户 home')
             marker = path / 'completed.txt'
             env['PAPER2ZOTERO_TEST_RESULT'] = str(marker)
-            (package / 'literature-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
+            (package / 'paper-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
 set -eu
 test -t 0
 sleep 3

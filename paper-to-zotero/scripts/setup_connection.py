@@ -175,7 +175,7 @@ def open_page(url: str) -> None:
                    *(record[1] for record in SERVICES.values())}:
         raise ValueError('未知的授权页面。')
     if os.name == 'nt':
-        os.startfile(url)
+        getattr(os, 'startfile')(url)
     else:
         import webbrowser
         if not webbrowser.open(url):

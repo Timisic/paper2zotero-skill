@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         }, ensure_ascii=False))
         return 0
 
-    print("== literature-to-zotero setup doctor ==")
+    print("== paper-to-zotero setup doctor ==")
     print("ready:", "READY" if ready else "NOT READY (见下方缺失项)\n")
     for it in items:
         mark = "OK " if it["status"] == "ok" else "MISSING"

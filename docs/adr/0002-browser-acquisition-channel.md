@@ -8,4 +8,4 @@ Some full-text access depends on a logged-in publisher session, institutional ac
 
 The result distinguishes login/entitlement, challenges, unreachable pages and a broken browser connection. The Agent inspects the actual page before choosing a remedy. Multiple publisher errors alone do not prove a lost institutional session, and a reachable page does not guarantee a downloadable PDF.
 
-Browser access is a fallback under ADR-0004. It does not gate directly downloadable papers. Current session ownership and institutional-login steps are maintained in [acquisition-and-artifacts.md](../../literature-to-zotero/references/acquisition-and-artifacts.md#myloft-handoff).
+Browser access is a fallback under ADR-0004. It does not gate directly downloadable papers. Current session ownership and institutional-login steps are maintained in [acquisition-and-artifacts.md](../../paper-to-zotero/references/acquisition-and-artifacts.md#myloft-handoff).

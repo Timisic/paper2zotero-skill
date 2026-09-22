@@ -51,7 +51,7 @@ function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
         return $LASTEXITCODE
     }
     if (-not $Terminal) {
-        $gui = Join-Path $PSScriptRoot '..\literature-to-zotero\scripts\setup_gui.py'
+        $gui = Join-Path $PSScriptRoot '..\paper-to-zotero\scripts\setup_gui.py'
         $pythonw = Join-Path (Split-Path $pythonPath) 'pythonw.exe'
         if (-not (Test-Path -LiteralPath $pythonw)) { $pythonw = $pythonPath }
         $guiArgs = @(('"' + $gui + '"'), '--agent', $Agent)
@@ -88,7 +88,7 @@ function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
     # Quote each path explicitly; use a one-word title so it cannot become a command.
     # Only this wizard maps Ctrl+V to paste. Keep Ctrl+C as interrupt and leave
     # the user's global mintty settings untouched.
-    $arguments = @('--hold', 'error', '--title', 'literature-to-zotero',
+    $arguments = @('--hold', 'error', '--title', 'paper-to-zotero',
         '-o', 'ShootFoot=yes', '-o', 'KeyFunctions=C+v:paste',
         '-o', 'CtrlExchangeShift=no', '-o', 'ClipShortcuts=yes',
         '-e', '/usr/bin/bash', ('"' + $entry.Replace('\', '/') + '"')) + $WizardArgs

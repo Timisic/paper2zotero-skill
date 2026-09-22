@@ -1,12 +1,12 @@
 # Agent 安装执行说明
 
-目标：为用户当前使用的助手安装此 skill，打开可操作的向导，完成本地账号配置后进行检查。README 是给人的入口；平台分支、参数和完成条件以本文为准。
+目标：为用户当前使用的助手安装 `paper-to-zotero` 和 `discussion-drafter` 两个 skills，打开可操作的向导，完成本地账号配置后进行检查。README 是给人的入口；平台分支、参数和完成条件以本文为准。
 
 ## 1. 确定系统与安装目标
 
 从当前运行环境确定操作系统和助手，不让用户选择 Python 版本、目录或服务参数。安装目标参数是 `codex`、`claude-code` 或 `pi`；明确知道当前助手时必须传入。以下示例以 Claude Code 为例，按当前助手替换这个值。`auto` 只安装到已经存在的助手配置目录；无法识别时，交互向导会询问使用哪一个助手。只有用户要求所有助手时才使用 `all`。
 
-安装与验证共用 `scripts/agent_installation.py`。Codex 使用 `~/.codex/skills`（尊重 `CODEX_HOME`）；Claude Code 使用 `~/.claude/skills`（尊重 `CLAUDE_CONFIG_DIR`）；Pi 使用 `~/.pi/agent/skills`。共享目录中的已有安装可以被识别，但不会被默认改写。
+安装与验证共用 `paper-to-zotero/scripts/agent_installation.py`。Codex 使用 `~/.codex/skills`（尊重 `CODEX_HOME`）；Claude Code 使用 `~/.claude/skills`（尊重 `CLAUDE_CONFIG_DIR`）；Pi 使用 `~/.pi/agent/skills`。所选助手同时获得两个 skills。已有本安装器管理的其他助手副本也会更新；旧 `literature-to-zotero` 名称在两项技能安装成功后移至可恢复备份。独立安装保留，不自动覆盖。
 
 普通配置依次为：准备工具、连接 Zotero、连接 OpenAlex（必配）、启用全文阅读、检查结果、更多配置（可选）。OpenAlex 必须填写授权码并通过小型检索验证，才能通过基础配置检查。首次使用默认走这条路径。用户要求更多设置时加 `--advanced` / `-Advanced`；群组文库加 `--group` / `-Group`（使用本地 setup 入口）。
 
@@ -74,16 +74,17 @@ bash "$HOME/.local/share/paper2zotero-source/install/setup.sh" --agent claude-co
 
 完成条件：运行工具、PDF 工具、选定助手的 `SKILL.md`、Zotero 身份与读写权限、OpenAlex 授权检索、全文阅读授权，以及此前启用的可选功能，均按实际探测通过。报告缺失项及一个继续配置入口。终端就绪、文件安装成功或演示检查通过，均不等于账号配置完成；总检也不证明论文已处理或桌面附件已下载。
 
-最后请当前助手确认可以发现 `literature-to-zotero`。Claude Code 可用 `/literature-to-zotero`，Codex 可用 `$literature-to-zotero`；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。
+最后请当前助手确认可以发现 `paper-to-zotero` 和 `discussion-drafter`。Claude Code 可用 `/paper-to-zotero`、`/discussion-drafter`，Codex 可用 `$paper-to-zotero`、`$discussion-drafter`；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。`discussion-drafter` 另需当前助手连接 Zotero MCP：发现实际工具并只读验证目标集合访问。Web API 配置检查通过不等于 MCP 已连接；缺少连接时明确列为讨论写作的未完成项，不重复申请已有账号。
 
-交付时简短询问用户是否想换用自己熟悉的总结提示词。若向导已询问，复用该选择，不再重复询问。需要时只给出当前助手实际加载的 skill 下 `references/paper-summary.md` 的绝对路径，以及“修改前半部分的阅读分析要求，保留 `## Save and continue` 及之后的保存／续跑说明”的方法；不打开编辑器、不修改提示词，也不新增配置项。通过 `agent_installation.installed_paths(agent=已选目标)` 定位安装目录，避免把下载仓库里的文件误报为生效文件；自定义配置目录以实际路径为准。已有笔记不自动重写，更新或重装可能覆盖自定义内容，提醒用户自行保留副本。
+交付时简短询问用户是否想换用自己熟悉的总结提示词。若向导已询问，复用该选择，不再重复询问。需要时只给出当前助手实际加载的 skill 下 `references/paper-summary.md` 的绝对路径，以及“修改前半部分的阅读分析要求，保留 `## Save and continue` 及之后的保存／续跑说明”的方法；不打开编辑器、不修改提示词，也不新增配置项。通过 `agent_installation.installed_paths(agent=已选目标)` 定位安装目录，避免把下载仓库里的文件误报为生效文件；自定义配置目录以实际路径为准。已有笔记不自动重写；托管安装会保留自定义总结提示词，仍建议用户保留自己的副本。
 
 ## 通过其他 skill 分发工具安装
 
-本仓库保留标准 `literature-to-zotero/SKILL.md` 布局。例如已有 Node.js 的用户可用：
+本仓库保留两个标准 skill 目录。例如已有 Node.js 的用户可分别安装：
 
 ```bash
-npx skills add Timisic/paper2zotero-skill --skill literature-to-zotero --agent claude-code --global
+npx skills add Timisic/paper2zotero-skill --skill paper-to-zotero --agent claude-code --global
+npx skills add Timisic/paper2zotero-skill --skill discussion-drafter --agent claude-code --global
 ```
 
 这类工具安装 skill 文件，不安装运行依赖或连接服务。继续按本文启动 setup。若外部管理器已占用同名目录，本安装器会保留它并报冲突；由用户选择保留外部管理或先移走该目录后改用本安装器。不要自动覆盖独立安装。

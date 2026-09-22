@@ -7,7 +7,7 @@ the same records preflight and the setup doctor use — so the wizard can
 never report "done" while the skill would refuse to run, and vice versa.
 
 Commands:
-  skill-links     - skill reachable from at least one agent runtime root
+  skill-links     - both skills ready in the selected agent runtime
   zotero-local    - Zotero Desktop local API answers on 127.0.0.1:23119
   zotero-sync     - Desktop attachment file sync enabled (absent pref =
                     Zotero 7 default ON) and auto-download not disabled
@@ -31,6 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import capability  # noqa: E402
 import credentials  # noqa: E402
+import agent_installation  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 SCRIPTS = SKILL_DIR / "scripts"
@@ -43,7 +44,10 @@ def print_record(record: dict[str, str | bool]) -> int:
 
 
 def cmd_skill_links() -> int:
-    return print_record(capability.skill_links(capability.skill_link_roots()))
+    agent = os.environ.get('PAPER2ZOTERO_AGENT', 'auto')
+    paths = [path for name in agent_installation.SKILL_NAMES
+             for path in agent_installation.installed_paths(agent=agent, skill_name=name)]
+    return print_record({'ok': agent_installation.installation_ok(agent), 'detail': ', '.join(paths)})
 
 
 def cmd_zotero_local() -> int:

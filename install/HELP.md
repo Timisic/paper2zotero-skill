@@ -50,10 +50,10 @@ Windows 基础配置的完成页会提供 **更多配置（可选）** 按钮，
 
 | 安装方式 | 要修改的文件 |
 | --- | --- |
-| macOS / Linux | `~/.local/share/literature-to-zotero/skill/references/paper-summary.md` |
-| Windows · Codex | `%USERPROFILE%\.codex\skills\literature-to-zotero\references\paper-summary.md` |
-| Windows · Claude Code | `%USERPROFILE%\.claude\skills\literature-to-zotero\references\paper-summary.md` |
-| Windows · Pi | `%USERPROFILE%\.pi\agent\skills\literature-to-zotero\references\paper-summary.md` |
+| macOS / Linux | `~/.local/share/paper-to-zotero/skill/references/paper-summary.md` |
+| Windows · Codex | `%USERPROFILE%\.codex\skills\paper-to-zotero\references\paper-summary.md` |
+| Windows · Claude Code | `%USERPROFILE%\.claude\skills\paper-to-zotero\references\paper-summary.md` |
+| Windows · Pi | `%USERPROFILE%\.pi\agent\skills\paper-to-zotero\references\paper-summary.md` |
 
 用文本编辑器打开它，把前半部分的阅读分析要求替换为自己的提示词，保留 **`## Save and continue` 及之后**的保存／续跑说明。无需修改密钥或其他账号配置。保存后在新文献任务中使用；已经生成的笔记不会自动重写。更新或重装可能覆盖这个文件，请自行保留自定义提示词副本。
 
@@ -63,7 +63,11 @@ Windows 双击 `install/setup-demo.cmd`，macOS/Linux 运行 `bash install/setup
 
 ## 助手里找不到技能
 
-新开一个助手会话再试。仍找不到时，让助手“检查 literature-to-zotero 是否安装到了当前助手”。同一份技能支持 Claude Code、Codex 和 Pi；安装到一个助手不会自动使所有助手都能使用。
+新开一个助手会话再试。仍找不到时，让助手“检查 paper-to-zotero 和 discussion-drafter 是否安装到了当前助手”。安装器支持 Claude Code、Codex 和 Pi，所选助手会同时安装两项技能；需要全部助手时选择 `all`。
+
+从旧版升级时，安装器会迁移它管理的 `literature-to-zotero` 安装，旧入口保留在助手目录旁的备份文件夹。独立安装不会覆盖；不同助手中存在冲突的自定义总结提示词时，会保留并提示选择。账号配置继续读取 `~/.config/literature-to-zotero/`，无需重填密钥；该兼容目录不代表旧 skill 仍需使用。
+
+`discussion-drafter` 需要当前助手已连接 Zotero MCP。完成文件安装或 Zotero Web API 检查并不能证明 MCP 已连接。打开 Zotero 后，让助手只读验证指定集合，再提供自己的研究背景与核心发现开始写作。
 
 ## 论文和数据会发送到哪里
 

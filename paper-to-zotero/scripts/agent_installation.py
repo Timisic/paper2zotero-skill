@@ -11,7 +11,12 @@ from pathlib import Path
 
 AGENTS = {"codex": ".codex", "claude-code": ".claude", "pi": ".pi/agent"}
 CHOICES = ("auto", *AGENTS, "all")
-SKILL_NAME = "literature-to-zotero"
+SKILL_NAME = "paper-to-zotero"
+SKILL_NAMES = (SKILL_NAME, "discussion-drafter")
+
+
+def shared_path(name: str, home: Path | None = None) -> Path:
+    return (home or Path.home()) / '.local/share/paper-to-zotero' / ('skill' if name == SKILL_NAME else name)
 
 
 def agent_roots(home: Path | None = None) -> dict[str, Path]:
@@ -38,7 +43,7 @@ def selected_roots(agent: str = "auto") -> list[Path]:
     return [root for root in roots.values() if root.parent.is_dir()]
 
 
-def installed_paths(home: Path | None = None, agent: str = "auto") -> list[str]:
+def installed_paths(home: Path | None = None, agent: str = "auto", *, skill_name: str = SKILL_NAME) -> list[str]:
     from install import runtime_ready
     if agent not in CHOICES:
         raise ValueError(f"未知安装目标：{agent}")
@@ -48,11 +53,13 @@ def installed_paths(home: Path | None = None, agent: str = "auto") -> list[str]:
     else:
         base = home if home is not None else Path.home()
         candidates = list(roots.values()) + [base / ".agents/skills", base / ".hermes/skills"]
-    return [str(root / SKILL_NAME) for root in candidates
-            if runtime_ready(root / SKILL_NAME, (home / '.local/share/literature-to-zotero/skill') if home else None)]
+    return [str(root / skill_name) for root in candidates
+            if runtime_ready(root / skill_name, shared_path(skill_name, home))]
 
 
 def installation_ok(agent: str = "auto") -> bool:
     if agent == "all":
-        return all(installed_paths(agent=name) for name in AGENTS)
-    return bool(installed_paths(agent=agent))
+        return all(installation_ok(name) for name in AGENTS)
+    roots = [{Path(path).parent for path in installed_paths(agent=agent, skill_name=name)}
+             for name in SKILL_NAMES]
+    return bool(set.intersection(*roots))

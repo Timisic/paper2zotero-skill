@@ -34,18 +34,18 @@ jobs:
       - name: Pipeline, recovery, identity and local I/O regressions
         run: >-
           python -m pytest -q
-          literature-to-zotero/tests/test_windows_pipeline.py
-          literature-to-zotero/tests/test_http_client.py
-          literature-to-zotero/tests/test_http_acquisition.py
-          literature-to-zotero/tests/test_mineru_resume.py
-          literature-to-zotero/tests/test_zotero_ingest.py
-          literature-to-zotero/tests/test_full_chain.py
-          literature-to-zotero/tests/test_process_run.py
-          literature-to-zotero/tests/test_workflow_resume.py
-          literature-to-zotero/tests/test_managed_installation.py
-          literature-to-zotero/tests/test_setup_connection.py
-          literature-to-zotero/tests/test_setup_input.py
-          literature-to-zotero/tests/test_onboarding.py
+          paper-to-zotero/tests/test_windows_pipeline.py
+          paper-to-zotero/tests/test_http_client.py
+          paper-to-zotero/tests/test_http_acquisition.py
+          paper-to-zotero/tests/test_mineru_resume.py
+          paper-to-zotero/tests/test_zotero_ingest.py
+          paper-to-zotero/tests/test_full_chain.py
+          paper-to-zotero/tests/test_process_run.py
+          paper-to-zotero/tests/test_workflow_resume.py
+          paper-to-zotero/tests/test_managed_installation.py
+          paper-to-zotero/tests/test_setup_connection.py
+          paper-to-zotero/tests/test_setup_input.py
+          paper-to-zotero/tests/test_onboarding.py
       - name: Windows graphical wizard controls
         if: runner.os == 'Windows'
-        run: python -m pytest -q literature-to-zotero/tests/test_setup_gui.py
+        run: python -m pytest -q paper-to-zotero/tests/test_setup_gui.py

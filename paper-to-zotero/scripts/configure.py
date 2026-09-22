@@ -62,7 +62,8 @@ def probe(command: str) -> dict[str, object]:
     if command == 'skill-links':
         agent = os.environ.get('PAPER2ZOTERO_AGENT', 'auto')
         ok = agent_installation.installation_ok(agent)
-        detail = ', '.join(agent_installation.installed_paths(agent=agent))
+        detail = ', '.join(path for name in agent_installation.SKILL_NAMES
+                           for path in agent_installation.installed_paths(agent=agent, skill_name=name))
     else:
         try:
             result = subprocess.run([sys.executable, str(SCRIPTS / 'verify.py'), command],

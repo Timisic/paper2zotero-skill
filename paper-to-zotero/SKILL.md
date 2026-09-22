@@ -1,9 +1,9 @@
 ---
-name: literature-to-zotero
+name: paper-to-zotero
 description: Find, screen, acquire, verify, summarize, and save scholarly papers to Zotero from a natural-language research intent or known paper identifiers. Use for psychology and AI literature searches that need a user-confirmed reading list, authenticated MyLOFT access, source PDFs, derived Markdown, and auditable Zotero ingestion. Do not use for writing a cross-paper literature review.
 ---
 
-# Literature to Zotero
+# Paper to Zotero
 
 Turn a research intent into a verified Zotero collection while preserving the distinction between source metadata, source PDFs, derived text, and generated summaries.
 
@@ -52,7 +52,7 @@ Target about ten minutes after confirmation for five ordinarily accessible paper
    This pass acquires, verifies and converts. The advisory `--check-ingestion` checks Zotero identity/write access once alongside the work; failure does not block PDFs, conversion or summaries. After summaries, step 9 ingests once with read-back. PDF-first ingestion remains available for early partial delivery. Resume the same run with `--ids` for named gaps. Do not compose a new ingestion script at runtime: an implementation error is a maintenance problem to report, not something to patch mid-run.
 8. If `acquire.browser_handoff` is present, complete the [MyLOFT handoff](references/acquisition-and-artifacts.md#myloft-handoff) in the same browser session after the command exits. Use page evidence and the subscribed database; capture and record the verified PDF, or a precise unresolved state. This is already-authorized work, not a new confirmation. Then use `--stages convert` for newly acquired files and proceed to summaries, without retrying unresolved downloads.
 9. `status: awaiting_summaries` returns `summary_batch_file`: a JSON object whose `summaries` list contains each full-text source, source basis/hash, Markdown section locations and a `content_file` for the summary body. Read [paper-summary.md](references/paper-summary.md). Read each main text once, consulting a passage again only to resolve a concrete question. Write each `content_file` in the paper's language unless the user specifies otherwise, following the six-part analysis contract without a length limit; self-check once. Run `summary_batch_command` with the actual agent model as provider to save and record the batch, then its `resume_command` (or `resume_shell`) to ingest with the approved collection and local read-back options. This is an internal handoff, not a new confirmation.
-10. Deliver the returned `table` (`workflow.py report` regenerates it): per paper, PDF / Markdown / summary / Zotero cloud / local sync / pending reason, plus the collection and the local run path. Deliver the built-in verification evidence without re-querying the same objects. Report cloud-verified papers as delivered while Desktop downloads; only missing local evidence warrants a separate local check.
+10. Deliver the returned `table` (`workflow.py report` regenerates it): per paper, PDF / Markdown / summary / Zotero cloud / local sync / pending reason, plus the collection and the local run path. Deliver the built-in verification evidence without re-querying the same objects. Report cloud-verified papers as delivered while Desktop downloads; only missing local evidence warrants a separate local check. When the requested papers and notes have been saved, add one short reminder: “提供你的研究背景和核心发现后，可以使用 discussion-drafter，基于本次 Zotero 集合及子集合撰写讨论，并附 APA 参考文献表。” Use the actual collection name, follow the user's language, and explain that the discussion skill needs a working Zotero MCP connection. This is a suggested next step, not permission to start drafting or invent the user's research results.
 
 ## Hard invariants
 

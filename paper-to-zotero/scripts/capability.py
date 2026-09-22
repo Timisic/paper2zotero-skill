@@ -263,7 +263,7 @@ REACHABILITY_NOTE = (
 
 def probe_reachable(url: str, timeout: int = 8) -> bool:
     """Can this host be opened at all, with or without the ambient proxy?"""
-    request = urllib.request.Request(url, headers={"User-Agent": "literature-to-zotero/0.1"})
+    request = urllib.request.Request(url, headers={"User-Agent": "paper-to-zotero/0.1"})
     for opener in (
         urllib.request.build_opener(),
         urllib.request.build_opener(urllib.request.ProxyHandler({})),

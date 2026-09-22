@@ -9,7 +9,7 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ROOT / 'literature-to-zotero/scripts'
+SCRIPTS = ROOT / 'paper-to-zotero/scripts'
 sys.path.insert(0, str(SCRIPTS))
 import agent_installation
 import configure
@@ -27,17 +27,17 @@ def environment(home):
 def test_targeted_install_survives_other_agent_conflict(tmp_path, agent, folder):
     env = environment(tmp_path)
     other = '.codex' if agent != 'codex' else '.claude'
-    conflict = tmp_path / other / 'skills/literature-to-zotero'
+    conflict = tmp_path / other / 'skills/paper-to-zotero'
     conflict.mkdir(parents=True)
     (conflict / 'my-note').write_text('keep')
     for _ in range(2):
         result = subprocess.run([sys.executable, str(SCRIPTS / 'install.py'), '--agent', agent],
                                 env=env, capture_output=True, text=True, encoding='utf-8')
         assert result.returncode == 0, result.stdout + result.stderr
-    assert (tmp_path / folder / 'skills/literature-to-zotero/SKILL.md').is_file()
+    assert (tmp_path / folder / 'skills/paper-to-zotero/SKILL.md').is_file()
     assert (conflict / 'my-note').read_text() == 'keep'
     # The selected runtime must work from an unrelated working directory.
-    result = subprocess.run([sys.executable, str(tmp_path / folder / 'skills/literature-to-zotero/scripts/workflow.py'),
+    result = subprocess.run([sys.executable, str(tmp_path / folder / 'skills/paper-to-zotero/scripts/workflow.py'),
                              '--help'], cwd=tmp_path, env=env, capture_output=True)
     assert result.returncode == 0, result.stderr
 
@@ -47,7 +47,7 @@ def test_auto_detection_does_not_create_other_runtimes(tmp_path):
     (tmp_path / '.claude').mkdir()
     result = subprocess.run([sys.executable, str(SCRIPTS / 'install.py')], env=env, capture_output=True)
     assert result.returncode == 0, result.stderr
-    assert (tmp_path / '.claude/skills/literature-to-zotero/SKILL.md').is_file()
+    assert (tmp_path / '.claude/skills/paper-to-zotero/SKILL.md').is_file()
     assert not (tmp_path / '.codex').exists()
     assert not (tmp_path / '.pi').exists()
 
@@ -63,11 +63,15 @@ def test_target_verification_rejects_empty_directory_and_other_agent(tmp_path, m
     monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path))
     monkeypatch.delenv('CODEX_HOME', raising=False)
     monkeypatch.delenv('CLAUDE_CONFIG_DIR', raising=False)
-    codex = tmp_path / '.codex/skills/literature-to-zotero'
+    codex = tmp_path / '.codex/skills/paper-to-zotero'
     codex.mkdir(parents=True)
     (codex / 'SKILL.md').write_text('fixture')
-    claude = tmp_path / '.claude/skills/literature-to-zotero'
+    claude = tmp_path / '.claude/skills/paper-to-zotero'
     claude.mkdir(parents=True)
+    assert not agent_installation.installation_ok('codex')
+    discussion = codex.parent / 'discussion-drafter'
+    discussion.mkdir()
+    (discussion / 'SKILL.md').write_text('fixture')
     assert agent_installation.installation_ok('codex')
     assert not agent_installation.installation_ok('claude-code')
     assert not agent_installation.installation_ok('all')

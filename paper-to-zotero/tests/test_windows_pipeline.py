@@ -138,7 +138,7 @@ def test_updating_one_agent_updates_all_existing_managed_copies(tmp_path, monkey
     code.write_text('version = 2')
     install.install('claude-code')
     for root in ('.claude', '.codex', '.pi/agent'):
-        assert (tmp_path / root / 'skills/literature-to-zotero/scripts/runtime.py').read_text() == 'version = 2'
+        assert (tmp_path / root / 'skills/paper-to-zotero/scripts/runtime.py').read_text() == 'version = 2'
 
 
 def test_native_lock_released_after_process_exit(tmp_path):

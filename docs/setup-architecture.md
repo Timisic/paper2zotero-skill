@@ -8,15 +8,17 @@ Paths below are relative to the repository root.
 
 | Owner | Responsibility |
 | --- | --- |
-| `install/setup.ps1`, `literature-to-zotero/scripts/bootstrap.sh` | Prepare native tools and save their verified paths |
-| `literature-to-zotero/scripts/agent_installation.py`, `install.py` in the same directory | Select agent destinations, install runtime files and preserve conflicts |
-| `literature-to-zotero/scripts/setup-wizard.sh` | Human steps using the existing terminal template |
-| `literature-to-zotero/scripts/setup-input.sh` | Masked authorization input, control-character rejection and retry |
-| `literature-to-zotero/scripts/setup_gui.py`, `setup_connection.py` | Default Windows native wizard; shared validated account connection and accepted saves for GUI and Bash |
-| `literature-to-zotero/scripts/configure.py` | Atomic UTF-8 configuration writes and completion checks |
-| `literature-to-zotero/scripts/credentials.py`, `capability.py` in the same directory | Resolve credentials and judge service capabilities |
+| `install/setup.ps1`, `paper-to-zotero/scripts/bootstrap.sh` | Prepare native tools and save their verified paths |
+| `paper-to-zotero/scripts/agent_installation.py`, `install.py` in the same directory | Select agent destinations, install runtime files and preserve conflicts |
+| `paper-to-zotero/scripts/setup-wizard.sh` | Human steps using the existing terminal template |
+| `paper-to-zotero/scripts/setup-input.sh` | Masked authorization input, control-character rejection and retry |
+| `paper-to-zotero/scripts/setup_gui.py`, `setup_connection.py` | Default Windows native wizard; shared validated account connection and accepted saves for GUI and Bash |
+| `paper-to-zotero/scripts/configure.py` | Atomic UTF-8 configuration writes and completion checks |
+| `paper-to-zotero/scripts/credentials.py`, `capability.py` in the same directory | Resolve credentials and judge service capabilities |
 
-Installation and verification share agent destinations and runtime evidence. Managed copies are used on Windows; links are used on macOS/Linux. Independent installations are preserved. All complete runtime copies are staged and hashed before any active directory changes. A durable publication journal records the original targets, prepared paths and backups before renaming. Rerunning any install entry finishes the pending publication first; it then applies the requested update. A process lock excludes simultaneous publishers. Backups and staging stay outside discoverable skill roots and on each target's volume. This is resumable publication, not an instantaneous multi-directory transaction: an interrupted switch can temporarily leave a target unavailable until setup resumes.
+Installation and verification share agent destinations and runtime evidence. Both `paper-to-zotero` and `discussion-drafter` must be ready in the same selected agent. Managed copies are used on Windows; links are used on macOS/Linux. Independent installations are preserved. The installer checks both sources and all destination conflicts before publishing. Each skill's complete runtime copies are staged and hashed, with a separate durable publication journal recording original targets, prepared paths and backups before renaming. Rerunning finishes pending publication and applies the update. A process lock excludes simultaneous publishers. Backups and staging stay outside discoverable skill roots and on each target's volume. This is resumable publication, not an instantaneous bundle transaction: interruption can leave one skill installed and the other pending; the bundle readiness check then fails.
+
+New runtimes live under `~/.local/share/paper-to-zotero/`. Existing managed `literature-to-zotero` installations join the migration, including previously managed shared roots; independent installs are not adopted. Old discoverable names move to recoverable backups only after both skills publish successfully. The old shared runtime remains available to those backups. Customized summary prompts are carried forward; conflicting customizations stop the update. Credentials and verified tool paths continue using `~/.config/literature-to-zotero/`; cache paths, v1 ownership markers and Zotero note identity markers also retain their old identifiers to preserve settings and idempotency.
 
 Each managed runtime carries a content manifest. Verification checks files and the shared version, so a missing script or mixed release cannot pass merely because SKILL.md exists. The documented customization of `references/paper-summary.md` is allowed for readiness; the file must still exist. Installation staging always checks every byte. Reinstalling identical complete content does not create another backup. Existing v1 ownership markers remain upgradeable; the first update adds manifests. Unmanaged skills retain their independent installation semantics.
 
