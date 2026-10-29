@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Turn local PDFs into verified candidates and Markdown without a search round.
+"""Turn local PDFs into verified candidates, then Markdown, without a search round.
 
 The caller already has the file. This command reads a DOI or title from it,
 completes the bibliographic record from Crossref and OpenAlex, appends a
-candidate without replacing one that is already stored, verifies the PDF with
-the same identity check as ``import-pdfs``, and converts it.
+candidate without replacing one that is already stored, and verifies the PDF
+with the same identity check as ``import-pdfs``.
 
-The default converter is local text extraction. It does not upload the file
-and does not ask for consent. ``--backend cloud`` is the explicit MinerU path:
-upload consent is required only then.
+Markdown conversion is ``process_run.stage_convert`` (MinerU). Upload needs
+recorded consent for the verified ids. Without that consent the command stops
+after import and names the consent step. It does not upload. ``--backend local``
+writes on-machine text instead and does not record consent.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -27,7 +27,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paper_artifacts  # noqa: E402
 import process_run  # noqa: E402
 import sources  # noqa: E402
-import summary_artifact  # noqa: E402
 import workflow  # noqa: E402
 
 # A title match this strong is the same work. Anything weaker must not donate
@@ -379,13 +378,7 @@ def convert_local(run_dir: Path, plan: dict[str, Any], imported: Mapping[str, An
     plan["status"] = "converted"
 
 
-def mark_cloud_consent(run_dir: Path, plans: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Record a missing upload decision without calling MinerU.
-
-    Caller holds the run lock. Papers that already have consent are returned
-    so conversion can run after the lock is released: MinerU recording takes
-    the same lock itself.
-    """
+def mineru_ready(run_dir: Path, plans: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     verified = [plan for plan in plans if plan.get("import_status") == "verified"]
     package = workflow.Run.open(run_dir)
     ready: list[dict[str, Any]] = []
@@ -403,12 +396,11 @@ def mark_cloud_consent(run_dir: Path, plans: Sequence[dict[str, Any]]) -> list[d
     return ready
 
 
-def convert_cloud(run_dir: Path, ready: Sequence[dict[str, Any]]) -> None:
-    if not ready:
-        return
-    identities = [str(plan["id"]) for plan in ready]
-    outcome = process_run.stage_convert(
-        process_run.ProcessRequest(run_dir=run_dir, ids=identities, stages=("convert",)), identities)
+def record_mineru_markdown(run_dir: Path, ready: Sequence[dict[str, Any]], outcome: Mapping[str, Any]) -> None:
+    raw_failed = outcome.get("failed")
+    raw_skipped = outcome.get("skipped")
+    failed = raw_failed if isinstance(raw_failed, dict) else {}
+    skipped = raw_skipped if isinstance(raw_skipped, dict) else {}
     for plan in ready:
         paper = workflow.Run.open(run_dir).paper(str(plan["id"]))
         if paper.markdown:
@@ -418,34 +410,7 @@ def convert_cloud(run_dir: Path, ready: Sequence[dict[str, Any]]) -> None:
             continue
         plan["status"] = "convert_failed"
         plan["convert"] = "failed"
-        plan["reason"] = ((outcome.get("failed") or {}).get(plan["id"])
-                          or (outcome.get("skipped") or {}).get(plan["id"]))
-
-
-def summary_continuation(run_dir: Path, identities: Sequence[str], collection_name: str | None,
-                         collection_key: str | None, storage_root: Path | None) -> dict[str, Any]:
-    if not identities:
-        return {}
-    package = workflow.Run.open(run_dir)
-    pending = process_run.summary_handoff(package, list(identities), package.candidates())
-    if not pending:
-        return {}
-    request = process_run.ProcessRequest(
-        run_dir=run_dir, ids=list(identities), stages=("ingest",),
-        collection_key=collection_key, collection_name=collection_name, storage_root=storage_root,
-    )
-    command = process_run.ingest_command(request, list(identities))
-    handoff = summary_artifact.prepare_handoff(run_dir, pending, command)
-    return {
-        "pending_summaries": pending,
-        "resume_command": command,
-        "resume_shell": shlex.join(command),
-        "summary_batch_file": str(handoff),
-        "summary_batch_command": [
-            sys.executable, str(process_run.SCRIPTS / "summary_artifact.py"),
-            "--batch-file", str(handoff), "--provider", "<actual-agent-model>",
-        ],
-    }
+        plan["reason"] = failed.get(plan["id"]) or skipped.get(plan["id"])
 
 
 def public_paper(plan: Mapping[str, Any]) -> dict[str, Any]:
@@ -465,14 +430,9 @@ def public_paper(plan: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def run_local_pdfs(run_dir: Path, pdfs: Sequence[Path], *, backend: str = "local",
+def run_local_pdfs(run_dir: Path, pdfs: Sequence[Path], *, backend: str = "cloud",
                    collection_name: str | None = None, collection_key: str | None = None,
                    storage_root: Path | None = None, client: BibliographyClient | None = None) -> dict[str, Any]:
-    """Extract, complete, verify and convert.
-
-    Candidate writes hold the run lock. Cloud MinerU conversion runs after
-    that lock is released, because its recorder takes the same lock.
-    """
     if backend not in ("local", "cloud"):
         raise ValueError("backend must be local or cloud")
     if not pdfs:
@@ -482,10 +442,15 @@ def run_local_pdfs(run_dir: Path, pdfs: Sequence[Path], *, backend: str = "local
         raise ValueError(f"run package has no manifest: {run_dir}")
     bibliography = client or sources.Sources(browser=None, attempts=2, timeout=8, budget=12)
     with workflow.run_lock(run_dir):
-        plans, identities, cloud_ready = _run_local_pdfs(
+        plans, identities, ready = _run_local_pdfs(
             run_dir, pdfs, backend=backend, client=bibliography)
-    if backend == "cloud":
-        convert_cloud(run_dir, cloud_ready)
+    if ready:
+        convert_ids = [str(plan["id"]) for plan in ready]
+        outcome = process_run.stage_convert(
+            process_run.ProcessRequest(run_dir=run_dir, ids=convert_ids, stages=("convert",)),
+            convert_ids,
+        )
+        record_mineru_markdown(run_dir, ready, outcome)
     return finish(run_dir, plans, identities, backend=backend, collection_name=collection_name,
                   collection_key=collection_key, storage_root=storage_root)
 
@@ -547,46 +512,60 @@ def _run_local_pdfs(run_dir: Path, pdfs: Sequence[Path], *, backend: str,
                 run = workflow.Run.open(run_dir)
                 run.advance(str(plan["id"]), warning=str(plan["warning"]))
                 run.save()
-    cloud_ready: list[dict[str, Any]] = []
-    if backend == "cloud":
-        cloud_ready = mark_cloud_consent(run_dir, plans)
-    else:
+    ready: list[dict[str, Any]] = []
+    if backend == "local":
         for plan in plans:
             row = imported.get(str(plan.get("id")))
             if plan.get("import_status") == "verified" and row and row.get("path"):
                 convert_local(run_dir, plan, row)
-    return plans, identities, cloud_ready
+    else:
+        ready = mineru_ready(run_dir, plans)
+    return plans, identities, ready
+
+
+CONSENT_NEXT_ACTION = (
+    "MinerU upload consent is missing for the verified PDFs. Ask once unless the user already refused, "
+    "record workflow.py consent --service mineru for those ids, then re-run local_pdf.py or "
+    "process_run.py --stages convert. Do not upload before consent"
+)
 
 
 def finish(run_dir: Path, plans: Sequence[dict[str, Any]], identities: Sequence[str], *, backend: str,
            collection_name: str | None, collection_key: str | None, storage_root: Path | None) -> dict[str, Any]:
+    failed_open = [plan for plan in plans if plan.get("status") == "extraction_failed"]
+    consent_required = [str(plan["id"]) for plan in plans if plan.get("status") == "consent_required" and plan.get("id")]
     handoff_ids = [str(plan["id"]) for plan in plans
                    if plan.get("import_status") == "verified" and plan.get("status") != "consent_required"]
-    continuation = summary_continuation(run_dir, handoff_ids, collection_name, collection_key, storage_root)
-    failed_open = [plan for plan in plans if plan.get("status") == "extraction_failed"]
-    if continuation.get("pending_summaries"):
-        status = "awaiting_summaries"
-        action = ("read summary_batch_file, write each content_file from its full-text source, "
-                  "self-check once, execute summary_batch_command, then resume_command")
-        if not collection_name and not collection_key:
-            action += (". Add the Zotero collection the user already named on resume_command; "
-                       "ask for it only when they have not, and only before ingestion")
-    elif plans and len(failed_open) == len(plans):
+    continuation: dict[str, Any] = {}
+    if plans and len(failed_open) == len(plans):
         status = "pending"
         action = "no DOI or usable title could be read; do not invent a bibliographic record"
-    elif any(plan.get("status") == "consent_required" for plan in plans):
+    elif consent_required:
         status = "partial"
-        action = ("Cloud MinerU was requested and upload consent is missing. Ask once unless the user "
-                  "already refused, record workflow.py consent, then re-run local_pdf.py --backend cloud. "
-                  "The local backend does not ask.")
+        action = CONSENT_NEXT_ACTION
     else:
-        status = "partial"
-        action = "deliver the rows that finished; the others name the evidence that is still missing"
+        package = workflow.Run.open(run_dir)
+        pending = process_run.summary_handoff(package, handoff_ids, package.candidates()) if handoff_ids else []
+        request = process_run.ProcessRequest(
+            run_dir=run_dir, ids=handoff_ids, stages=("ingest",),
+            collection_key=collection_key, collection_name=collection_name, storage_root=storage_root,
+        )
+        continuation = process_run.attach_summary_handoff(run_dir, pending, handoff_ids, request)
+        if continuation.get("pending_summaries"):
+            status = "awaiting_summaries"
+            action = process_run.AWAITING_SUMMARIES_ACTION
+            if not collection_name and not collection_key:
+                action += (". Add the Zotero collection the user already named on resume_command; "
+                           "ask for it only when they have not, and only before ingestion")
+        else:
+            status = "partial"
+            action = "deliver the rows that finished; the others name the evidence that is still missing"
     result: dict[str, Any] = {
         "status": status,
         "backend": backend,
         "run_dir": str(run_dir),
         "papers": [public_paper(plan) for plan in plans],
+        "consent_required": consent_required,
         "next_action": action,
         **continuation,
     }
@@ -600,9 +579,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--pdf", action="append", required=True, dest="pdfs",
                         help="Local PDF. Repeat for a batch. DOI is optional.")
-    parser.add_argument("--backend", choices=("local", "cloud"), default="local",
-                        help="local extracts Markdown on this machine (default). "
-                             "cloud uploads to MinerU and requires recorded consent.")
+    parser.add_argument("--backend", choices=("local", "cloud"), default="cloud",
+                        help="cloud uploads verified PDFs to MinerU after recorded consent (default). "
+                             "local writes text on this machine and does not record consent.")
     parser.add_argument("--collection-name")
     parser.add_argument("--collection-key")
     parser.add_argument("--storage-root")

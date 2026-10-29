@@ -6,14 +6,14 @@
 
 Research intent → one candidate list → confirmation of selected papers, collection and MinerU upload choice → PDF acquisition/verification → conversion → full-text summary → Zotero ingestion/read-back → per-artifact result.
 
-A supplied PDF starts at `local_pdf.py`: extract a DOI or title, complete the record, verify, and convert locally without an upload question. Topic search still confirms MinerU upload with the candidate list. Existing authorization is reused within its scope. One failed paper does not block independent work on others. A run is continued rather than recreated after interruption.
+A supplied PDF starts at `local_pdf.py`: extract a DOI or title, complete the record, verify, and convert with MinerU after recorded upload consent. `--backend local` writes on-machine text and does not record consent. Topic search confirms MinerU upload with the candidate list. Both paths use the same convert. Existing authorization is reused within its scope. One failed paper does not block independent work on others. A run is continued rather than recreated after interruption.
 
 ## Modules and ownership
 
 | Module | Responsibility |
 |---|---|
 | `workflow.py` (`Run`, `Paper`) | Run schema, selected IDs, consent, artifact paths, state transitions and reporting; `import-pdfs` handles local PDF copying/verification/recording |
-| `local_pdf.py` | Local PDF fast path: extract DOI/title, complete the record, verify, and convert without an upload question |
+| `local_pdf.py` | Local PDF fast path: extract DOI/title, complete the record, verify, then convert with MinerU after recorded consent. `--backend local` writes on-machine text and does not record consent |
 | `process_run.py` | Compose acquisition, conversion and ingestion; return summary handoff and executable ingestion continuation |
 | `discovery.py`, `sources.py` | Bounded discovery, source-specific responses, normalization and citation provenance |
 | `acquire.py`, `browser_pdf.py` | HTTP-first retrieval; browser fallback when required by actual access evidence |
@@ -47,7 +47,7 @@ Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Determini
 - Shared request budgets include retries and waits. A failed write response may mean the write succeeded; reconcile the journal before retrying.
 - API credentials reach only their issuing service and never appear in outputs, logs or run artifacts.
 - Existing Zotero metadata, notes and attachments are preserved. DOI matches and identical attachment bytes are reused; attachment `file_action` reports reuse/upload behavior.
-- Topic-search conversion needs recorded upload consent. The local PDF fast path converts locally without that question; `--backend cloud` is the only local-PDF case that still asks. A missing token or failed conversion leaves the verified PDF usable; a summary requires readable full text, not an abstract alone.
+- Topic search and the local PDF default both convert with MinerU and need recorded upload consent. Without consent the verified PDF stays and nothing is uploaded. `--backend local` writes on-machine text and does not record consent. A missing token or failed conversion leaves the verified PDF usable. A summary requires readable full text, not an abstract alone. The agent writes that summary and does not pause the user for the prose.
 - Cloud read-back checks item identity, collection, summary and attachment bytes. Local verification additionally needs real storage files with matching hashes.
 
 ## Delivery states

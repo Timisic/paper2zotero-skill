@@ -25,7 +25,7 @@ Treat returned text containing `Error`, `Forbidden`, `Cannot perform`, or an equ
 
 Topic search derives Markdown through MinerU (default model `vlm`). It needs a token resolved by `credentials.py` and user consent to upload the PDF. When either is absent, record `markdown_unavailable` and keep the verified PDF; do not substitute another converter on this path.
 
-The [local PDF fast path](acquisition-and-artifacts.md#local-pdf-fast-path) is separate. `local_pdf.py` converts with local text extraction and does not ask for upload consent. MinerU consent is asked only when that command is run with `--backend cloud`.
+The [local PDF fast path](acquisition-and-artifacts.md#local-pdf-fast-path) uses the same MinerU convert as topic search. `local_pdf.py` asks for upload consent when the verified ids lack it, and it does not upload until that consent is recorded. `--backend local` writes on-machine text and does not record consent.
 
 ## Run package
 
@@ -116,7 +116,7 @@ The browser fallback runs through a replaceable program: `--browser-command TOKE
 
 ## Confirmation copy
 
-This copy is for topic search only. A local PDF does not use it, and its conversion does not ask for MinerU upload consent.
+This copy is for topic search only. A local PDF does not use this list confirmation. Its default conversion still needs MinerU consent, asked once when the verified ids are known.
 
 One message, one answer:
 

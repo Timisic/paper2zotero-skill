@@ -95,6 +95,14 @@ def pytest_configure(config):
     subprocess.run = recorded
 
 
+def test_file(repo, node):
+    return repo / 'paper-to-zotero' / 'tests' / node.split('::', 1)[0]
+
+
+def runnable(repo, feature):
+    return all(test_file(repo, node).is_file() for node in CASES[feature])
+
+
 def doctor(repo):
     required = ['workflow.py', 'process_run.py', 'discovery.py', 'summary_artifact.py', 'zotero_ingest.py', 'local_pdf.py']
     files = [repo / 'paper-to-zotero/scripts' / name for name in required]
@@ -123,6 +131,15 @@ def main():
     if args.action == 'doctor' or not checks['ok']:
         print(json.dumps(checks, indent=2))
         return 0 if checks['ok'] else 2
+    if args.feature != 'all' and not runnable(repo, args.feature):
+        print(json.dumps({
+            'ok': False,
+            'feature': args.feature,
+            'reason': 'this branch does not ship the scripts or tests for this feature',
+        }, indent=2))
+        return 2
+    selected = list(CASES) if args.feature == 'all' else [args.feature]
+    features = [name for name in selected if runnable(repo, name)]
     evidence = (args.evidence or repo / 'literature-runs' / ('verification-' + time.strftime('%Y%m%d-%H%M%S'))).resolve()
     evidence.mkdir(parents=True, exist_ok=False)
     save(evidence / 'doctor.json', checks)
@@ -151,7 +168,6 @@ def main():
             'P2Z_VERIFY_PORTS': str(ports), 'P2Z_VERIFY_NETWORK': str(evidence / 'network.jsonl'),
             'P2Z_VERIFY_TRANSCRIPT': str(evidence / 'commands.jsonl'),
         }
-        features = list(CASES) if args.feature == 'all' else [args.feature]
         nodes = [str(app / 'tests' / node) for feature in features for node in CASES[feature]]
         command = [sys.executable, '-m', 'pytest', '-p', 'verify_runner', '-p', 'no:cacheprovider',
                    '-vv', '--tb=short', '--basetemp', str(scratch / 'cases'),

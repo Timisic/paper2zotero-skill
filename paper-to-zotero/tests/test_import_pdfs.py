@@ -23,6 +23,9 @@ def test_relative_mapping_import_and_resume_preserve_later_artifacts(tmp_path):
     target = Path(first['papers'][0]['path'])
     assert target.is_relative_to(run) and target.read_bytes() == source.read_bytes()
     assert first['papers'][0]['action'] == 'imported'
+    assert 'consent' in first['next_action']
+    assert 'process_run.py --stages convert' in first['next_action']
+    assert 'Do not upload before consent' in first['next_action']
     summary = run / 'summary.md'; summary.write_text('kept')
     run_script('workflow.py', 'record-paper', '--run-dir', str(run), '--id', 'doi:10.1000/alpha',
                '--state', 'summary_generated', '--artifact', 'summary=' + str(summary))

@@ -15,8 +15,9 @@ Two judgements stay with the agent and come back as structured handoffs
 rather than prompts: understanding the request (already settled before this
 runs) and writing each paper's summary from its verified full text. A paper
 that needs a summary is returned in `pending_summaries` with the source to
-read; the agent writes it with `summary_artifact.py`, records it with
-`workflow.py record-paper`, and re-runs this command on the same run.
+read. The agent writes each `content_file` itself, without pausing the user
+for that prose, then runs `summary_batch_command` and the returned resume
+command.
 """
 from __future__ import annotations
 
@@ -380,6 +381,31 @@ def ingest_command(request: ProcessRequest, identities: list[str]) -> list[str]:
     return command
 
 
+AWAITING_SUMMARIES_ACTION = (
+    "read summary_batch_file, write each content_file from its full-text source yourself, "
+    "self-check once, execute summary_batch_command, then resume_command. "
+    "Do not pause the user to draft the summaries"
+)
+
+
+def attach_summary_handoff(run_dir: Path, pending: Sequence[dict[str, Any]], identities: Sequence[str],
+                           request: ProcessRequest) -> dict[str, Any]:
+    if not pending:
+        return {}
+    command = ingest_command(request, list(identities))
+    handoff = summary_artifact.prepare_handoff(run_dir, list(pending), command)
+    return {
+        "pending_summaries": list(pending),
+        "resume_command": command,
+        "resume_shell": shlex.join(command),
+        "summary_batch_file": str(handoff),
+        "summary_batch_command": [
+            sys.executable, str(SCRIPTS / "summary_artifact.py"),
+            "--batch-file", str(handoff), "--provider", "<actual-agent-model>",
+        ],
+    }
+
+
 def ingestion_readiness(request: ProcessRequest) -> dict[str, Any]:
     account = credentials.zotero_credentials()
     configured = bool(account['api_key'] and account['library_id'])
@@ -470,8 +496,7 @@ def _process(request: ProcessRequest) -> dict[str, Any]:
         "elapsed_seconds": round(time.monotonic() - started, 3),
         "started_at": started_at, "finished_at": workflow.utc_now(), "timings": timings,
         "next_action": {
-            "awaiting_summaries": "read summary_batch_file, write each content_file from its full-text source, "
-                                  "self-check once, execute summary_batch_command, then resume_command",
+            "awaiting_summaries": AWAITING_SUMMARIES_ACTION,
             "pending": "read the ingest reason, then re-run this command on the same run once the service recovers",
             "partial": "deliver the table; re-running retries only the rows marked actionable "
                        "(a paper with no obtainable full text is finished, not waiting)",
@@ -481,12 +506,7 @@ def _process(request: ProcessRequest) -> dict[str, Any]:
         "table": workflow.render_report(rows),
     })
     if pending_summaries:
-        result["resume_command"] = ingest_command(request, identities)
-        result["resume_shell"] = shlex.join(result["resume_command"])
-        handoff = summary_artifact.prepare_handoff(run, pending_summaries, result['resume_command'])
-        result['summary_batch_file'] = str(handoff)
-        result['summary_batch_command'] = [sys.executable, str(SCRIPTS / 'summary_artifact.py'),
-                                            '--batch-file', str(handoff), '--provider', '<actual-agent-model>']
+        result.update(attach_summary_handoff(run, pending_summaries, identities, request))
     result.update(elapsed_seconds=round(time.monotonic() - started, 3), finished_at=workflow.utc_now())
     return result
 
