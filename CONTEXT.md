@@ -6,14 +6,14 @@
 
 Research intent → one candidate list → confirmation of selected papers, collection and MinerU upload choice → PDF acquisition/verification → conversion → full-text summary → Zotero ingestion/read-back → per-artifact result.
 
-A supplied PDF starts at `local_pdf.py`: extract a DOI or title, complete the record, verify, and convert locally without an upload question. Topic search still confirms MinerU upload with the candidate list. Existing authorization is reused within its scope. One failed paper does not block independent work on others. A run is continued rather than recreated after interruption.
+A supplied PDF starts at `local_pdf.py`: extract a DOI or title, complete the record, verify, and convert with MinerU after recorded upload consent. `--backend local` writes on-machine text and does not record consent. Topic search confirms MinerU upload with the candidate list. Both paths use the same convert. Existing authorization is reused within its scope. One failed paper does not block independent work on others. A run is continued rather than recreated after interruption.
 
 ## Modules and ownership
 
 | Module | Responsibility |
 |---|---|
 | `workflow.py` (`Run`, `Paper`) | Run schema, selected IDs, consent, artifact paths, state transitions and reporting; `import-pdfs` handles local PDF copying/verification/recording |
-| `local_pdf.py` | Local PDF fast path: extract DOI/title, complete the record, verify, and convert without an upload question |
+| `local_pdf.py` | Local PDF fast path: extract DOI/title, complete the record, verify, then convert with MinerU after recorded consent. `--backend local` writes on-machine text and does not record consent |
 | `process_run.py` | Compose acquisition, conversion and ingestion; return summary handoff and executable ingestion continuation |
 | `discovery.py`, `sources.py` | Bounded discovery, source-specific responses, normalization and citation provenance |
 | `acquire.py`, `browser_pdf.py` | HTTP-first retrieval; browser fallback when required by actual access evidence |
