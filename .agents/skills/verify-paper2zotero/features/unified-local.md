@@ -1,0 +1,7 @@
+# Unified local workflow
+
+Drive `verify_runner.py run --feature unified-local` after doctor passes. Seventeen checks in `test_unified_local.py` drive the same workflow/process/ingest CLI using a disposable profile and ephemeral native-local protocol peer. The suite covers metadata→PDF/MD on one parent, actual backend labels/file-URI readback, missing authorization fail-closed, unknown create and registration outcomes, Server-ID changes/external storage rejection, late DOI enrichment, human bibliography/notes, ambiguity/conflicts, completed-source restoration, stale derivatives, stable aliases/consent, local parse failure/PDF delivery and CLI defaults.
+
+Read sources `workflow.py`, `process_run.py`, `zotero_ingest.py`, `zotero_local.py` and `local_parse.py`. Source/PDF/summary lineage must match current files; DOI enrichment cannot rename selected IDs or widen cloud consent. Semantic index is pending. Fixture tokens are synthetic and journal output must not contain them.
+
+Success: every selected check passes, guard blocks real port23119, and cleanup removes scratch with no owned listeners. Parser executables in these checks are fake; local HTTP peer simulates Zotero10 and writes only fixture files. Existing installed MinerU can be driven separately through `process_run --stages convert` on an isolated synthetic paper, with evidence recorded; never add a real-library write to this fixture recipe. New Zotero authorization or persistent settings require the user's action.
