@@ -15,14 +15,12 @@ python "$SKILL_DIR/scripts/local_pdf.py" --run-dir <run_dir> --pdf <file.pdf> \
 Repeat `--pdf` for a batch. The command does five things:
 
 1. Read a DOI and a title from the PDF. A file that yields neither is `extraction_failed`. It is not given an invented DOI, and it is not imported.
-2. Complete the record from Crossref and OpenAlex. A printed DOI is looked up directly. With no DOI, a title hit is accepted only when the titles strongly match; a weak hit is not allowed to supply its DOI. The paper is then stored under a `title:` identity with `metadata_degraded`, and conversion still runs.
+2. Complete the record from Crossref and OpenAlex. A printed DOI is looked up directly. With no DOI, a title hit is accepted only when the titles strongly match; a weak hit is not allowed to supply its DOI. The paper is then stored under a `title:` identity with `metadata_degraded`. Conversion runs after MinerU consent covers that id, or immediately with `--backend local`.
 3. Append the candidate. An existing candidate with the same id or DOI is kept as stored, including its title and other fields.
 4. Select those files — supplying the PDF is the selection — and verify them with `import-pdfs`. Identity verification is unchanged: DOI match or a sufficient title match is `verified`; a different paper is `rejected`; unreadable text is `unverified` and kept for a person.
-5. Convert verified PDFs to Markdown with local text extraction. This does not upload the file and does not ask for consent.
+5. Convert verified PDFs with MinerU through `process_run.stage_convert`, the same convert topic search uses. If consent for those ids is missing, the result is `partial`, the verified PDF stays, and `next_action` says to record consent and then convert. The command does not upload. Ask once unless the user already refused, record `workflow.py consent --service mineru`, then re-run `local_pdf.py` or `process_run.py --stages convert`. `--backend local` writes `local-text/paper.md` and does not record consent. Use that flag only when the user wants no upload.
 
-`--backend cloud` is the explicit MinerU path. Use it only when the user asked for cloud MinerU. If consent for those ids is missing, the command stops before upload and says so. Ask once unless the user already refused, record `workflow.py consent`, and run the same command again. Do not ask on the local backend.
-
-Pass `--collection-name` when the user has already named the Zotero collection. If they have not, ask once before ingestion, not before conversion. After `awaiting_summaries`, follow `pending_summaries` and [paper-summary.md](paper-summary.md), then `resume_command`. Ingestion and read-back are the existing `process_run.py --stages ingest` path. `ingest.papers` still carries cloud/local verification and attachment reuse.
+Pass `--collection-name` when the user has already named the Zotero collection. If they have not, ask once before ingestion, not before conversion. After `awaiting_summaries`, write each `content_file` from [paper-summary.md](paper-summary.md) yourself, then run `summary_batch_command` and `resume_command`. Do not pause the user for that prose. Ingestion and read-back are the existing `process_run.py --stages ingest` path. `ingest.papers` still carries cloud/local verification and attachment reuse.
 
 `import-pdfs` remains the verifier this command calls. Repeating it preserves an existing matching PDF and later artifacts; a different file is reported rather than replacing it. Relative PDF paths resolve from the mapping file, not the run directory. There is no need to choose paper directory names or assemble per-file copy/verify/record commands.
 
@@ -103,7 +101,7 @@ choco install poppler          # Windows
 
 ## Markdown
 
-The local PDF fast path writes Markdown itself and does not use the command below. Use this section for MinerU after recorded consent, including `local_pdf.py --backend cloud`.
+Topic search and the local PDF default both convert with MinerU after recorded consent. `local_pdf.py` calls the same `stage_convert` path. Use the command below for a direct MinerU run. `--backend local` is the only local-PDF opt-out, and it writes `local-text/paper.md` instead of calling MinerU.
 
 Use only identity-verified selected PDFs and recorded MinerU consent (see [workflow.md](workflow.md)). Credentials are resolved by `credentials.py` across supported runtimes.
 

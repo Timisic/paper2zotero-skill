@@ -52,6 +52,8 @@ Correct concrete errors, then package and record the note. Completion depends on
 
 ## Save and continue
 
+When a run returns `awaiting_summaries`, write every `content_file` in this turn and continue. Do not pause the user to draft the summary. The scripts do not call a model. The six-part contract above stays as written. After the files are written, run `summary_batch_command` and then `resume_command`.
+
 For a batch, open `summary_batch_file`. Its `reading` outline gives the Markdown section lines and the end of the main text; appendices and references remain in the original source for specific checks. Write each summary body to its `content_file`, then run:
 
 ```bash

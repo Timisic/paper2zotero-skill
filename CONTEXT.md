@@ -47,7 +47,7 @@ Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Determini
 - Shared request budgets include retries and waits. A failed write response may mean the write succeeded; reconcile the journal before retrying.
 - API credentials reach only their issuing service and never appear in outputs, logs or run artifacts.
 - Existing Zotero metadata, notes and attachments are preserved. DOI matches and identical attachment bytes are reused; attachment `file_action` reports reuse/upload behavior.
-- Topic-search conversion needs recorded upload consent. The local PDF fast path converts locally without that question; `--backend cloud` is the only local-PDF case that still asks. A missing token or failed conversion leaves the verified PDF usable; a summary requires readable full text, not an abstract alone.
+- Topic search and the local PDF default both convert with MinerU and need recorded upload consent. Without consent the verified PDF stays and nothing is uploaded. `--backend local` writes on-machine text and does not record consent. A missing token or failed conversion leaves the verified PDF usable. A summary requires readable full text, not an abstract alone. The agent writes that summary and does not pause the user for the prose.
 - Cloud read-back checks item identity, collection, summary and attachment bytes. Local verification additionally needs real storage files with matching hashes.
 
 ## Delivery states
