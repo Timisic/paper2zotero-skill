@@ -50,7 +50,7 @@ The ordinary project `run-python.sh` reads the real user's runtime configuration
 
 ## Doctor
 
-The read-only `doctor` command above checks interpreter version, pytest, `pdfinfo`, `pdftotext`, required CLI sources and source hashes. Exit 0 / `ok: true` means the local runner is worth driving, not that production credentials or services are healthy. During `run`, `guard.json` additionally proves that real Zotero's local port 23119 is blocked before any application code executes. Fixture ports are owned by this run, allocated dynamically and recorded in `ports.txt`.
+The read-only `doctor` command above checks interpreter version, pytest, `pdfinfo`, `pdftotext`, required CLI sources and source hashes. On this branch the required sources are `workflow.py`, `process_run.py`, `discovery.py`, `summary_artifact.py`, `zotero_ingest.py`, and `local_pdf.py`. `local_parse.py` and `zotero_local.py` are not part of that check; the local-parser and unified-local notes apply when those scripts are present. Exit 0 / `ok: true` means the local runner is worth driving, not that production credentials or services are healthy. During `run`, `guard.json` additionally proves that real Zotero's local port 23119 is blocked before any application code executes. Fixture ports are owned by this run, allocated dynamically and recorded in `ports.txt`.
 
 ## Drive
 

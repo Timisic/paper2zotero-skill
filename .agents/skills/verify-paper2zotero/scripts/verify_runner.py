@@ -96,7 +96,7 @@ def pytest_configure(config):
 
 
 def doctor(repo):
-    required = ['workflow.py', 'process_run.py', 'discovery.py', 'summary_artifact.py', 'local_parse.py', 'zotero_local.py', 'zotero_ingest.py']
+    required = ['workflow.py', 'process_run.py', 'discovery.py', 'summary_artifact.py', 'zotero_ingest.py', 'local_pdf.py']
     files = [repo / 'paper-to-zotero/scripts' / name for name in required]
     checks = {
         'python': sys.version.split()[0], 'interpreter': sys.executable,

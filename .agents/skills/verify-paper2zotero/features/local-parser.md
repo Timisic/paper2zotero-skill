@@ -2,7 +2,7 @@
 
 ## Start and health
 
-Run the parent skill doctor, then `run --feature local-parser`. No parser models, Zotero service or account are needed for this fixture subset. For installed package availability, use `python3 paper-to-zotero/scripts/local_parse.py doctor`; this does not prove inference works.
+Run the parent skill doctor, then `run --feature local-parser` when `paper-to-zotero/scripts/local_parse.py` and `tests/test_local_parse.py` are present. Doctor does not require `local_parse.py`. This branch does not ship that script, so a missing file is not a doctor failure and this feature cannot be driven here. No parser models, Zotero service or account are needed for this fixture subset when it is present. For installed package availability, use `python3 paper-to-zotero/scripts/local_parse.py doctor` only if that script exists; this does not prove inference works.
 
 ## Drive and assert
 
