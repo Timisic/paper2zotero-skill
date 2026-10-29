@@ -17,7 +17,6 @@ from test_workflow_resume import selected_run
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import local_pdf  # noqa: E402
 import paper_artifacts  # noqa: E402
-import process_run  # noqa: E402
 
 
 PROSE = (
@@ -212,7 +211,7 @@ def test_default_does_not_upload_without_consent(tmp_path: Path, builtin_extract
     run = fresh_run(tmp_path)
     pdf = write_pdf(tmp_path, "cloud.pdf", document(f"{KNOWN_TITLE}\ndoi:10.1145/3643540"))
     calls: list[object] = []
-    monkeypatch.setattr(process_run.mineru_parse, "parse", lambda request: calls.append(request))
+    monkeypatch.setattr(local_pdf.process_run.mineru_parse, "parse", lambda request: calls.append(request))
     result = local_pdf.run_local_pdfs(run, [pdf], client=EmptyLookup())
     paper = result["papers"][0]
     assert result["backend"] == "cloud"
@@ -237,7 +236,7 @@ def test_default_chains_mineru_after_consent(tmp_path: Path, builtin_extractor: 
     pdf = write_pdf(tmp_path, "cloud.pdf", document(f"{KNOWN_TITLE}\ndoi:10.1145/3643540"))
     monkeypatch.setenv("MINERU_TOKEN", "fixture-token")
 
-    def fake_parse(request: process_run.mineru_parse.ParseRequest) -> dict[str, object]:
+    def fake_parse(request: local_pdf.process_run.mineru_parse.ParseRequest) -> dict[str, object]:
         pdf_path = Path(request.pdfs[0])
         markdown = pdf_path.parent / "mineru" / "paper.md"
         markdown.parent.mkdir(parents=True, exist_ok=True)
@@ -249,7 +248,7 @@ def test_default_chains_mineru_after_consent(tmp_path: Path, builtin_extractor: 
             "markdown": str(markdown),
         }]}
 
-    monkeypatch.setattr(process_run.mineru_parse, "parse", fake_parse)
+    monkeypatch.setattr(local_pdf.process_run.mineru_parse, "parse", fake_parse)
     stopped = local_pdf.run_local_pdfs(run, [pdf], client=EmptyLookup())
     assert stopped["status"] == "partial"
     identity = stopped["papers"][0]["id"]

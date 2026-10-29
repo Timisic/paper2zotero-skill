@@ -390,7 +390,6 @@ AWAITING_SUMMARIES_ACTION = (
 
 def attach_summary_handoff(run_dir: Path, pending: Sequence[dict[str, Any]], identities: Sequence[str],
                            request: ProcessRequest) -> dict[str, Any]:
-    """Summary fields shared by topic processing and local PDF intake."""
     if not pending:
         return {}
     command = ingest_command(request, list(identities))

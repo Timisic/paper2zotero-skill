@@ -379,11 +379,6 @@ def convert_local(run_dir: Path, plan: dict[str, Any], imported: Mapping[str, An
 
 
 def mineru_ready(run_dir: Path, plans: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Split verified papers by recorded MinerU consent. Does not upload or write consent.
-
-    Caller holds the run lock. Consented papers are returned so conversion can
-    run after the lock is released. MinerU recording takes the same lock.
-    """
     verified = [plan for plan in plans if plan.get("import_status") == "verified"]
     package = workflow.Run.open(run_dir)
     ready: list[dict[str, Any]] = []
@@ -402,7 +397,6 @@ def mineru_ready(run_dir: Path, plans: Sequence[dict[str, Any]]) -> list[dict[st
 
 
 def record_mineru_markdown(run_dir: Path, ready: Sequence[dict[str, Any]], outcome: Mapping[str, Any]) -> None:
-    """Copy the shared convert result onto each local-PDF plan. Does not convert again."""
     raw_failed = outcome.get("failed")
     raw_skipped = outcome.get("skipped")
     failed = raw_failed if isinstance(raw_failed, dict) else {}
@@ -439,12 +433,6 @@ def public_paper(plan: Mapping[str, Any]) -> dict[str, Any]:
 def run_local_pdfs(run_dir: Path, pdfs: Sequence[Path], *, backend: str = "cloud",
                    collection_name: str | None = None, collection_key: str | None = None,
                    storage_root: Path | None = None, client: BibliographyClient | None = None) -> dict[str, Any]:
-    """Extract, complete, verify, and convert.
-
-    Candidate writes hold the run lock. MinerU conversion runs after that lock
-    is released, because its recorder takes the same lock. The default backend
-    is MinerU. ``backend="local"`` writes on-machine text and does not upload.
-    """
     if backend not in ("local", "cloud"):
         raise ValueError("backend must be local or cloud")
     if not pdfs:
