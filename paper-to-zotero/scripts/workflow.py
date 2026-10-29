@@ -653,7 +653,9 @@ def import_pdf_mapping(run_dir: Path, mapping_file: Path) -> dict[str, Any]:
                 staged.unlink(missing_ok=True)
     return {"status": "complete" if all(r["status"] == "verified" for r in results) else "partial",
             "run_dir": str(run.directory), "papers": results,
-            "next_action": "convert the verified PDFs with process_run.py --stages convert; include the approved collection and storage-root"}
+            "next_action": "Record MinerU consent for verified ids that lack it, then convert with "
+                           "process_run.py --stages convert. Include the approved collection and storage-root. "
+                           "Do not upload before consent."}
 
 
 def command_import_pdfs(args: argparse.Namespace) -> None:
