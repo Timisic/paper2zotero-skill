@@ -23,7 +23,9 @@ Searching is never gated on Zotero Desktop or its sync state. A configured token
 
 Treat returned text containing `Error`, `Forbidden`, `Cannot perform`, or an equivalent failure as failure even when the protocol reports `is_error=false`.
 
-Markdown is derived through MinerU (default model `vlm`). It needs a token resolved by `credentials.py` from the configured credential sources and user consent to upload the PDF. When either is absent, record `markdown_unavailable` and keep the verified PDF; do not substitute another converter.
+Topic search derives Markdown through MinerU (default model `vlm`). It needs a token resolved by `credentials.py` and user consent to upload the PDF. When either is absent, record `markdown_unavailable` and keep the verified PDF; do not substitute another converter on this path.
+
+The [local PDF fast path](acquisition-and-artifacts.md#local-pdf-fast-path) is separate. `local_pdf.py` converts with local text extraction and does not ask for upload consent. MinerU consent is asked only when that command is run with `--backend cloud`.
 
 ## Run package
 
@@ -113,6 +115,8 @@ Failed acquisition returns `acquire.browser_handoff` with the paper ID, expected
 The browser fallback runs through a replaceable program: `--browser-command TOKEN` (repeat the flag once per argv token) substitutes anything speaking the `browser_pdf.py` protocol — `capture`, one JSON line on stdout, exit 0 only on success. The default is the bundled `browser_pdf.py`, and only that default requires the Kimi channel; when it is missing, HTTP acquisition still runs and the stage reports `capability_missing` beside the papers that needed a browser. `--no-source-lookup` restricts acquisition to links already recorded, and `--acquire-timeout` bounds one paper across every route. This is how the acquisition logic is tested without a live browser; it is not a way to acquire from an unverified source, since identity verification still runs on the bytes that come back.
 
 ## Confirmation copy
+
+This copy is for topic search only. A local PDF does not use it, and its conversion does not ask for MinerU upload consent.
 
 One message, one answer:
 

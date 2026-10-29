@@ -12,6 +12,7 @@ So this module answers three questions and hides the rest:
 
     search(source, query)   candidates for a topic
     work(source, doi)       what this source knows about one DOI
+    bibliographic(title)    Crossref works whose title matches one known paper
     arxiv(doi, title)       the open preprint of a known paper, if any
 
 Each returns an `Answer` with a **status**, not an exception, because the
@@ -464,6 +465,34 @@ class Sources:
             return answer
         answer = Answer(**{**answer.__dict__, "records": [record] if record else [],
                            "status": "ok" if record else "not_found"})
+        return self._remember(key, answer)
+
+    def bibliographic(self, title: str, *, rows: int = 5, budget: float | None = None) -> Answer:
+        """Crossref works for one already-known title.
+
+        This is a metadata completion of a single paper, not a discovery
+        round: callers must not record it against the search budget, and a
+        weak title hit is not safe to adopt as that paper's DOI.
+        """
+        text = " ".join(title.split())
+        if not text:
+            return Answer(source="crossref", question="bibliographic", status="not_found",
+                          detail="no title", observed_at=observed_at())
+        key = f"bibliographic:crossref:{text.lower()}:{rows}"
+        hit = self._cached(key)
+        if hit is not None:
+            return hit
+        payload, answer = self._fetch(
+            "crossref", "bibliographic", "/works",
+            {"query.bibliographic": text, "rows": str(max(1, min(rows, 20)))},
+            budget=budget, allow_browser=False,
+        )
+        if not answer.ok:
+            return answer
+        message = (payload or {}).get("message") if isinstance(payload, dict) else None
+        records = [item for item in (message or {}).get("items") or [] if isinstance(item, dict)]
+        answer = Answer(**{**answer.__dict__, "records": records,
+                           "status": "ok" if records else "empty"})
         return self._remember(key, answer)
 
     def arxiv(self, doi: str | None, title: str | None = None, *, budget: float | None = None) -> Answer:

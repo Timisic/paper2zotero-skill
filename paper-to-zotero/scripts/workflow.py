@@ -480,18 +480,18 @@ def command_import_candidates(args: argparse.Namespace) -> None:
     print(json.dumps({"imported": len(candidates)}))
 
 
-def command_approve_candidates(args: argparse.Namespace) -> None:
-    run_dir = absolute_path(args.run_dir)
+def approve_selection(run_dir: Path, ids: Sequence[str], source: str = "user-selection",
+                      rule: str = "explicit IDs") -> dict[str, Any]:
+    """Approve exactly these candidate ids. The same selection is left untouched."""
+    run_dir = absolute_path(run_dir)
     manifest = load_manifest(run_dir)
-    requested = [value.strip() for value in args.ids.split(",") if value.strip()]
-    requested = list(dict.fromkeys(requested))
+    requested = list(dict.fromkeys(str(value).strip() for value in ids if str(value).strip()))
     current_ids = {candidate["id"] for candidate in read_json(run_dir / "candidates.json")}
     unknown = [value for value in requested if value not in current_ids]
     if unknown:
-        fail("unknown candidate ids: " + ", ".join(unknown))
+        raise ValueError("unknown candidate ids: " + ", ".join(unknown))
     if requested == manifest["selected_ids"] and manifest["gates"]["candidate_selection"] == "approved":
-        print(json.dumps({"selected": requested, "unchanged": True}))
-        return
+        return {"selected": requested, "unchanged": True}
     manifest["selected_ids"] = requested
     for candidate_id in requested:
         if manifest["papers"][candidate_id]["state"] == PaperState.DISCOVERED.value:
@@ -503,12 +503,17 @@ def command_approve_candidates(args: argparse.Namespace) -> None:
         write_json(snapshot, read_json(run_dir / "candidates.json"))
     manifest["selection"] = {
         "ids": requested, "at": utc_now(),
-        "source": args.source, "rule": args.rule,
+        "source": source, "rule": rule,
         "candidate_sha256": snapshot_hash, "candidate_snapshot": str(snapshot),
     }
     manifest["events"].append({"event": "candidate_selection_approved", **manifest["selection"]})
     save_manifest(run_dir, manifest)
-    print(json.dumps({"selected": requested}, ensure_ascii=False))
+    return {"selected": requested}
+
+
+def command_approve_candidates(args: argparse.Namespace) -> None:
+    requested = [value.strip() for value in args.ids.split(",") if value.strip()]
+    print(json.dumps(approve_selection(args.run_dir, requested, args.source, args.rule), ensure_ascii=False))
 
 
 def command_consent(args: argparse.Namespace) -> None:
@@ -591,10 +596,10 @@ def apply_paper_update(
     return paper
 
 
-def command_import_pdfs(args: argparse.Namespace) -> None:
-    """Verify and import a fixed ID/file mapping; CLI main already holds the run lock."""
+def import_pdf_mapping(run_dir: Path, mapping_file: Path) -> dict[str, Any]:
+    """Verify and import a fixed ID/file mapping. Caller holds the run lock."""
     from paper_artifacts import verify
-    mapping_path = Path(args.file).resolve()
+    mapping_path = Path(mapping_file).resolve()
     entries = read_json(mapping_path)
     if not isinstance(entries, list) or not entries:
         raise ValueError("PDF mapping must be a nonempty list of {id, pdf}")
@@ -604,7 +609,7 @@ def command_import_pdfs(args: argparse.Namespace) -> None:
     identities = [e["id"] for e in entries]
     if len(set(identities)) != len(identities):
         raise ValueError("duplicate paper IDs in PDF mapping")
-    run = Run.open(args.run_dir)
+    run = Run.open(run_dir)
     run.require_confirmed()
     run.resolve_ids(identities)
     candidates = run.require_candidates(identities)
@@ -646,9 +651,13 @@ def command_import_pdfs(args: argparse.Namespace) -> None:
         finally:
             if staged is not None:
                 staged.unlink(missing_ok=True)
-    print(json.dumps({"status": "complete" if all(r["status"] == "verified" for r in results) else "partial",
-                      "run_dir": str(run.directory), "papers": results,
-                      "next_action": "convert the verified PDFs with process_run.py --stages convert; include the approved collection and storage-root"}, ensure_ascii=False))
+    return {"status": "complete" if all(r["status"] == "verified" for r in results) else "partial",
+            "run_dir": str(run.directory), "papers": results,
+            "next_action": "convert the verified PDFs with process_run.py --stages convert; include the approved collection and storage-root"}
+
+
+def command_import_pdfs(args: argparse.Namespace) -> None:
+    print(json.dumps(import_pdf_mapping(args.run_dir, Path(args.file)), ensure_ascii=False))
 
 
 def command_record_paper(args: argparse.Namespace) -> None:

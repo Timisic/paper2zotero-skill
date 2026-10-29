@@ -1,26 +1,30 @@
 # Acquisition and paper artifacts
 
-`process_run.py` performs this pipeline for a confirmed selection: it walks the acquisition order below, verifies identity, converts consented PDFs, and hands back the papers whose summaries the agent still owes. This document is what it does, and what to run by hand when one paper needs individual attention. The steps are per paper: a failure at any step never stops the others, and a paper keeps every artifact it already has.
+`process_run.py` performs this pipeline for a confirmed topic-search selection: it walks the acquisition order below, verifies identity, converts consented PDFs, and hands back the papers whose summaries the agent still owes. A PDF that is already on disk uses the local fast path instead. This document is what the pipeline does, and what to run by hand when one paper needs individual attention. The steps are per paper: a failure at any step never stops the others, and a paper keeps every artifact it already has.
 
-## Local PDF entry
+## Local PDF fast path
 
-Use the following local path after selection, collection and upload permission are explicit. Load this section and the summary contract; acquisition/browser references are only needed if a PDF is missing.
-
-Prepare `candidates.json` using the supplied bibliographic metadata (`id`, `title`, `doi`, year/authors when available), and `pdfs.json` as `[{"id": "doi:...", "pdf": "/absolute/source.pdf"}]`. Relative PDF paths resolve from `pdfs.json`, not the run directory. In the configured environment, start these commands directly:
+Topic search skips this section. Use it when the user or the agent already has the PDF. Do not read the acquisition order, the browser handoff, or the discovery script. DOI is optional.
 
 ```bash
 python "$SKILL_DIR/scripts/workflow.py" init --run-root <workspace> --slug <label> --intent '<request>'
-# Use the returned absolute run_dir in every command below.
-python "$SKILL_DIR/scripts/workflow.py" import-candidates --run-dir <run_dir> --file <candidates.json>
-python "$SKILL_DIR/scripts/workflow.py" approve-candidates --run-dir <run_dir> --ids '<selected IDs>' --source '<user authorization>'
-python "$SKILL_DIR/scripts/workflow.py" consent --run-dir <run_dir> --service mineru --decision approved --source '<upload authorization>'
-python "$SKILL_DIR/scripts/workflow.py" import-pdfs --run-dir <run_dir> --file <pdfs.json>
-python "$SKILL_DIR/scripts/process_run.py" --run-dir <run_dir> --stages convert --collection-name '<approved collection>' --storage-root <Zotero-data-dir>
+python "$SKILL_DIR/scripts/local_pdf.py" --run-dir <run_dir> --pdf <file.pdf> \
+  --collection-name '<collection, only if the user already named one>'
 ```
 
-Record `denied` instead of `approved` if upload was declined. `import-pdfs` copies, verifies and records selected PDFs in one call, keeps rejected/unreadable originals and returns per-paper outcomes. Repeating it preserves an existing matching PDF and later artifacts; a different file is reported rather than replacing it. There is no need to choose paper directory names or assemble per-file copy/verify/record commands.
+Repeat `--pdf` for a batch. The command does five things:
 
-After conversion, follow `pending_summaries` and its summary contract, then execute `resume_command`. At delivery, `ingest.papers` already contains cloud/local verification and attachment reuse evidence.
+1. Read a DOI and a title from the PDF. A file that yields neither is `extraction_failed`. It is not given an invented DOI, and it is not imported.
+2. Complete the record from Crossref and OpenAlex. A printed DOI is looked up directly. With no DOI, a title hit is accepted only when the titles strongly match; a weak hit is not allowed to supply its DOI. The paper is then stored under a `title:` identity with `metadata_degraded`, and conversion still runs.
+3. Append the candidate. An existing candidate with the same id or DOI is kept as stored, including its title and other fields.
+4. Select those files — supplying the PDF is the selection — and verify them with `import-pdfs`. Identity verification is unchanged: DOI match or a sufficient title match is `verified`; a different paper is `rejected`; unreadable text is `unverified` and kept for a person.
+5. Convert verified PDFs to Markdown with local text extraction. This does not upload the file and does not ask for consent.
+
+`--backend cloud` is the explicit MinerU path. Use it only when the user asked for cloud MinerU. If consent for those ids is missing, the command stops before upload and says so. Ask once unless the user already refused, record `workflow.py consent`, and run the same command again. Do not ask on the local backend.
+
+Pass `--collection-name` when the user has already named the Zotero collection. If they have not, ask once before ingestion, not before conversion. After `awaiting_summaries`, follow `pending_summaries` and [paper-summary.md](paper-summary.md), then `resume_command`. Ingestion and read-back are the existing `process_run.py --stages ingest` path. `ingest.papers` still carries cloud/local verification and attachment reuse.
+
+`import-pdfs` remains the verifier this command calls. Repeating it preserves an existing matching PDF and later artifacts; a different file is reported rather than replacing it. Relative PDF paths resolve from the mapping file, not the run directory. There is no need to choose paper directory names or assemble per-file copy/verify/record commands.
 
 ## Acquisition order
 
@@ -98,6 +102,8 @@ choco install poppler          # Windows
 ```
 
 ## Markdown
+
+The local PDF fast path writes Markdown itself and does not use the command below. Use this section for MinerU after recorded consent, including `local_pdf.py --backend cloud`.
 
 Use only identity-verified selected PDFs and recorded MinerU consent (see [workflow.md](workflow.md)). Credentials are resolved by `credentials.py` across supported runtimes.
 
