@@ -1,5 +1,7 @@
 # Discovery and screening
 
+This document is the topic-search path. A PDF the user or the agent already has does not use it; run `local_pdf.py` from the [local PDF fast path](acquisition-and-artifacts.md#local-pdf-fast-path) instead.
+
 The goal is a list of papers worth reading, fast. Coverage may be incomplete; the user can ask to widen it. Say what the list does not cover instead of buying completeness with time.
 
 ## Query construction

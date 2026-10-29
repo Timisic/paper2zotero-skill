@@ -1,6 +1,6 @@
 ---
 name: paper-to-zotero
-description: Find, screen, acquire, verify, summarize, and save scholarly papers to Zotero from a natural-language research intent or known paper identifiers. Use for psychology and AI literature searches that need a user-confirmed reading list, authenticated MyLOFT access, source PDFs, derived Markdown, and auditable Zotero ingestion. Do not use for writing a cross-paper literature review.
+description: Find, screen, acquire, verify, summarize, and save scholarly papers to Zotero from a natural-language research intent, known paper identifiers, or local PDFs. Use for psychology and AI literature searches that need a user-confirmed reading list, authenticated MyLOFT access, source PDFs, derived Markdown, and auditable Zotero ingestion. A PDF the user already has is verified and converted without a separate upload confirmation. Do not use for writing a cross-paper literature review.
 ---
 
 # Paper to Zotero
@@ -11,14 +11,28 @@ Resolve `SKILL_DIR` to the directory containing this `SKILL.md` (Claude Code als
 
 ## The shape of a run
 
-**Natural language → one screened list → one confirmation → automatic processing → one result table.**
+**Topic search:** natural language → one screened list → one confirmation → automatic processing → one result table.
 
-A clear request authorizes retrieval inside its own intent, so there is no separate plan approval. The single planned pause is the confirmation in step 5. After it, `process_run.py` carries the batch without further instructions, and delivers whatever succeeded rather than waiting for everything.
+**Local PDF:** a file the user or the agent already has → extract the record → verify → convert → the same summary and ingestion handoff. No screening list and no upload question.
+
+A clear topic-search request authorizes retrieval inside its own intent, so there is no separate plan approval. The single planned pause is the confirmation in step 5. After it, `process_run.py` carries the batch without further instructions, and delivers whatever succeeded rather than waiting for everything.
 
 ## Choose the entry path
 
-- **Discovery**: the user describes a literature need. Run the full workflow below.
-- **Known papers**: the user supplies DOI, title, URL, or PDF. Initialize a run package and import their metadata as candidates. Reuse explicit selection, collection and upload authorization already provided; otherwise confirm the missing choices. For local PDFs, follow the short [local PDF entry](references/acquisition-and-artifacts.md#local-pdf-entry), then start at conversion.
+- **Local / known PDF**: the user or the agent already has the PDF. DOI is optional. Do not run discovery or the candidate-list confirmation. Follow the [local PDF fast path](references/acquisition-and-artifacts.md#local-pdf-fast-path) only — it extracts a DOI or title, completes the record, verifies the file, and converts. Do not ask for Markdown conversion or for MinerU upload. Ask for the Zotero collection only when the user has not already named one, and only before ingestion.
+- **Topic search**: the user describes a literature need and does not already have the PDFs. Run the workflow below. Do not send that request through the local PDF fast path.
+
+An identifier with no file (DOI, title, or URL) is neither path's discovery script: import that metadata as candidates and start at `process_run.py --stages acquire,convert`. Cloud conversion there still needs recorded MinerU consent.
+
+## Local PDF fast path
+
+```bash
+python "$SKILL_DIR/scripts/workflow.py" init --run-root <workspace> --slug <label> --intent '<request>'
+python "$SKILL_DIR/scripts/local_pdf.py" --run-dir <run_dir> --pdf <file.pdf> \
+  --collection-name '<collection, only if the user already named one>'
+```
+
+Repeat `--pdf` for a batch. The command appends candidates and does not replace an existing candidate that already has the same id or DOI. Conversion runs immediately on the local backend. `--backend cloud` is MinerU, and it is the only form of this command that asks for upload consent: use it only when the user explicitly asked for cloud MinerU, record consent, and run the same command again. When the result is `awaiting_summaries`, continue with steps 9 and 10 below.
 
 ## Runtime
 
@@ -34,7 +48,9 @@ Normal delivery ends with the returned table, read-back evidence and links to ex
 
 Target about ten minutes after confirmation for five ordinarily accessible papers, not a guarantee for gated sources. Follow timestamped stage events and `timings`; distinguish script execution from human/agent handoff time. Use 15–30-second process waits while doing independent reading. At ten minutes report completed artifacts and the specific outstanding stage; finish a bounded in-flight operation or actionable recovery rather than extending unchanged probes. A human access challenge keeps its tab while other papers proceed.
 
-## Workflow
+## Topic search
+
+Follow this section only when the user asked for a literature search. A local PDF does not use steps 1–8.
 
 1. On first installation or after environment changes, read [workflow.md](references/workflow.md) and follow the [Agent installation instructions](https://github.com/Timisic/paper2zotero-skill/blob/main/install/AGENT_SETUP.md) using the current host and agent target to install dependencies and configure services. Do not re-run full setup on an ordinary run. Check what a stage needs when that stage runs: `preflight.py --stage discovery|acquisition|browser_fallback|conversion|ingestion|local_sync`. Discovery and acquisition require nothing local — a search is never blocked because Zotero Desktop is closed, and an open-access PDF is fetched without a browser. Kimi gates `browser_fallback` alone. The automatic processing entry point requires Zotero Web API read/write credentials. MCP can assist library reading but does not replace the scripted writer or its credentials.
 2. Initialize the run package with `workflow.py init`. Store every query, decision, artifact, warning, and paper state there. Never write run artifacts into the installed skill.
@@ -56,7 +72,7 @@ Target about ten minutes after confirmation for five ordinarily accessible paper
 
 ## Hard invariants
 
-- One confirmation is the normal path, not a licence to assume consent. Missing information is asked for; it is never treated as approval. Existing authorization for the same papers, service and operation is reused on resume; added papers extend scope, revocation narrows only what it names.
+- Topic search has one confirmation, not a licence to assume consent. Missing information is asked for; it is never treated as approval. Existing authorization for the same papers, service and operation is reused on resume; added papers extend scope, revocation narrows only what it names. A file the user already supplied is the selection for that PDF: local conversion does not ask again.
 - Default ranking prefers relevance over citation count; explicit user selection overrides it. Record resolved IDs, source message and dated citation snapshot. Hard constraints and venue exceptions stay explicit; "prefer top venues" is a ranking preference, not a filter.
 - Publisher abstracts, screening reasons, derived Markdown, and generated summaries stay separately labeled. Missing evidence stays missing — never fill a column to make the table look complete, and never present a gap as "no literature exists".
 - A source PDF is parseable and identity-matched. A login page, error page, unrelated file, or browser printout is not one. Unreadable text means `unverified` and the file is kept for a human — never rejected as the wrong paper.
@@ -67,5 +83,6 @@ Target about ten minutes after confirmation for five ordinarily accessible paper
 - An API key goes only to the service that issued it — never to a publisher, a redirect target, or the browser fallback — and pacing for one key is shared across every command on this machine.
 - Credentials never appear in chat, commands shown to the user, logs, or run packages. All helpers resolve credentials through `credentials.py`; temporary signed URLs stay in private checkpoint files (0600).
 - For Pi model identity, use the session's declared model or read only `PI_PROVIDER` and `PI_MODEL`. A substring search for `PI_` also matches `API_KEY`; never enumerate or filter the environment to discover model settings.
-- MinerU is the only Markdown derivation path — no local fallback. Uploading a PDF to MinerU requires explicit consent; without a token or consent, record `markdown_unavailable` and keep the verified PDF.
+- Topic search derives Markdown only through MinerU. Uploading a PDF to MinerU requires explicit consent; without a token or consent, record `markdown_unavailable` and keep the verified PDF.
+- The local PDF fast path converts with local text extraction and does not ask for upload consent. Cloud MinerU on that path runs only with `--backend cloud`, and only that explicit choice asks for consent.
 - Cancellation preserves completed writes and the run package. Cleanup is a separate, explicit action.
