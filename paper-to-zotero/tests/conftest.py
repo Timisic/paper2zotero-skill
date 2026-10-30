@@ -42,6 +42,10 @@ CLOSED = "http://127.0.0.1:9"
 SOURCES = ("openalex", "semantic_scholar", "crossref", "unpaywall", "arxiv", "pmc")
 
 os.environ.setdefault("LITERATURE_SOURCE_BASES", json.dumps({name: CLOSED for name in SOURCES}))
+# Production defaults are Kimi search and the lab MinerU host. The suite
+# keeps the HTTP discovery pair and does not dial that host.
+os.environ["SEARCH_BACKEND"] = "http"
+os.environ["MINERU_API_BASE"] = ""
 os.environ.setdefault("LITERATURE_THROTTLE_DIR",
                       tempfile.mkdtemp(prefix="literature-throttle-"))
 # Subprocess tests inherit this. Explicit fixture adapters remain usable;

@@ -4,7 +4,7 @@
 
 ## Journaled writer (all runtimes)
 
-Use the same writer with or without Zotero MCP. MCP remains useful for discovery of existing library data; the writer owns this run's mutations and checkpoints.
+When this session has Zotero MCP tools, use them for create, update, attachment, and collection changes. Otherwise run the journaled writer below. It prefers the local Desktop API (`ZOTERO_LOCAL_API`, default `http://127.0.0.1:23119/api`, library `users/0`). A write sends `Zotero-Server-ID`. The first write posts to `/api/local/authorize` and Zotero shows Allow / Always Allow / Deny. Always Allow stores `ZOTERO_LOCAL_API_KEY` so later runs do not prompt. A 401 authorizes once and retries. No `ZOTERO_API_KEY` is required while that local API is writable. Set `ZOTERO_WRITE_BACKEND=web` to force the Web API, or `local` to fail when Desktop is down. `auto` (the default) uses Desktop, then the Web API. MCP remains useful for reading the library either way. The writer owns this run's scripted mutations and checkpoints.
 
 ```bash
 python "$SKILL_DIR/scripts/zotero_ingest.py" --run-dir <run_dir> --dry-run

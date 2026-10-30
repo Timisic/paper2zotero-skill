@@ -48,10 +48,10 @@ CHECKLIST = [
     ("Zotero Desktop 本地 API（应用已安装并运行）", "zotero_local"),
     ("Zotero 附件文件同步", "zotero_sync"),
     ("Zotero MCP 已配置", "zotero_mcp"),
-    ("Zotero Web API key（hybrid 写入：身份与写权限）", "zotero_key"),
+    ("Zotero 写入（本地 API 优先，Web API 可选）", "zotero_write"),
     ("Kimi WebBridge（浏览器自动化）", "kimi"),
-    ("MinerU token（Markdown 解析）", "mineru"),
-    ("文献检索来源（OpenAlex 必备，其余可选）", "discovery_sources"),
+    ("全文转换（自建 MinerU、云端或 markitdown）", "mineru"),
+    ("文献检索来源（默认 Kimi，HTTP 来源可选）", "discovery_sources"),
 ]
 
 

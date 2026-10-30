@@ -35,7 +35,7 @@ def test_setup_doctor_reports_missing_items_without_secrets(tmp_path: Path) -> N
     assert "external_sources" not in {item["name"] for item in payload["items"]}
     assert "ok" not in payload["external_sources"]
     names = {item["name"] for item in payload["items"]}
-    assert "MinerU token（Markdown 解析）" in names
+    assert "全文转换（自建 MinerU、云端或 markitdown）" in names
     assert "Zotero MCP 已配置" in names
     assert all(item["status"] in {"ok", "missing"} for item in payload["items"])
     assert "super-secret" not in result.stdout

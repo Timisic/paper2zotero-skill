@@ -231,6 +231,78 @@ def mineru_token() -> str:
     return token
 
 
+# Lab MinerU 4.1 Tasks API. The LAN host is the default. Tailscale stays
+# available by setting MINERU_API_BASE. An explicit empty MINERU_API_BASE or
+# MINERU_ENDPOINT disables the self-hosted hop.
+LAB_MINERU_API_BASE = "http://192.168.8.167:8000"
+LAB_MINERU_API_BASE_TAILSCALE = "http://100.92.231.38:8000"
+SEARCH_BACKENDS = ("kimi", "openalex", "semantic_scholar", "http")
+WRITE_BACKENDS = ("auto", "local", "web")
+
+
+def configured_value(name: str) -> str | None:
+    """The raw configured string, or None when neither env nor the skill file sets it.
+
+    An empty string is a real setting. Callers use it to turn a default off.
+    """
+    if name in os.environ:
+        return os.environ[name].strip()
+    skill = _skill_env()
+    if name in skill:
+        return skill[name].strip()
+    return None
+
+
+def _choice(name: str, default: str, allowed: tuple[str, ...], aliases: dict[str, str] | None = None) -> str:
+    value = configured_value(name)
+    raw = default if value is None or not value.strip() else value.strip().lower()
+    raw = (aliases or {}).get(raw, raw)
+    if raw not in allowed:
+        raise ValueError(f"unknown {name}: {raw}")
+    return raw
+
+
+def mineru_api_base() -> str:
+    """Self-hosted MinerU origin. The lab LAN host is the default."""
+    for name in ("MINERU_API_BASE", "MINERU_ENDPOINT"):
+        value = configured_value(name)
+        if value is not None:
+            return value.rstrip("/")
+    return LAB_MINERU_API_BASE
+
+
+def search_backend() -> str:
+    """Literature search channel. `kimi` is the default; HTTP APIs are opt-in."""
+    return _choice("SEARCH_BACKEND", "kimi", SEARCH_BACKENDS, {
+        "openalex,semantic_scholar": "http",
+        "openalex+semantic_scholar": "http",
+    })
+
+
+def discovery_sources_for(backend: str | None = None) -> tuple[str, ...]:
+    chosen = search_backend() if backend is None else backend
+    return {
+        "kimi": ("kimi",),
+        "openalex": ("openalex",),
+        "semantic_scholar": ("semantic_scholar",),
+        "http": ("openalex", "semantic_scholar"),
+    }[chosen]
+
+
+def write_backend() -> str:
+    """`auto` uses the local Zotero API when it can accept writes, else the Web API."""
+    return _choice("ZOTERO_WRITE_BACKEND", "auto", WRITE_BACKENDS)
+
+
+def zotero_local_api_key() -> str:
+    return configured_value("ZOTERO_LOCAL_API_KEY") or ""
+
+
+def zotero_local_api() -> str:
+    value = configured_value("ZOTERO_LOCAL_API")
+    return (value or "http://127.0.0.1:23119/api").rstrip("/")
+
+
 def zotero_configured() -> bool:
     creds = zotero_credentials()
     return bool(creds["api_key"] and creds["library_id"])

@@ -5,13 +5,19 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass, field, replace
 import hashlib
+import importlib.util
 import io
 import json
 from pathlib import Path
 from runtime_io import absolute_path
+import shutil
+import subprocess
 import sys
 import time
-from typing import Any, Sequence
+import urllib.error
+import urllib.parse
+import urllib.request
+from typing import Any, Mapping, Sequence
 import zipfile
 
 import credentials
@@ -318,6 +324,209 @@ def _parse(request: ParseRequest) -> dict[str, Any]:
     return {'status': 'partial' if any(r['state'] == 'failed' for r in result_files) else 'ok',
             'converter': 'mineru', 'model': request.model, 'batch_id': batches[0] if len(batches) == 1 else None,
             'batch_ids': batches, 'files': result_files, 'journals': [str(path) for path in groups]}
+
+
+CLOUD_API = "https://mineru.net"
+_FAIL = {"failed", "canceled", "cancelled"}
+_DONE = {"completed", "done", "success"}
+
+
+class _SameOriginRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> Any:
+        old, new = urllib.parse.urlsplit(req.full_url), urllib.parse.urlsplit(newurl)
+        if (old.scheme, old.netloc) != (new.scheme, new.netloc):
+            raise ValueError("MinerU redirect left the configured host")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _origin(url: str) -> tuple[str, str]:
+    parts = urllib.parse.urlsplit(url)
+    return parts.scheme, parts.netloc
+
+
+def _exchange(method: str, url: str, *, body: bytes | None = None,
+              headers: Mapping[str, str] | None = None, timeout: float = 30) -> tuple[int, bytes]:
+    request = urllib.request.Request(url, data=body, headers=dict(headers or {}), method=method)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _SameOriginRedirect())
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            return response.status, response.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read()
+
+
+def tasks_health(base: str, timeout: float = 3) -> dict[str, Any]:
+    """GET /v1/health. A non-200 or an unreachable host is not a usable converter."""
+    try:
+        status, raw = _exchange("GET", base.rstrip("/") + "/v1/health", timeout=timeout)
+    except (OSError, urllib.error.URLError, TimeoutError, ValueError) as exc:
+        return {"ok": False, "detail": type(exc).__name__}
+    if status != 200:
+        return {"ok": False, "status": status}
+    try:
+        payload = json.loads(raw.decode() or "{}")
+    except ValueError:
+        payload = {}
+    if isinstance(payload, dict) and payload.get("ok") is False:
+        return {"ok": False, "status": status}
+    version = payload.get("version") or payload.get("mineru_version") if isinstance(payload, dict) else None
+    tier = payload.get("tier") if isinstance(payload, dict) else None
+    return {"ok": True, "status": status, "version": version, "tier": tier, "api": "v1-tasks"}
+
+
+def markitdown_available() -> bool:
+    return bool(shutil.which("markitdown") or importlib.util.find_spec("markitdown"))
+
+
+def converter_plan(*, live: bool = False) -> dict[str, Any]:
+    """Order: configured self-hosted MinerU, cloud token, then local markitdown."""
+    base = credentials.mineru_api_base()
+    token = bool(credentials.mineru_token())
+    local = markitdown_available()
+    chain: list[str] = []
+    if base:
+        chain.append("mineru-self-hosted")
+    if token:
+        chain.append("mineru-cloud")
+    if local:
+        chain.append("markitdown")
+    health = tasks_health(base) if live and base else None
+    available: list[str] = []
+    if base and (not live or (health or {}).get("ok")):
+        available.append("mineru-self-hosted")
+    if token:
+        available.append("mineru-cloud")
+    if local:
+        available.append("markitdown")
+    return {
+        "selected": available[0] if available else None,
+        "chain": chain,
+        "available": available,
+        "api_base": base or None,
+        "lab_default": credentials.LAB_MINERU_API_BASE,
+        "tailscale": credentials.LAB_MINERU_API_BASE_TAILSCALE,
+        "health": health,
+        "markitdown": local,
+        "markitdown_install": "pip install 'markitdown[pdf]'",
+    }
+
+
+def choose_converter(*, live: bool = True) -> tuple[str, str] | None:
+    plan = converter_plan(live=live)
+    selected = plan["selected"]
+    if selected == "mineru-self-hosted":
+        return selected, str(plan["api_base"])
+    if selected == "mineru-cloud":
+        return selected, CLOUD_API
+    if selected == "markitdown":
+        return selected, ""
+    return None
+
+
+def _same_origin(base: str, url: str) -> None:
+    if _origin(base) != _origin(url):
+        raise ValueError("MinerU result URL left the configured API host")
+
+
+def _markdown_from_zip(raw: bytes, target: Path) -> str:
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        if any(name.endswith("full.md") for name in archive.namelist()):
+            return unpack(raw, target)
+        markdown = [name for name in archive.namelist()
+                    if name.endswith(".md") and ".." not in Path(name).parts and not Path(name).is_absolute()]
+        if len(markdown) != 1:
+            raise ValueError("MinerU result must contain markdown")
+        target.mkdir(parents=True, exist_ok=True)
+        output = target / "paper.md"
+        output.write_bytes(archive.read(markdown[0]))
+        return str(output)
+
+
+def parse_tasks_pdf(pdf: Path, base: str, timeout: float) -> str:
+    """One PDF through MinerU 4.1 Tasks: create, PUT if asked, poll, unpack."""
+    raw_pdf = pdf.read_bytes()
+    digest = hashlib.sha256(raw_pdf).hexdigest()
+    body = json.dumps({
+        "files": [{"file_name": pdf.name, "bytes": len(raw_pdf), "sha256sum": digest}],
+        "output_formats": ["default"],
+    }).encode()
+    status, payload = _exchange(
+        "POST", base.rstrip("/") + "/v1/tasks", body=body,
+        headers={"Content-Type": "application/json"}, timeout=min(timeout, 60),
+    )
+    if status >= 400:
+        raise ValueError(f"MinerU task create failed: HTTP {status}")
+    receipt = json.loads(payload)
+    task_id = str(receipt["task_id"])
+    upload = (receipt.get("files") or [{}])[0].get("upload") or {}
+    if upload.get("url"):
+        _same_origin(base, upload["url"])
+        put_status, _ = _exchange(
+            "PUT", upload["url"], body=raw_pdf,
+            headers={str(key): str(value) for key, value in (upload.get("headers") or {}).items()},
+            timeout=min(timeout, 120),
+        )
+        if put_status >= 400:
+            raise ValueError(f"MinerU upload failed: HTTP {put_status}")
+    deadline = time.monotonic() + timeout
+    result_url = ""
+    while True:
+        status, payload = _exchange(
+            "GET", base.rstrip("/") + "/v1/tasks/" + urllib.parse.quote(task_id, safe=""),
+            timeout=min(30, timeout),
+        )
+        if status >= 400:
+            raise ValueError(f"MinerU task poll failed: HTTP {status}")
+        detail = json.loads(payload)
+        entry = (detail.get("files") or [{}])[0]
+        state = str(entry.get("status") or entry.get("state") or detail.get("status") or "").lower()
+        if state in _FAIL:
+            raise ValueError(f"MinerU task {state}")
+        if entry.get("result_url") and state in _DONE:
+            result_url = str(entry["result_url"])
+            break
+        if time.monotonic() >= deadline:
+            raise ValueError("MinerU task still running")
+        time.sleep(0.05 if timeout <= 5 else 2)
+    _same_origin(base, result_url)
+    status, blob = _exchange("GET", result_url, timeout=min(timeout, 120))
+    if status >= 400:
+        raise ValueError(f"MinerU result download failed: HTTP {status}")
+    folder = pdf.resolve().parent / "mineru" / digest[:16]
+    return _markdown_from_zip(blob, folder)
+
+
+def convert_markitdown(pdf: Path) -> str:
+    dest_dir = pdf.resolve().parent / "markitdown"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "paper.md"
+    banner = "<!-- converter: markitdown; not a MinerU layout parse -->\n\n"
+    executable = shutil.which("markitdown")
+    if executable:
+        subprocess.run([executable, str(pdf), "-o", str(dest)], check=True, timeout=180)
+        body = dest.read_text(encoding="utf-8") if dest.is_file() else ""
+    else:
+        from markitdown import MarkItDown
+        body = MarkItDown().convert(str(pdf)).text_content or ""
+    if "converter: markitdown" not in body:
+        body = banner + body.strip() + "\n"
+    dest.write_text(body, encoding="utf-8")
+    if not body.strip():
+        raise ValueError("markitdown produced no text")
+    return str(dest)
+
+
+def convert_selected(kind: str, base: str, pdfs: Sequence[Path], timeout: float) -> dict[str, Any]:
+    files = []
+    for pdf in pdfs:
+        digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
+        try:
+            markdown = parse_tasks_pdf(pdf, base, timeout) if kind == "mineru-self-hosted" else convert_markitdown(pdf)
+            files.append({"path": str(pdf), "sha256": digest, "state": "done", "markdown": markdown})
+        except (OSError, ValueError, subprocess.SubprocessError, zipfile.BadZipFile, urllib.error.URLError, json.JSONDecodeError) as error:
+            files.append({"path": str(pdf), "sha256": digest, "state": "failed", "reason": str(error)})
+    failed = any(item["state"] != "done" for item in files)
+    return {"status": "partial" if failed else "ok", "converter": kind, "files": files}
 
 
 def main() -> None:

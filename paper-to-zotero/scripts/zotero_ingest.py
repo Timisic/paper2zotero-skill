@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Resume selected papers into Zotero through a journaled Web API write path."""
+"""Resume selected papers into Zotero through a journaled write path.
+
+The local Desktop API is preferred. The Web API is the fallback when Desktop
+is down, and the path an explicit ``--api-base`` (a fixture or a mirror) names.
+"""
 from __future__ import annotations
 
 import argparse
@@ -14,8 +18,10 @@ import secrets
 import sys
 import time
 import re
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
+import urllib.error
 import urllib.parse
+import urllib.request
 
 import credentials
 import paper_artifacts
@@ -73,11 +79,33 @@ def same_work(expected: dict[str, Any], other: dict[str, Any]) -> bool:
                 and author(expected) == author(other))
 
 
+class _FileRedirect(Exception):
+    def __init__(self, path: str) -> None:
+        self.path = path
+
+
+class _LocalFileRedirect(urllib.request.HTTPRedirectHandler):
+    """Zotero 10 answers GET /file with a file:// URL on this machine."""
+
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> Any:
+        parts = urllib.parse.urlsplit(newurl)
+        if parts.scheme == "file":
+            raise _FileRedirect(urllib.request.url2pathname(parts.path))
+        old = urllib.parse.urlsplit(req.full_url)
+        if (old.scheme, old.netloc) != (parts.scheme, parts.netloc):
+            raise RequestError("insecure_redirect")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class Writer:
-    def __init__(self, run: Path, account: dict[str, str], api_base: str, budget: float):
+    def __init__(self, run: Path, account: dict[str, str], api_base: str, budget: float, *,
+                 extra_headers: dict[str, str] | None = None,
+                 reauthorize: Callable[[], str] | None = None):
         self.run, self.client = run, Client(budget=budget)
         self.base = f"{api_base.rstrip('/')}/{account['library_type']}s/{account['library_id']}"
-        self.headers = {'Zotero-API-Key': account['api_key'], 'Zotero-API-Version': '3'}
+        self.headers = {'Zotero-API-Key': account['api_key'], 'Zotero-API-Version': '3', **(extra_headers or {})}
+        self.reauthorize = reauthorize
+        self.local = reauthorize is not None
         self.path = run / 'zotero-state.json'
         self.inventory: list[dict[str, Any]] | None = None
         self.doi_index: dict[str, list[dict[str, Any]]] = {}
@@ -91,13 +119,29 @@ class Writer:
     def save(self) -> None:
         write_json(self.path, self.state)
 
+    def _send(self, method: str, url: str, *, body: bytes | None = None,
+              headers: dict[str, str] | None = None) -> Any:
+        """One authed request. A 401 on the local API authorizes once and retries."""
+        merged = {**self.headers, **(headers or {})}
+        try:
+            return self.client.request(method, url, headers=merged, body=body)
+        except RequestError as error:
+            if error.status != 401 or self.reauthorize is None:
+                raise
+            key = self.reauthorize()
+            if not key:
+                raise
+            self.headers['Zotero-API-Key'] = key
+            merged['Zotero-API-Key'] = key
+            return self.client.request(method, url, headers=merged, body=body)
+
     def call(self, method: str, path: str, payload: Any = None, extra: dict[str, str] | None = None) -> Any:
-        headers = {**self.headers, **(extra or {})}
+        headers = dict(extra or {})
         body = None
         if payload is not None:
             headers['Content-Type'] = 'application/json'
             body = json.dumps(payload).encode()
-        response = self.client.request(method, self.base + path, headers=headers, body=body)
+        response = self._send(method, self.base + path, body=body, headers=headers)
         return response.json() if response.body else None
 
     def get(self, path: str) -> Any:
@@ -220,12 +264,31 @@ class Writer:
 
 
     def fetch_file(self, key: str) -> bytes | None:
+        url = self.base + '/items/' + key + '/file'
+        if self.local:
+            return self._fetch_local_file(url)
         try:
-            return self.client.request('GET', self.base + '/items/' + key + '/file', headers=self.headers).body
+            return self._send('GET', url).body
         except RequestError as error:
             if error.status != 404:
                 raise
             return None
+
+    def _fetch_local_file(self, url: str) -> bytes | None:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _LocalFileRedirect())
+        request = urllib.request.Request(url, headers=self.headers, method='GET')
+        try:
+            with opener.open(request, timeout=20) as reply:
+                return reply.read()
+        except _FileRedirect as found:
+            path = Path(found.path)
+            return path.read_bytes() if path.is_file() else None
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return None
+            raise RequestError('invalid_request', error.code) from None
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            raise RequestError('retry_exhausted') from error
 
     def attach(self, identity: str, parent: str, source: Path, content_type: str,
                children: list[dict[str, Any]]) -> dict[str, Any]:
@@ -292,17 +355,17 @@ class Writer:
 
     def upload(self, key: str, source: Path, content_type: str) -> None:
         raw = source.read_bytes()
-        headers = {**self.headers, 'Content-Type': 'application/x-www-form-urlencoded', 'If-None-Match': '*'}
+        headers = {'Content-Type': 'application/x-www-form-urlencoded', 'If-None-Match': '*'}
         url = self.base + '/items/' + key + '/file'
         fields = {'md5': hashlib.md5(raw).hexdigest(), 'filename': source.name,
                   'filesize': len(raw), 'mtime': int(source.stat().st_mtime * 1000), 'contentType': content_type}
-        auth = self.client.request('POST', url, body=urllib.parse.urlencode(fields).encode(), headers=headers).json()
+        auth = self._send('POST', url, body=urllib.parse.urlencode(fields).encode(), headers=headers).json()
         if not auth.get('exists'):
             # The API supplies the multipart envelope; no library credential is
             # sent to the signed storage URL, and signed URLs are not journaled.
             body = auth['prefix'].encode() + raw + auth['suffix'].encode()
             self.client.request('POST', auth['url'], body=body, headers={'Content-Type': auth['contentType']})
-            self.client.request('POST', url, body=urllib.parse.urlencode({'upload': auth['uploadKey']}).encode(), headers=headers)
+            self._send('POST', url, body=urllib.parse.urlencode({'upload': auth['uploadKey']}).encode(), headers=headers)
 
     def finish_paper(self, key: str, candidate: dict[str, Any], paper: Paper, storage: Path | None) -> str:
         """Write whatever this paper actually has, and name what it still lacks.
@@ -460,6 +523,81 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+WEB_API = "https://api.zotero.org"
+
+
+def open_local_session(api_root: str | None = None) -> dict[str, Any] | None:
+    """A writable Zotero 10 Desktop session, or None when that API is not up.
+
+    Preflight must not call this: authorizing shows Allow / Always Allow / Deny.
+    A remembered key is reused; a 401 later asks again. Always Allow stores the
+    key. A single-use key is consumed by the first write that accepts it.
+    """
+    root = (api_root or credentials.zotero_local_api()).rstrip("/")
+    client = Client(budget=5, timeout=3)
+    try:
+        probe = client.request("GET", root + "/users/0/items?limit=1", max_attempts=1, budget=5)
+    except RequestError:
+        return None
+    server = probe.headers.get("Zotero-Server-ID")
+    if not server:
+        return None
+
+    def authorize() -> str:
+        body = json.dumps({"appName": "literature-to-zotero"}).encode()
+        request = urllib.request.Request(
+            root + "/local/authorize", data=body, method="POST",
+            headers={"Content-Type": "application/json", "Zotero-API-Version": "3", "Zotero-Server-ID": server},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                payload = json.loads(response.read().decode() or "{}")
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
+            return ""
+        issued = str(payload.get("key") or "") if isinstance(payload, dict) else ""
+        if isinstance(payload, dict) and payload.get("remember") and issued:
+            import configure
+            configure.save("ZOTERO_LOCAL_API_KEY", issued)
+        return issued
+
+    key = credentials.zotero_local_api_key() or authorize()
+    if not key:
+        return None
+    return {
+        "account": {"api_key": key, "library_id": "0", "library_type": "user"},
+        "api_base": root,
+        "extra_headers": {"Zotero-Server-ID": server},
+        "reauthorize": authorize,
+        "channel": "local_api",
+    }
+
+
+def resolve_write_target(request: IngestRequest) -> dict[str, Any]:
+    """Local Desktop when this call is aimed at zotero.org and Desktop can write.
+
+    An ``--api-base`` other than the public Web API stays on that base. That is
+    how fixtures and mirrors keep the Web API client.
+    """
+    explicit = request.api_base.rstrip("/") != WEB_API
+    backend = "web" if explicit else credentials.write_backend()
+    if backend != "web":
+        session = open_local_session()
+        if session:
+            return session
+        if backend == "local":
+            raise ValueError("local Zotero API is not writable")
+    account = credentials.zotero_credentials()
+    if not account["api_key"] or not account["library_id"]:
+        raise ValueError("Zotero credentials missing")
+    return {
+        "account": account,
+        "api_base": request.api_base,
+        "extra_headers": None,
+        "reauthorize": None,
+        "channel": "web_api",
+    }
+
+
 def artifact_snapshot(paper: Paper) -> dict[str, tuple[str, str]]:
     return {field: (str(path), hashlib.sha256(path.read_bytes()).hexdigest())
             for field in Paper.ARTIFACTS if (path := paper.artifact(field)) is not None}
@@ -489,15 +627,14 @@ def ingest(request: IngestRequest) -> dict[str, Any]:
                 invalid[paper.id] = str(error)
         return {'status': 'invalid_artifacts' if invalid else 'planned', 'ids': identities,
                 'collection': request.collection_key or request.collection_name, 'errors': invalid}
-    account = credentials.zotero_credentials()
-    if not account['api_key'] or not account['library_id']:
-        raise ValueError('Zotero credentials missing')
+    target = resolve_write_target(request)
     # One remote writer owns its journal, but HTTP never owns the manifest
     # lock: acquisition/conversion of other papers can commit while we wait.
     with run_lock(run, "zotero"):
         package = Run.open(run)
         package.require_confirmed()
-        writer = Writer(run, account, request.api_base, request.retry_budget)
+        writer = Writer(run, target['account'], target['api_base'], request.retry_budget,
+                        extra_headers=target['extra_headers'], reauthorize=target['reauthorize'])
         if request.reuse_map:
             for identity, key in read_json(request.reuse_map).items():
                 if identity not in package.selected:
@@ -555,7 +692,7 @@ def ingest(request: IngestRequest) -> dict[str, Any]:
             writer.save()
         status = 'pending' if errors else ('partial' if pending else 'complete')
         return {'status': status, 'collection': collection, 'ids': identities,
-                'errors': errors, 'incomplete': pending,
+                'errors': errors, 'incomplete': pending, 'write_channel': target['channel'],
                 'papers': {key: writer.state['papers'][key] for key in identities if key in writer.state['papers']}}
 
 

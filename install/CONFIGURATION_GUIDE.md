@@ -11,9 +11,20 @@
 
 | 配置项 | 解决什么问题 | 需要准备 |
 | --- | --- | --- |
-| Zotero Web API | 把论文和笔记保存到你的文库 | Zotero 账号和文库读写 API Key |
-| OpenAlex | 根据研究问题找到候选论文 | OpenAlex 账号和 API Key |
-| MinerU | 将PDF转成Markdown，方便AI读取 | MinerU 账号和 Token |
+| Zotero 本地 API | 把论文和笔记写进本机文库 | Zotero 10 开着，并在授权框选「始终允许」 |
+| Kimi WebBridge | 默认文献检索 | 浏览器扩展已连接 |
+| 自建 MinerU | 将 PDF 转成 Markdown | 下面的 `MINERU_API_BASE` |
+
+OpenAlex、MinerU 云端 Token、Zotero Web API 仍可用，都不是默认必配。向导里的对应步骤只在你改用这些可选通道时需要。
+
+实验室环境变量（写在 `~/.config/literature-to-zotero/env`，也可临时放在进程环境里）：
+
+```bash
+SEARCH_BACKEND=kimi
+MINERU_API_BASE=http://192.168.8.167:8000
+```
+
+`MINERU_API_BASE` 可以改成别的地址。Tailscale `http://100.92.231.38:8000` 仍可使用，但不是默认。把该项设成空字符串会关掉自建 MinerU。云端回退仍用 `MINERU_TOKEN`。本机回退：`pip install 'markitdown[pdf]'`。写入通道默认 `ZOTERO_WRITE_BACKEND=auto`（本机 API，失败再用 Web API）。`ZOTERO_LOCAL_API_KEY` 在选择「始终允许」后由程序写入。
 
 ### 有需要时再补充
 

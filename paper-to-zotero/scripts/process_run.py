@@ -283,14 +283,21 @@ def record_trail(run: Path, identity: str, target: Path, result: dict[str, Any])
 
 
 def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, Any]:
-    """Convert consented PDFs. A conversion failure keeps the PDF path open."""
+    """Convert PDFs. Self-hosted MinerU, then cloud MinerU, then markitdown.
+
+    An upload still needs recorded consent. markitdown never leaves the machine,
+    so it does not. A conversion failure keeps the PDF path open.
+    """
     run = request.run_dir
     package = workflow.Run.open(run)
+    explicit = request.mineru_api_base.rstrip("/") != mineru_parse.CLOUD_API
+    plan = ("mineru-cloud", request.mineru_api_base) if explicit else mineru_parse.choose_converter(live=True)
+    local_only = bool(plan) and plan[0] == "markitdown"
     pending, skipped = {}, {}
     for paper in package.papers(identities):
         if paper.markdown or not paper.pdf:
             continue
-        if not package.consented("mineru", [paper.id]):
+        if not local_only and not package.consented("mineru", [paper.id]):
             skipped[paper.id] = "markdown_unavailable: no upload consent"
             continue
         pending[paper.id] = paper.pdf
@@ -299,12 +306,16 @@ def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, A
             workflow.Run.record(run, identity, warning=reason)
     if not pending:
         return {"converted": [], "failed": {}, "skipped": skipped}
-    if not credentials.mineru_token():
+    if plan is None or (plan[0] == "mineru-cloud" and not credentials.mineru_token()):
+        reason = "markdown_unavailable: no MinerU token"
         for identity in pending:
-            workflow.Run.record(run, identity, warning="markdown_unavailable: no MinerU token")
-        return {"converted": [], "failed": {}, "skipped": {**skipped, **{key: "markdown_unavailable: no MinerU token" for key in pending}}}
+            workflow.Run.record(run, identity, warning=reason)
+        return {"converted": [], "failed": {}, "skipped": {**skipped, **{key: reason for key in pending}}}
     try:
-        result = mineru_parse.parse(request.parse_request(list(pending.values())))
+        if plan[0] == "mineru-cloud":
+            result = mineru_parse.parse(replace(request.parse_request(list(pending.values())), api_base=plan[1]))
+        else:
+            result = mineru_parse.convert_selected(plan[0], plan[1], list(pending.values()), request.poll_timeout)
     except (RequestError, ValueError, OSError) as error:
         reason = f"markdown_unavailable: {error}"
         for identity in pending:
@@ -407,17 +418,22 @@ def attach_summary_handoff(run_dir: Path, pending: Sequence[dict[str, Any]], ide
 
 
 def ingestion_readiness(request: ProcessRequest) -> dict[str, Any]:
+    """Local Zotero write when this call still targets zotero.org; otherwise the named API."""
+    explicit = request.api_base.rstrip('/') != zotero_ingest.WEB_API
+    local_ok = None
+    if not explicit and credentials.write_backend() != 'web':
+        local_ok = capability.probe_zotero_local_write()
     account = credentials.zotero_credentials()
     configured = bool(account['api_key'] and account['library_id'])
     access = None
-    if configured:
+    if configured and local_ok is not True:
         try:
             access = capability.zotero_key_access(account['api_key'], account['library_id'],
                                                  account['library_type'], request.api_base,
                                                  timeout=3, attempts=1)
         except (RequestError, OSError, ValueError):
             access = {'reachable': False, 'identity_match': None, 'write_permission': None}
-    result = capability.zotero_key(configured, access)
+    result = capability.zotero_write(local_ok, capability.zotero_key(configured, access))
     print(json.dumps({'stage': 'ingestion_readiness', 'at': workflow.utc_now(), **result}),
           file=sys.stderr, flush=True)
     return result

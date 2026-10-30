@@ -24,7 +24,7 @@ A supplied PDF starts at `local_pdf.py`: extract a DOI or title, complete the re
 | `credentials.py`, `capability.py` | Credential resolution and capability semantics; preflight/setup/verify consume these |
 | `http_client.py` | Bounded requests, shared pacing, credential-safe redirects and uncertain-write outcomes |
 
-Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Deterministic scripts own service operations and recovery; the Agent owns research interpretation, screening and summarization. The automatic writer uses Zotero Web API credentials; MCP is optional assistance, not an alternative automatic writer.
+Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Deterministic scripts own service operations and recovery; the Agent owns research interpretation, screening and summarization. The automatic writer prefers the local Zotero Desktop API and does not need Web API credentials while that API is writable. Zotero MCP is the agent's write path when its tools are in the session. The Web API remains the fallback.
 
 ## Domain terms
 

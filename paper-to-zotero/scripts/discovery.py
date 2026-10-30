@@ -29,14 +29,17 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass, field
 import json
+import os
 from pathlib import Path
 import re
 import sys
 import time
-from typing import Any, Mapping, Sequence
+import urllib.parse
+from typing import Any, Callable, Mapping, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import credentials  # noqa: E402
 import sources as source_module  # noqa: E402
 import workflow  # noqa: E402
 from sources import Answer, Query, Sources  # noqa: E402
@@ -254,6 +257,8 @@ def discover(request: DiscoveryRequest, client: Sources | None = None) -> dict[s
             # fact the user is entitled to see next to the results.
             answer = Answer(source=name, question="search", status="skipped",
                             detail="retrieval budget spent", observed_at=timestamp)
+        elif name == "kimi":
+            answer = kimi_search(request.query, budget=min(budget.remaining(), PER_SOURCE_CEILING))
         else:
             answer = client.search(name, request.query,
                                    budget=min(budget.remaining(), PER_SOURCE_CEILING, client.budget))
@@ -383,11 +388,89 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
                         help="the user asked to widen coverage beyond the default ceiling")
 
 
+DEFAULT_SEARCH_PAGE = "https://www.semanticscholar.org/search?q={query}&sort=relevance"
+EXTRACT_JS = r"""
+(() => {
+  const take = %d;
+  const hits = [];
+  const seen = new Set();
+  const text = (document.body && document.body.innerText || '').slice(0, 800);
+  const blocked = /are you a robot|just a moment|verify you are|人机验证|人機驗證/i.test(text);
+  function push(title, url, year) {
+    title = (title || '').replace(/\s+/g, ' ').trim();
+    if (!title || seen.has(title) || hits.length >= take) return;
+    seen.add(title);
+    hits.push({title: title, url: url || null, year: year ? Number(year) : null, authors: []});
+  }
+  const rows = document.querySelectorAll('[data-test-id="paper-row"], .gs_ri, [data-paper-id]');
+  for (const row of rows) {
+    const link = row.querySelector('a[href]');
+    const blob = row.innerText || '';
+    const year = (blob.match(/\b(19|20)\d{2}\b/) || [])[0];
+    push(link && link.innerText, link && link.href, year);
+  }
+  if (!hits.length) {
+    for (const link of document.querySelectorAll('a[href*="/paper/"]')) push(link.innerText, link.href, null);
+  }
+  return JSON.stringify({hits: hits, blocked: blocked, url: location.href, title: document.title});
+})()
+"""
+
+
+class _FormatMap(dict):
+    def __missing__(self, key: str) -> str:
+        return ""
+
+
+def search_page(query: Query) -> str:
+    """The page Kimi WebBridge opens. `KIMI_SEARCH_URL` may replace it."""
+    template = credentials.configured_value("KIMI_SEARCH_URL") or DEFAULT_SEARCH_PAGE
+    if not template:
+        template = DEFAULT_SEARCH_PAGE
+    return template.format_map(_FormatMap({
+        "query": urllib.parse.quote(query.text),
+        "limit": str(query.limit),
+        "from_year": "" if query.from_year is None else str(query.from_year),
+        "to_year": "" if query.to_year is None else str(query.to_year),
+    }))
+
+
+def kimi_search(query: Query, budget: float, transport: Callable[..., Any] | None = None) -> Answer:
+    """One literature search through the user's browser, not an HTTP API client."""
+    observed = source_module.observed_at()
+    if transport is None and os.environ.get("LITERATURE_BROWSER_DISABLED") == "1":
+        return Answer(source="kimi", question="search", status="unavailable",
+                      detail="Kimi WebBridge disabled", observed_at=observed)
+    if transport is None:
+        import browser_pdf
+        transport = browser_pdf.command
+    url = search_page(query)
+    timeout = max(5, int(budget))
+    try:
+        transport("navigate", {"url": url, "newTab": True, "group_title": "literature search"},
+                  "literature-discovery", timeout)
+        data = transport("evaluate", {"code": EXTRACT_JS % max(1, min(query.limit, 25))},
+                         "literature-discovery", timeout)
+    except (OSError, TimeoutError, RuntimeError, ValueError) as exc:
+        return Answer(source="kimi", question="search", status="unavailable",
+                      detail=str(exc), observed_at=observed)
+    if not isinstance(data, dict) or "hits" not in data:
+        return Answer(source="kimi", question="search", status="unavailable",
+                      detail="search page was not readable", observed_at=observed)
+    hits = [hit for hit in data.get("hits") or [] if isinstance(hit, dict) and hit.get("title")]
+    if data.get("blocked"):
+        return Answer(source="kimi", question="search", status="unavailable",
+                      detail="search page is blocked", observed_at=observed)
+    return Answer(source="kimi", question="search", status="ok" if hits else "empty",
+                  records=hits, detail=url, observed_at=observed)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     add_arguments(parser)
-    parser.add_argument("--sources", default=",".join(source_module.DISCOVERY_SOURCES),
-                        help="Comma-separated subset of: " + ", ".join(source_module.DISCOVERY_SOURCES))
+    parser.add_argument("--sources", default=None,
+                        help="Comma-separated subset of kimi, " + ", ".join(source_module.DISCOVERY_SOURCES)
+                        + ". Default follows SEARCH_BACKEND.")
     parser.add_argument("--limit", type=int, default=50, help="records requested per source")
     parser.add_argument("--input-json", action="append", metavar="SOURCE=PATH",
                         help="Use a saved response for one source instead of the network")
@@ -408,8 +491,15 @@ def request_from_args(args: argparse.Namespace, names: Sequence[str]) -> Discove
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    names = [name for name in args.sources.split(",") if name.strip()]
-    unknown = [name for name in names if name not in source_module.DISCOVERY_SOURCES]
+    if args.sources:
+        names = [name for name in args.sources.split(",") if name.strip()]
+    else:
+        try:
+            names = list(credentials.discovery_sources_for())
+        except ValueError as error:
+            workflow.fail(str(error))
+    allowed = set(source_module.DISCOVERY_SOURCES) | {"kimi"}
+    unknown = [name for name in names if name not in allowed]
     if unknown:
         workflow.fail("unknown discovery source(s): " + ", ".join(unknown))
     request = request_from_args(args, names)
