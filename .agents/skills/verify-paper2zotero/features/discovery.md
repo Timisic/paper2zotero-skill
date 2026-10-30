@@ -26,4 +26,4 @@ Inspect `commands.jsonl` for the action and return value, `results.xml` for each
 
 ## Gotchas
 
-Offline JSON input proves normalization, not live scholarly search. The 429 case is a client-level boundary check, not a CLI invocation. Preserve candidate provenance and distinguish empty from unavailable.
+Offline JSON input proves normalization, not live scholarly search. The 429 case is a client-level boundary check, not a CLI invocation. Preserve candidate provenance and distinguish empty from unavailable. Unset `SEARCH_BACKEND` selects Kimi (`credentials.search_backend`). These three nodes pass `--sources openalex,semantic_scholar` or render an existing table. The suite sets `SEARCH_BACKEND=http` and `LITERATURE_BROWSER_DISABLED=1`, so a green run does not start Kimi. Live Kimi needs the `kimi-webbridge` binary (`~/.kimi-webbridge/bin/kimi-webbridge` or `PATH`) and `kimi-webbridge status`.

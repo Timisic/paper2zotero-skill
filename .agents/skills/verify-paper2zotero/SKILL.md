@@ -46,7 +46,7 @@ Once doctor passes:
 
 The ordinary project `run-python.sh` reads the real user's runtime configuration, so this harness deliberately runs the chosen interpreter directly. The environment is reusable and is not part of per-run scratch cleanup.
 
-`run` snapshots current scripts, tests and references into a unique temporary directory, drives the 15 fixture tests whose modules are present, and tears down that snapshot. It does not collect `local-parser` or `unified-local`, because those test modules are not in this branch. Source edits must be finished before launching. No build is required. Test peers bind only `127.0.0.1:0` and are ready when their fixture context returns. Never point the helper at an existing service or a real Zotero data directory. A sandbox that refuses local bind needs narrowly scoped host approval for these fixture peers; do not disable the network guard.
+`run` snapshots current scripts, tests and references into a unique temporary directory, drives the 23 fixture tests whose modules are present, and tears down that snapshot. It collects `lab-defaults` from `tests/test_lab_defaults.py`. It does not collect `local-parser` or `unified-local`, because those test modules are not in this branch. Source edits must be finished before launching. No build is required. Test peers bind only `127.0.0.1:0` and are ready when their fixture context returns. Never point the helper at an existing service or a real Zotero data directory. A sandbox that refuses local bind needs narrowly scoped host approval for these fixture peers; do not disable the network guard.
 
 ## Doctor
 
@@ -62,6 +62,7 @@ Run all features as above, or append one of:
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature local-pdf
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature acquisition
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature delivery
+"$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature lab-defaults
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature local-parser
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature unified-local
 ```
@@ -72,11 +73,11 @@ The runner reuses `tests/http_fixture.py`, `zotero_peer.py`, `mineru_peer.py`, `
 
 ## Evidence
 
-A pass requires exit 0, every selected present test passed (15 for a full run), `guard.json` exit 0, and `cleanup.json` showing removed scratch and no listening owned ports. Check `pytest.log` and `results.xml`, not merely file existence. `doctor.json` identifies the interpreter and source hashes; `invocation.json` identifies the exact test nodes.
+A pass requires exit 0, every selected present test passed (23 for a full run), `guard.json` exit 0, and `cleanup.json` showing removed scratch and no listening owned ports. Check `pytest.log` and `results.xml`, not merely file existence. `doctor.json` identifies the interpreter and source hashes; `invocation.json` identifies the exact test nodes.
 
 `commands.jsonl` retains action, stdout, stderr and exit status. `state/` retains disposable run manifests, candidates, PDFs, acquisition trails, hashes, conversion journals, summary handoffs and simulated Zotero storage after teardown. Paths in transcripts retain the original temporary location: map `<scratch>/cases/` to `<evidence>/state/` using `cleanup.json`. `network.jsonl` records allowed/blocked Python socket attempts; a blocked probe of 23119 is expected, as are unavailable-source attempts to closed fixture URLs. No real credentials are included; known test-secret strings are redacted in command transcripts. State can contain dummy fixture credentials and signed fixture URLs only.
 
-Tests exercise public CLI paths and assert side effects and read-back, with a few source-failure / rejection checks calling the same production client directly. Fixture setup sometimes seeds candidate metadata or already acquired artifacts; that seeding is not proof of discovery or acquisition. The browser adapter, bibliographic responses, Zotero service, MinerU service and summary text are simulated. Tests prove orchestration, persisted files, consent boundaries, bytes/read-back and recovery against those boundaries. They do not prove scientific summary quality, actual publisher access, external authentication, Desktop sync, semantic search, or real uploads.
+Tests exercise public CLI paths and assert side effects and read-back, with a few source-failure / rejection checks calling the same production client directly. Fixture setup sometimes seeds candidate metadata or already acquired artifacts; that seeding is not proof of discovery or acquisition. The browser adapter, bibliographic responses, Zotero service, MinerU service and summary text are simulated. Tests prove orchestration, persisted files, consent boundaries, bytes/read-back and recovery against those boundaries. They do not prove scientific summary quality, actual publisher access, external authentication, a live Kimi search, the lab MinerU host, Desktop sync, a local file attach, semantic search, or real uploads.
 
 ## Cleanup
 
@@ -90,6 +91,12 @@ Failure diagnosis: doctor failures mean missing interpreter/dependencies/source 
 
 ## Limits and maintenance
 
-No real integration runs are authorized by this skill. A future live write test requires separately authorized, demonstrably disposable library/storage and appropriate credentials; otherwise report it as not run. This branch does not ship `local_parse.py` or `zotero_local.py`. `run --feature local-parser` and `run --feature unified-local` report that absence. They are not doctor failures. Do not invent those scripts. Native Zotero writes have fixture coverage only until an authorized disposable profile is driven. Personal-library semantic search and production content quality remain unaccepted. Installer GUI, natural-language screening, all platform variants and the wider test suite are outside this starter map.
+No real integration runs are authorized by this skill. Unset `SEARCH_BACKEND` selects Kimi. Unset `MINERU_API_BASE` selects self-hosted MinerU at `http://192.168.8.167:8000`, then MinerU cloud when `MINERU_TOKEN` is set, then markitdown. Unset `ZOTERO_WRITE_BACKEND` prefers the local API at `http://127.0.0.1:23119/api` and falls back to the Web API. `run --feature lab-defaults` drives `tests/test_lab_defaults.py` on loopback peers. That pass does not open the lab host, the Kimi daemon, or Zotero Desktop.
+
+Live Kimi needs the `kimi-webbridge` binary and `kimi-webbridge status`. Live MinerU needs `GET http://192.168.8.167:8000/v1/health`, then `POST /v1/tasks`. A `--mineru-api-base` that answers `GET /v1/health` is that Tasks host, including `http://192.168.8.167:8000` and `MINERU_API_BASE`. Leaving the flag at `https://mineru.net` health-checks the configured host and uses Tasks when the check passes. A base that does not answer `/v1/health` stays the cloud v4 client, which is what the offline fixtures speak. Live Desktop needs HTTP 200 and `Zotero-Server-ID` from `http://127.0.0.1:23119/api/users/0/items?limit=1`, then `POST /api/local/authorize`.
+
+Local API attach reads the `file://` target of `GET /file` in `zotero_ingest._LocalFileRedirect.http_error_302`, then posts the bytes to a same-origin `/api/local/uploads/` URL with `Zotero-API-Key` and `Zotero-Server-ID`. A live write still needs a separately authorized, disposable library and storage. Otherwise report it as not run.
+
+This branch does not ship `local_parse.py` or `zotero_local.py`. `run --feature local-parser` and `run --feature unified-local` report that absence. They are not doctor failures. Do not invent those scripts, and do not treat `lab-defaults` as those missing modules. Personal-library semantic search and production content quality remain unaccepted. Installer GUI, natural-language screening, all platform variants and the wider test suite are outside this starter map.
 
 Use PStack Personal's `/maintain-verification-skill` when entry points or behavior change. Update this map alongside the code; do not mark a skipped path verified by a different entry point.
