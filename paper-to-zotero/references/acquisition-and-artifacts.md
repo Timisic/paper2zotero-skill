@@ -101,7 +101,7 @@ choco install poppler          # Windows
 
 ## Markdown
 
-Topic search and the local PDF default both convert through one chain: self-hosted MinerU (`MINERU_API_BASE`, default `http://192.168.8.167:8000`), then MinerU cloud when `MINERU_TOKEN` is set, then markitdown. `local_pdf.py` calls the same `stage_convert` path. Use the command below for a direct MinerU cloud run. `--backend local` is the explicit no-upload opt-out, and it writes `local-text/paper.md`. It is not the markitdown hop. Install that hop with `pip install 'markitdown[pdf]'`. Tailscale `http://100.92.231.38:8000` remains a valid `MINERU_API_BASE` override.
+Conversion follows the chain named in `SKILL.md`. `local_pdf.py` uses the same `stage_convert`. The command below is a direct MinerU cloud run. `--backend local` writes `local-text/paper.md` and does not upload.
 
 Use only identity-verified selected PDFs and recorded MinerU consent (see [workflow.md](workflow.md)). Credentials are resolved by `credentials.py` across supported runtimes.
 

@@ -23,9 +23,7 @@ Searching is never gated on Zotero Desktop or its sync state. A configured token
 
 Treat returned text containing `Error`, `Forbidden`, `Cannot perform`, or an equivalent failure as failure even when the protocol reports `is_error=false`.
 
-Topic search derives Markdown through the converter chain. The default self-hosted MinerU Tasks API is `MINERU_API_BASE=http://192.168.8.167:8000` (override it; Tailscale `http://100.92.231.38:8000` stays available and is not the default). When that hop is unset or its `/v1/health` fails, a configured `MINERU_TOKEN` uses MinerU cloud. When neither MinerU path is available, markitdown converts on this machine (`pip install 'markitdown[pdf]'`). Uploading to either MinerU hop needs user consent. markitdown does not. When no hop is available, record `markdown_unavailable` and keep the verified PDF.
-
-The [local PDF fast path](acquisition-and-artifacts.md#local-pdf-fast-path) uses the same MinerU convert as topic search. `local_pdf.py` asks for upload consent when the verified ids lack it, and it does not upload until that consent is recorded. `--backend local` writes on-machine text and does not record consent.
+The [local PDF fast path](acquisition-and-artifacts.md#local-pdf-fast-path) uses the conversion row above. `local_pdf.py` asks for upload consent when the verified ids lack it, and it does not upload until that consent is recorded. `--backend local` writes on-machine text and does not record consent.
 
 ## Run package
 

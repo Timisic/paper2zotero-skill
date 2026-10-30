@@ -40,8 +40,6 @@ Bash and native Python use the same user profile. Both the Python executable and
 
 The wizard's mintty process maps only Ctrl+V to paste, using `ShootFoot=yes` and `KeyFunctions=C+v:paste`; `CtrlExchangeShift=no` preserves Ctrl+C interruption. These command-line options never modify global mintty preferences. Authorization input shows a fixed mask on receipt, handles backspace, rejects control characters before persistence, and pauses on EOF. The writer also rejects controls for non-wizard callers. Personal library discovery reports safe errors on stderr and offers a retry; manual IDs are only requested for group libraries.
 
-`tests/test_setup_input.py` exercises the real Bash input helper and retry stages with synthetic input and mocks Zotero identity responses. The native Windows launcher tests additionally check that mintty starts with the new options and that echo is disabled during entry and restored after success or interruption on a real TTY. Actual keyboard-to-clipboard integration still requires manual acceptance in the wizard window: Ctrl+V and Shift+Insert paste, Ctrl+C exits, backspace works, and no secret is echoed. Synthetic input is not a substitute for this keyboard check.
+`tests/test_setup_input.py` exercises the real Bash input helper and retry stages with synthetic input and mocks Zotero identity responses. The native Windows launcher tests additionally check that mintty starts with the new options and that echo is disabled during entry and restored after success or interruption on a real TTY.
 
-## Verification
-
-Distribution tests cover repeat installation, conflicting directories, download removal, private writes and incomplete checks. Onboarding tests cover targeted installs, basic/advanced demo paths, tool-path restoration and service timeouts. Native Windows tests cover the PowerShell/mintty/Bash chain with Chinese and spaced paths. These tests do not replace fresh-system installation, human authorization or a real paper run; see the [maintenance entry](README.md#检查与打包).
+Workflow verification is [verify-paper2zotero](../.agents/skills/verify-paper2zotero/SKILL.md).

@@ -17,14 +17,12 @@ For an existing collection, pass `--collection-key` instead. Subsequent calls re
 The writer:
 
 1. Validates what the paper has. Only the source PDF gates ingestion, because its identity must be proven before anything is written; a paper without one must already be explicitly `metadata_only`. Markdown and the summary are checked when present and reported as pending when absent.
-2. Scans every item page for a normalized DOI match. Without DOI it requires title, year and first-author identity. Ambiguous duplicates stop that paper. A supplied `--reuse-map <json>` maps selected candidate IDs to existing keys and is identity-checked. One DOI stays one item. Pass a dedicated `--collection-name` for a batch (for example `E2E Lab MinerU`); the writer adds that collection and leaves the item's other collections in place.
+2. Scans every item page for a normalized DOI match. Without DOI it requires title, year and first-author identity. Ambiguous duplicates stop that paper. A supplied `--reuse-map <json>` maps selected candidate IDs to existing keys and is identity-checked. One DOI stays one item. The writer adds this run's collection and leaves the item's other collections in place.
 3. Journals a stable key, creation payload and write token before each create. Response loss resumes by reading that key; a version-zero create cannot overwrite a persisted object.
 4. Merges missing metadata, adds collection membership and requested tags using a version precondition, preserving populated fields and other collections. A conflict requires a fresh read on resume.
 5. Reuses an imported file whose md5 already matches, whatever its filename is. An empty attachment record resumes uploading instead of being treated as complete. A different file that already uses this run's filename (`source.pdf`, `paper.md`) is replaced in place (`If-Match`) instead of gaining a sibling. Upload is authorization, byte transfer, then registration. Web API `/storage` and off-origin signed URLs receive no API key. The local Desktop byte POST goes to `/api/local/uploads/` and sends `Zotero-API-Key` plus `Zotero-Server-ID`. Relative upload URLs are resolved against the API origin.
 6. Writes a run- and content-versioned summary note when a summary exists. The marker is `literature-to-zotero:<run>:<hash>`. A later summary from the same run replaces that note. Notes from other runs, and any note this run does not own, stay as they are. A summary whose text contains `AutoResearch` is not written.
 7. Reads back collection membership, the summary and attachment bytes. On the local API, `GET /file` is a 302 to a `file://` path and the writer reads that path. It verifies the exact local storage paths against source hashes before reporting `read_back_verified`.
-
-Zotero Desktop has to be open for the local API. The first write shows Allow / Always Allow / Deny unless `ZOTERO_LOCAL_API_KEY` is already stored from Always Allow. Attachment read-back reads the `file://` path Zotero returns. Loopback tests model that redirect; they are not a live Desktop session.
 
 Each paper ends in one state, and every one of them is a delivery, not a retry signal:
 
