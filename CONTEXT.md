@@ -24,7 +24,7 @@ A supplied PDF starts at `local_pdf.py`: extract a DOI or title, complete the re
 | `credentials.py`, `capability.py` | Credential resolution and capability semantics; preflight/setup/verify consume these |
 | `http_client.py` | Bounded requests, shared pacing, credential-safe redirects and uncertain-write outcomes |
 
-Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Deterministic scripts own service operations and recovery; the Agent owns research interpretation, screening and summarization. The automatic writer uses Zotero Web API credentials; MCP is optional assistance, not an alternative automatic writer.
+Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Deterministic scripts own service operations and recovery; the Agent owns research interpretation, screening and summarization. The automatic writer prefers the local Zotero Desktop API and does not need Web API credentials while that API is writable. Zotero MCP is the agent's write path when its tools are in the session. The Web API remains the fallback.
 
 ## Domain terms
 
@@ -64,12 +64,4 @@ Stage preflight checks only that stage's dependencies. Network failure leaves id
 
 ## Development
 
-Read the relevant [ADRs](docs/README.md#architecture-decisions) before changing boundaries. Add meaningful tests around consent, recovery, identity and read-back behavior. Fixture tests are not live service acceptance.
-
-```bash
-cd paper-to-zotero
-python3 -m pytest tests -q
-python3 -m mypy scripts
-```
-
-The tests isolate real browser/network state. Local PDFs, run artifacts and cleanup snapshots under `literature-runs/` are ignored by Git; preserve them separately when needed for reproduction. Commit task-owned changes in coherent groups; publishing and pushing are separate actions.
+Read the relevant [ADRs](docs/README.md#architecture-decisions) before changing boundaries. Fixture tests are not live service acceptance. Workflow verification is [verify-paper2zotero](.agents/skills/verify-paper2zotero/SKILL.md). The lab path is Kimi search, MinerU at `http://192.168.8.167:8000`, then the local Zotero API.

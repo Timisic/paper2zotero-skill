@@ -15,17 +15,15 @@ python "$SKILL_DIR/scripts/preflight.py" --json --stage ingestion
 | `discovery` | nothing local | Zotero Desktop, file sync, Kimi |
 | `acquisition` | nothing: an open PDF is an HTTPS GET | Kimi WebBridge, Zotero of any kind |
 | `browser_fallback` | Kimi WebBridge connected | Zotero of any kind |
-| `conversion` | MinerU token (plus recorded consent) | Zotero Desktop |
-| `ingestion` | Zotero Web API key with write permission | Zotero Desktop being open |
+| `conversion` | One converter: self-hosted MinerU (`MINERU_API_BASE`, default `http://192.168.8.167:8000`), else a MinerU cloud token, else markitdown. Upload hops also need recorded consent | Zotero Desktop |
+| `ingestion` | Local Zotero write (`Zotero-Server-ID` on `127.0.0.1:23119`) or a Web API key with write permission | The other write path |
 | `local_sync` | Zotero Desktop local API and attachment file sync | — |
 
 Searching is never gated on Zotero Desktop or its sync state. A configured token is not proof of current reachability, and a successful key probe proves account permission, not that a later upload will succeed. For initial setup or configuration repair, follow the platform-specific installation instructions linked from `SKILL.md` and finish with `configure.py --check`. The broader `setup.py` doctor is for developer diagnosis, not a gate for ordinary runs.
 
 Treat returned text containing `Error`, `Forbidden`, `Cannot perform`, or an equivalent failure as failure even when the protocol reports `is_error=false`.
 
-Topic search derives Markdown through MinerU (default model `vlm`). It needs a token resolved by `credentials.py` and user consent to upload the PDF. When either is absent, record `markdown_unavailable` and keep the verified PDF; do not substitute another converter on this path.
-
-The [local PDF fast path](acquisition-and-artifacts.md#local-pdf-fast-path) uses the same MinerU convert as topic search. `local_pdf.py` asks for upload consent when the verified ids lack it, and it does not upload until that consent is recorded. `--backend local` writes on-machine text and does not record consent.
+The [local PDF fast path](acquisition-and-artifacts.md#local-pdf-fast-path) uses the conversion row above. `local_pdf.py` asks for upload consent when the verified ids lack it, and it does not upload until that consent is recorded. `--backend local` writes on-machine text and does not record consent.
 
 ## Run package
 

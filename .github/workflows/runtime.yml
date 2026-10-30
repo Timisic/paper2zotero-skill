@@ -37,6 +37,8 @@ jobs:
           paper-to-zotero/tests/test_windows_pipeline.py
           paper-to-zotero/tests/test_http_client.py
           paper-to-zotero/tests/test_http_acquisition.py
+          paper-to-zotero/tests/test_browser_pdf.py
+          paper-to-zotero/tests/test_lab_defaults.py
           paper-to-zotero/tests/test_mineru_resume.py
           paper-to-zotero/tests/test_zotero_ingest.py
           paper-to-zotero/tests/test_full_chain.py

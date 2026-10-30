@@ -10,7 +10,7 @@
 
 它会准备需要的工具，再打开配置向导。你只需按向导提示，打开对应的网页获取相关的API KEY，粘贴回向导中。
 
-默认 setup 依次是：**准备工具 → 连接 Zotero → 连接 OpenAlex（必配）→ 配置pdf转md（MinerU）→ 检查结果 → 更多配置（可选）**。最后还会询问你是否想换用自己的总结提示词。
+默认文献路径是 **Kimi 检索 → 局域网 MinerU（`http://192.168.8.167:8000`）→ 本机 Zotero**。OpenAlex、MinerU 云端和 Zotero Web API 是可选项。最后还会询问你是否想换用自己的总结提示词。
 
 ## 装好后怎么用
 
@@ -48,7 +48,7 @@ flowchart TD
     H --> I[保存到 Zotero，读回核验并报告结果]
 ```
 
-检索按可用配置调用 OpenAlex、Semantic Scholar 等来源；有公开 PDF 时直接下载，需要机构访问时才借助 Kimi Webbrige 登录浏览器获取 PDF。MinerU 负责把 PDF 转成 md 文字，**阅读分析由当前 AI 助手完成**。
+检索默认走 Kimi WebBridge。有公开 PDF 时直接下载，需要机构访问时才用已登录浏览器。PDF 转 Markdown 默认用局域网 MinerU（`http://192.168.8.167:8000`），笔记写入本机 Zotero。**阅读分析由当前 AI 助手完成**。
 
 笔记默认跟随论文语种，没有固定字数限制。你可以换用自己的总结提示词：编辑当前已安装 skill 中的 `references/paper-summary.md`。setup 末尾会显示实际路径；[修改位置与方法](install/HELP.md#更换总结提示词)也可随时查阅。
 

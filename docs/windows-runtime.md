@@ -1,6 +1,6 @@
 # Windows runtime reliability
 
-The setup window is only the entry point. Regression coverage must also exercise a selected run through acquisition, conversion, summary handoff, ingestion and read-back.
+Workflow fixtures belong to [verify-paper2zotero](../.agents/skills/verify-paper2zotero/SKILL.md). The contracts below are the Windows code rules.
 
 ## Platform contracts
 
@@ -18,12 +18,8 @@ The setup window is only the entry point. Regression coverage must also exercise
 - On Windows, updating one assistant also updates existing managed copies belonging to the other supported assistants. Independent installations and unselected new assistants remain outside that update.
 - Technical recovery and summary handoff reuse recorded authorization. Human decisions remain selection, consent, account entry, login and material scope changes. Diagnostic artifacts belong under `debug/`; they do not create another housekeeping question at delivery.
 
-## Regression entry
+Windows pipeline fixtures:
 
 ```bash
 python -m pytest paper-to-zotero/tests/test_windows_pipeline.py -q
 ```
-
-The original five platform failures went red together before their fixes. Additional tests exercise lost checkpoint recovery, cookie redirects, ambiguous remote states, real competing processes, failure cleanup, search readiness and managed-copy upgrades.
-
-The `Cross-platform runtime` workflow runs the same pipeline fixtures on Windows, macOS and Linux. Fixture results certify these code paths, not a publisher's current access policy or a real user's account entitlement. Tests isolate both HOME and USERPROFILE; installer tests must not patch the developer's actual assistants.

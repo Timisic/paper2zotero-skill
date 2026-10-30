@@ -174,6 +174,21 @@ def probe_zotero_local(timeout: int = 3) -> bool:
         return False
 
 
+def probe_zotero_local_write(timeout: int = 3, url: str | None = None) -> bool:
+    """Zotero 10 can accept a write: HTTP 200 and a Zotero-Server-ID.
+
+    This does not call /local/authorize. That endpoint asks the user to click
+    Allow. A readable API without a server id is Zotero 7 and is not a write path.
+    """
+    import credentials
+    target = url or (credentials.zotero_local_api() + "/users/0/items?limit=1")
+    try:
+        with urllib.request.urlopen(target, timeout=timeout) as response:
+            return response.status == 200 and bool(response.headers.get("Zotero-Server-ID"))
+    except Exception:
+        return False
+
+
 def probe_discovery_search(key: str | None = None) -> dict[str, Any]:
     """Setup requires an explicit OpenAlex key and a successful real query.
 
@@ -544,6 +559,31 @@ def zotero_key(configured: bool, access: Mapping[str, bool | None] | None) -> Re
     return _record(ok, detail, remediation)
 
 
+def zotero_write(local_ok: bool | None, key: Record | None) -> Record:
+    """A write path exists: local Zotero returned a server id, or the Web API key can write."""
+    if local_ok is True:
+        return _record(True, "本地 API 返回 Zotero-Server-ID，写入不需要 Web API key", _fix("zotero_local"))
+    if key is not None and key.get("ok") is True:
+        return _record(True, "Web API key 可写", _fix("zotero_key"))
+    if local_ok is None and key is None:
+        return _record(False, "在线写入探测已跳过（--skip-live）", _fix("zotero_local"))
+    detail = "本地 Zotero 不可写" if local_ok is False else "本地写入未探测"
+    if key is not None:
+        detail += "；" + str(key.get("detail") or "Web API 不可写")
+    return _record(False, detail, _fix("zotero_key"))
+
+
+def converter_ready(plan: Mapping[str, Any]) -> Record:
+    """Some hop in self-hosted MinerU, cloud MinerU, markitdown can run. No token text."""
+    selected = plan.get("selected")
+    base = plan.get("api_base") or ""
+    detail = f"selected={selected or 'none'} api_base={base or 'unset'}"
+    if selected:
+        return _record(True, detail, _fix("mineru"))
+    install = plan.get("markitdown_install") or "pip install 'markitdown[pdf]'"
+    return _record(False, detail + "; " + str(install), _fix("mineru"))
+
+
 def mineru(configured: bool, live: Mapping[str, Any] | None = None) -> Record:
     """A MinerU token is configured; optionally its live acceptance is known."""
     if not configured:
@@ -596,12 +636,14 @@ def skill_links(roots: Sequence[str]) -> Record:
 # over plain HTTP (ADR-0004). Kimi gates `browser_fallback` alone — the route
 # taken for entitlement, anti-bot and reachability walls — so its absence
 # narrows the routes available to one paper instead of stopping the stage.
+# Conversion needs one converter (self-hosted MinerU, cloud MinerU, or
+# markitdown). Ingestion needs a write path: local Zotero 10 or a Web API key.
 STAGE_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     "discovery": (),
     "acquisition": (),
     "browser_fallback": ("kimi",),
     "conversion": ("mineru",),
-    "ingestion": ("zotero_key",),
+    "ingestion": ("zotero_write",),
     "local_sync": ("zotero_local", "zotero_sync"),
 }
 
@@ -616,10 +658,10 @@ def stage_missing(stage: str, records: Mapping[str, Record]) -> list[str]:
 def ready(records: Mapping[str, Record]) -> bool:
     """Conjunction over the live-readiness capabilities only.
 
-    Callers pass exactly the records that gate "ready": zotero-local,
-    zotero-sync, zotero-key and kimi. MCP configuration, MinerU and skill
-    links are reported separately: MinerU absence is degradable, the scripted
-    Web API helpers cover the MCP tool channel, and skill links matter only
-    when invoking from an agent runtime.
+    Callers pass exactly the records that gate "ready". The write gate is
+    `zotero_write` (local Desktop or a Web API key), plus sync and Kimi.
+    MCP configuration, the converter chain and skill links are reported
+    separately. A missing cloud MinerU token does not block a run that has
+    another converter. Skill links matter only when invoking from an agent.
     """
     return bool(records) and all(r.get("ok") is True for r in records.values())

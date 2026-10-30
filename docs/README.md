@@ -31,8 +31,4 @@ python3 scripts/build-distribution.py --output <新的输出目录>
 
 打包包含首页、`install/`、`paper-to-zotero/` 和 `discussion-drafter/`；本目录、测试和本地运行数据不进入安装包。`paper-to-zotero/references/` 是 Agent 执行所需的材料，随 skill 分发。
 
-Windows 原生测试需在装有 Python、Git 和 Poppler 的 Windows 上运行：`python paper-to-zotero/tests/test_windows_setup.py -v`。其他系统上的跳过结果不算 Windows 验收。新系统安装、账号授权、客户端发现技能和真实论文处理，需要分别验证。
-
-`.github/workflows/runtime.yml` 在 Windows、macOS、Linux 上执行流水线、账号连接与托管安装回归。`test_windows_pipeline.py` 复现进程锁、私有文件清理、UTF-8、CRLF note 哈希、公开 PDF Cookie 重定向和多助手更新；`test_mineru_resume.py` 从公开转换入口检查空批次恢复；`test_managed_installation.py` 检查完整副本发布、损坏检测和中断恢复。测试默认使用临时 HOME/USERPROFILE，避免安装用例覆盖维护者的真实技能。Windows 私有文件检查 NTFS ACL；POSIX 检查 0600，不能用 POSIX 权限位冒充 Windows 验证。
-
-批处理性能回归集中在 `tests/test_session_bottlenecks.py`：占位凭据及账号边界、PDF 包装页恢复、批内一次扫描、上传期间登记其他论文、总结批量交接与来源变化保护。配合 `test_write_cost.py` 保留附件读回与重试去重约束；请求数和本地模拟测试不等同于真实网络的十分钟完成保证。
+文献流程的夹具验收是 [verify-paper2zotero](../.agents/skills/verify-paper2zotero/SKILL.md)。上面的 pytest 是全套回归，不是另一份手测清单。默认实验室路径是 Kimi 检索、`MINERU_API_BASE=http://192.168.8.167:8000`、本机 Zotero。

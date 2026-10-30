@@ -70,7 +70,7 @@ python "$SKILL_DIR/scripts/workflow.py" record-paper --run-dir <run_dir> \
   --id '<candidate-id>' --state pdf_acquired --artifact pdf=<paper-dir>/source.pdf
 ```
 
-Save a short handoff note in the run: publisher, observed access state, the portal/database used, action taken, final verification, elapsed time. Do not save cookies or signed query parameters. `save_as_pdf` is a webpage printout and cannot replace the source PDF. A download triggered through the observed publisher interface can be used after the same identity verification; it need not have come through a fixed script.
+Save a short handoff note in the run: publisher, observed access state, the portal/database used, action taken, final verification, elapsed time. Do not save cookies or signed query parameters. `save_as_pdf` is a webpage printout and cannot replace the source PDF. Do not click the publisher Download control, and do not open a PDF URL or SHA-256 this run already holds. `capture` writes that one PDF under the paper directory in `literature-runs/`, not into `~/Downloads`.
 
 `browser_error` means the adapter/session broke; `challenge_unsolved` means the challenge still needs a click; `blocked` means the current page offered no obtainable PDF, not proof that the library has no subscription; `wrong_document` means the bytes belong to another paper. Read `detail` before choosing the next action.
 
@@ -101,7 +101,7 @@ choco install poppler          # Windows
 
 ## Markdown
 
-Topic search and the local PDF default both convert with MinerU after recorded consent. `local_pdf.py` calls the same `stage_convert` path. Use the command below for a direct MinerU run. `--backend local` is the only local-PDF opt-out, and it writes `local-text/paper.md` instead of calling MinerU.
+Conversion follows the chain named in `SKILL.md`. `local_pdf.py` uses the same `stage_convert`. The command below is a direct MinerU cloud run. `--backend local` writes `local-text/paper.md` and does not upload.
 
 Use only identity-verified selected PDFs and recorded MinerU consent (see [workflow.md](workflow.md)). Credentials are resolved by `credentials.py` across supported runtimes.
 
@@ -111,7 +111,7 @@ python "$SKILL_DIR/scripts/mineru_parse.py" --run-dir <run_dir> --pdf <source.pd
 
 Repeat `--pdf` for a batch. Default output is `<PDF parent>/mineru/<source-and-config-id>/paper.md` with extracted image assets. `--output <root>` instead groups outputs by data ID under that root. The checkpoint binds source hashes and converter settings; repeat the same command to resume a submitted batch. Read [recovery.md](recovery.md) after interrupted upload, polling or download. Standalone conversion needs `--consent-source '<explicit approval reference>'`.
 
-MinerU (`vlm`) is the only converter. Without consent or a token, record `markdown_unavailable` as a warning and retain the PDF. A readable PDF can still support a summary labeled `source_basis=pdf`. Conversion failure does not invalidate PDF acquisition or prevent PDF ingestion. To deliver PDFs before a slow conversion, use `process_run.py --stages ingest`; the Markdown attaches to the same parent whenever it arrives. OCR is a MinerU option for scanned input.
+Self-hosted MinerU speaks the V1 Tasks API (`GET /v1/health`, `POST /v1/tasks`), not the cloud v4 batch URL. The cloud hop still uses `vlm` on mineru.net. Either MinerU hop uploads the PDF and needs recorded consent. markitdown does not. Without consent for an upload hop, or with no hop configured, record `markdown_unavailable` as a warning and retain the PDF. A readable PDF can still support a summary labeled `source_basis=pdf`. Conversion failure does not invalidate PDF acquisition or prevent PDF ingestion. To deliver PDFs before a slow conversion, use `process_run.py --stages ingest`; the Markdown attaches to the same parent whenever it arrives. OCR is a MinerU option for scanned input. An empty `MINERU_API_BASE` turns the self-hosted hop off.
 
 ## Full-text reading note
 

@@ -51,6 +51,8 @@ SETTINGS = {
     'ZOTERO_API_KEY', 'ZOTERO_LIBRARY_ID', 'ZOTERO_LIBRARY_TYPE', 'MINERU_TOKEN',
     'OPENALEX_API_KEY', 'SEMANTIC_SCHOLAR_API_KEY', 'CROSSREF_MAILTO',
     'UNPAYWALL_EMAIL', 'SETUP_DESKTOP', 'SETUP_BROWSER',
+    'SEARCH_BACKEND', 'MINERU_API_BASE', 'ZOTERO_LOCAL_API', 'ZOTERO_LOCAL_API_KEY',
+    'ZOTERO_WRITE_BACKEND',
 }
 
 
@@ -103,9 +105,13 @@ def check(*, as_json: bool = False) -> int:
         records.append(record)
         if not as_json:
             render(record)
-    discovery = capability.probe_discovery_search()
-    search_record = {'name': CHECKS['openalex'][0], **discovery,
-                     'action': '' if discovery['ok'] else CHECKS['openalex'][1]}
+    if credentials.search_backend() == 'kimi':
+        search_record = {'name': '论文检索（Kimi WebBridge）', 'ok': True,
+                         'detail': '默认检索走 Kimi WebBridge', 'action': ''}
+    else:
+        discovery = capability.probe_discovery_search()
+        search_record = {'name': CHECKS['openalex'][0], **discovery,
+                         'action': '' if discovery['ok'] else CHECKS['openalex'][1]}
     records.append(search_record)
     if not as_json:
         render(search_record)

@@ -66,7 +66,7 @@ def test_capture_current_follows_observed_pdf_frame_only(monkeypatch, tmp_path):
         "url": url, "content_type": "text/html", "links": [],
         "embedded_pdf_urls": [pdf], "text": "", "title": PROBE_TITLE})
     visited = []
-    def walk(target, session, rounds, settle):
+    def walk(target, session, rounds, settle, **_extra):
         visited.append(target)
         return {"url": target, "kind": "pdf", "trail": []}
     monkeypatch.setattr(browser_pdf, "walk", walk)
@@ -126,7 +126,7 @@ def test_current_capture_ignores_foreign_and_non_pdf_frames(monkeypatch, tmp_pat
     monkeypatch.setattr(browser_pdf, "read_state", lambda _: {
         "url": "https://publisher.example/article", "content_type": "text/html",
         "embedded_pdf_urls": [frame], "links": [], "text": "", "title": "Paper"})
-    monkeypatch.setattr(browser_pdf, "walk", lambda *_: pytest.fail('unrelated frame followed'))
+    monkeypatch.setattr(browser_pdf, "walk", lambda *_args, **_kwargs: pytest.fail('unrelated frame followed'))
     args = Namespace(current=True, url=None, session="fixture", rounds=2, settle=0,
                      output=str(tmp_path / "source.pdf"))
     assert browser_pdf.command_capture(args) == 2

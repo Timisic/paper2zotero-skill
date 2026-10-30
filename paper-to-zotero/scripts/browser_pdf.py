@@ -24,6 +24,11 @@ The blocked cases are reported, never faked: `challenge_unsolved` means a
 human must click the checkbox in the visible tab; `blocked` means no lawful
 copy was reachable from this session. Callers record those and move on.
 
+A URL or SHA-256 already stored for this run is not opened again. The PDF is
+read with `fetch` from the page the tab is already showing. A bare PDF URL is
+never loaded in the tab, because that navigation is what makes the browser
+save another copy into Downloads.
+
 Commands (each prints one JSON line):
   resolve  --doi DOI                 DOI → the URLs worth trying (no doi.org)
   capture  --url URL --output FILE   walk the ladder and write verified bytes
@@ -44,6 +49,7 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -51,8 +57,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paper_artifacts  # noqa: E402
@@ -420,6 +427,318 @@ def is_pdf(raw: bytes) -> bool:
     return raw.startswith(b"%PDF-")
 
 
+_VOLATILE_QUERY = {
+    "token", "access_token", "signature", "sig", "expires", "key", "api_key",
+    "apikey", "email",
+}
+OBTAINED_NAME = "obtained-pdfs.json"
+
+
+def pdf_identity(url: str) -> str:
+    """Wiley's `/doi/pdf/` and `/doi/pdfdirect/` are one file."""
+    text = str(url or "").strip()
+    if not text:
+        return ""
+    parts = urllib.parse.urlsplit(text)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return text
+    host = parts.hostname.lower()
+    if parts.port and not (
+        (parts.scheme == "https" and parts.port == 443) or (parts.scheme == "http" and parts.port == 80)
+    ):
+        host = f"{host}:{parts.port}"
+    path = urllib.parse.unquote(parts.path or "/")
+    path = re.sub(r"/doi/(?:pdfdirect|epdf|pdf)/", "/doi/pdf/", path, flags=re.I)
+    if len(path) > 1:
+        path = path.rstrip("/")
+    kept = [
+        (key, value)
+        for key, value in urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+        if key.lower() not in _VOLATILE_QUERY and not key.lower().startswith("x-amz-")
+    ]
+    kept.sort()
+    return urllib.parse.urlunsplit((parts.scheme.lower(), host, path, urllib.parse.urlencode(kept), ""))
+
+
+def looks_like_pdf_url(url: str) -> bool:
+    parts = urllib.parse.urlsplit(str(url or ""))
+    target = parts.path + (("?" + parts.query) if parts.query else "")
+    return bool(PDF_HREF.search(target))
+
+
+def run_root_for(output: Path) -> Path:
+    resolved = output.resolve()
+    for parent in resolved.parents:
+        if parent.name == "papers":
+            return parent.parent
+    return resolved.parent
+
+
+def _pdf_header(path: Path) -> bool:
+    try:
+        with path.open("rb") as handle:
+            return handle.read(5).startswith(b"%PDF-")
+    except OSError:
+        return False
+
+
+def load_obtained(root: Path) -> dict[str, Any]:
+    path = root / OBTAINED_NAME
+    if not path.is_file():
+        return {"entries": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"entries": []}
+    entries = data.get("entries") if isinstance(data, dict) else None
+    if not isinstance(entries, list):
+        return {"entries": []}
+    return {"entries": [entry for entry in entries if isinstance(entry, dict)]}
+
+
+def _write_obtained(root: Path, entries: Sequence[Mapping[str, Any]]) -> None:
+    path = root / OBTAINED_NAME
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps({"entries": list(entries)}, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+@contextmanager
+def _ledger_lock(root: Path) -> Iterator[None]:
+    root.mkdir(parents=True, exist_ok=True)
+    lock = root / ".obtained-pdfs.lock"
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            os.close(fd)
+            break
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                lock.unlink(missing_ok=True)
+                continue
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def _resolve_obtained(root: Path, entry: Mapping[str, Any]) -> Path | None:
+    raw = str(entry.get("path") or "")
+    if not raw or raw.startswith(("/", "\\")):
+        return None
+    candidate = (root / raw).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError:
+        return None
+    if candidate.is_file() and _pdf_header(candidate):
+        return candidate
+    return None
+
+
+def lookup_obtained(root: Path, url: str = "", digest: str = "") -> Path | None:
+    identity = pdf_identity(url) if url else ""
+    if not identity and not digest:
+        return None
+    if not root.is_dir():
+        return None
+    for entry in load_obtained(root)["entries"]:
+        identities = {str(item) for item in entry.get("identities") or []}
+        url_match = bool(identity) and identity in identities
+        hash_match = bool(digest) and str(entry.get("sha256") or "") == digest
+        if not url_match and not hash_match:
+            continue
+        found = _resolve_obtained(root, entry)
+        if found is not None:
+            return found
+    return None
+
+
+def record_obtained(root: Path, urls: Sequence[str], digest: str, saved: Path) -> None:
+    identities: list[str] = []
+    for url in urls:
+        identity = pdf_identity(str(url or ""))
+        if identity and identity not in identities:
+            identities.append(identity)
+    if (not identities and not digest) or not saved.is_file():
+        return
+    try:
+        relative = saved.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return
+    with _ledger_lock(root):
+        entries = load_obtained(root)["entries"]
+        target = next((entry for entry in entries if digest and entry.get("sha256") == digest), None)
+        if target is None:
+            target = {"sha256": digest, "path": relative, "identities": []}
+            entries.append(target)
+        target["sha256"] = digest
+        target["path"] = relative
+        current = [str(item) for item in target.get("identities") or [] if item]
+        for identity in identities:
+            if identity not in current:
+                current.append(identity)
+        target["identities"] = current
+        _write_obtained(root, entries)
+
+
+def reusable_pdf(
+    root: Path, output: Path, url: str, title: str, doi: str | None
+) -> tuple[bytes, str] | None:
+    found: Path | None = None
+    source = url
+    if output.is_file() and _pdf_header(output):
+        found = output
+    if found is None and url:
+        found = lookup_obtained(root, url=url)
+        source = url
+    if found is None:
+        return None
+    if title or doi:
+        _evidence, status = paper_artifacts.verify(found, title, doi)
+        if status == 2:
+            return None
+    try:
+        raw = found.read_bytes()
+    except OSError:
+        return None
+    if not is_pdf(raw):
+        return None
+    return raw, source or str(found)
+
+
+def _fetch_js(url: str) -> str:
+    return r"""
+(async () => {
+  try {
+    const response = await fetch(__URL__, { credentials: 'include' });
+    const buffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let head = '';
+    for (let i = 0; i < Math.min(bytes.length, 5); i++) head += String.fromCharCode(bytes[i]);
+    if (!head.startsWith('%PDF-')) {
+      return JSON.stringify({
+        ok: false, error: 'not a pdf', status: response.status,
+        content_type: response.headers.get('content-type'), url: response.url
+      });
+    }
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    window.__ltzCapture = btoa(binary);
+    const digest = await crypto.subtle.digest('SHA-256', buffer);
+    return JSON.stringify({
+      ok: true,
+      url: response.url,
+      status: response.status,
+      content_type: response.headers.get('content-type'),
+      bytes: bytes.length,
+      b64_length: window.__ltzCapture.length,
+      sha256: [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('')
+    });
+  } catch (error) {
+    return JSON.stringify({ ok: false, error: String(error).slice(0, 200) });
+  }
+})()
+""".replace("__URL__", json.dumps(url))
+
+
+def _clear_capture(session: str) -> None:
+    try:
+        evaluate("(()=>{delete window.__ltzCapture;return JSON.stringify('cleared')})()", session, timeout=15)
+    except BrowserError:
+        return
+
+
+def _read_chunks(session: str, header: Mapping[str, Any], chunk: int) -> bytes:
+    total = int(header.get("b64_length") or 0)
+    chunks: list[str] = []
+    try:
+        for offset in range(0, total, chunk):
+            piece = evaluate(
+                f"(()=>JSON.stringify(window.__ltzCapture.slice({offset},{offset + chunk})))()",
+                session,
+            )
+            if not isinstance(piece, str):
+                raise BrowserError(f"chunk at offset {offset} did not come back as text")
+            chunks.append(piece)
+        return decode_capture(chunks, str(header.get("sha256") or ""), int(header.get("bytes") or 0))
+    finally:
+        _clear_capture(session)
+
+
+def fetch_pdf(session: str, url: str, chunk: int = CHUNK_CHARS) -> tuple[bytes, dict[str, Any]] | None:
+    """Read one PDF URL from the current tab without navigating to it.
+
+    Navigation is what makes the browser save a copy. `fetch` does not.
+    Anything other than a PDF is a miss. The caller leaves the URL unopened.
+    """
+    if not looks_like_pdf_url(url):
+        return None
+    try:
+        header = evaluate(_fetch_js(url), session, timeout=60)
+    except BrowserError:
+        return None
+    if not isinstance(header, dict) or not header.get("ok"):
+        return None
+    try:
+        raw = _read_chunks(session, header, chunk)
+    except BrowserError:
+        return None
+    if not is_pdf(raw):
+        return None
+    return raw, header
+
+
+@contextmanager
+def obtaining(root: Path, identity: str, wait: float = 20.0) -> Iterator[str]:
+    """One in-flight capture per PDF identity.
+
+    A second caller that arrives while the first is still saving waits for
+    the ledger instead of opening the URL again. `ready` means the file is
+    already stored. `owner` means this caller may fetch.
+    """
+    if not identity:
+        yield "owner"
+        return
+    claims = root / ".obtaining"
+    claims.mkdir(parents=True, exist_ok=True)
+    path = claims / hashlib.sha256(identity.encode()).hexdigest()[:24]
+    created = False
+    state = "owner"
+    deadline = time.monotonic() + wait
+    while True:
+        if lookup_obtained(root, url=identity):
+            state = "ready"
+            break
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            os.close(fd)
+            created = True
+            state = "owner"
+            break
+        except FileExistsError:
+            try:
+                age = time.time() - path.stat().st_mtime
+            except OSError:
+                continue
+            if age > 120:
+                path.unlink(missing_ok=True)
+                continue
+            if time.monotonic() >= deadline:
+                state = "owner"
+                break
+            time.sleep(0.2)
+    try:
+        yield state
+    finally:
+        if created:
+            path.unlink(missing_ok=True)
+
+
 # ── The ladder ─────────────────────────────────────────────────────────────
 
 def read_state(session: str) -> dict[str, Any]:
@@ -534,7 +853,18 @@ def navigate(url: str, session: str, settle: float = 10.0) -> dict[str, Any]:
     the tab is still showing the *previous* URL when the budget runs out, this
     returns an error state rather than that stale page — otherwise the caller
     reads one paper's bytes while believing it asked for another's.
+
+    A bare PDF URL is not opened. Arc saves a copy into Downloads on that
+    navigation. The bytes are fetched from the article page that is already open.
     """
+    if looks_like_pdf_url(url):
+        return {
+            "url": "",
+            "requested": url,
+            "kind": "error",
+            "refused": "pdf-navigation",
+            "detail": "refusing to open a PDF URL; the browser would save another copy",
+        }
     ensure_tab(session, url)
     before = str(read_state(session).get("url") or "")
     command("navigate", {"url": url}, session)
@@ -551,7 +881,14 @@ def navigate(url: str, session: str, settle: float = 10.0) -> dict[str, Any]:
     return state
 
 
-def walk(url: str, session: str, rounds: int = 6, settle: float = 10.0, patience: float = 25.0) -> dict[str, Any]:
+def walk(
+    url: str,
+    session: str,
+    rounds: int = 6,
+    settle: float = 10.0,
+    patience: float = 25.0,
+    obtained_root: Path | None = None,
+) -> dict[str, Any]:
     """Drive the tab from `url` to a PDF response, or to a recorded refusal.
 
     A queue of candidates rather than a single "follow the best link" path,
@@ -560,10 +897,24 @@ def walk(url: str, session: str, rounds: int = 6, settle: float = 10.0, patience
     once, so a bounce costs one candidate instead of spinning until the round
     budget runs out, and the walk moves on to the next candidate.
 
+    A PDF URL is read with `fetch` from the page already open. It is never
+    opened in the tab: that navigation is what makes Arc save another copy.
+    A URL or SHA-256 this run already holds is not fetched again.
+
     Returns the final page state plus `kind` (the classification it stopped
     on) and `trail` (what it did on the way), so a caller can record exactly
     why a paper is not `read_back_verified`.
     """
+    if obtained_root is not None:
+        considered: set[str] = set()
+        for candidate in (url, *publisher_pdf_urls(url)):
+            identity = pdf_identity(candidate)
+            if not identity or identity in considered:
+                continue
+            considered.add(identity)
+            held = lookup_obtained(obtained_root, url=candidate)
+            if held is not None:
+                return {"kind": "pdf", "url": candidate, "reused_path": str(held), "trail": ["reused"]}
     trail: list[str] = []
     visited: set[str] = set()
     queue: list[str] = [url]
@@ -575,6 +926,31 @@ def walk(url: str, session: str, rounds: int = 6, settle: float = 10.0, patience
             break
         target = queue.pop(0)
         visited.add(target)
+        if obtained_root is not None:
+            held = lookup_obtained(obtained_root, url=target)
+            if held is not None:
+                trail.append(f"reused @ {target[:120]}")
+                return {"kind": "pdf", "url": target, "reused_path": str(held), "trail": trail}
+        if looks_like_pdf_url(target):
+            # Opening this URL is the download. Read it from the current page.
+            fetched = fetch_pdf(session, target)
+            if fetched is not None and is_pdf(fetched[0]):
+                raw, header = fetched
+                if obtained_root is not None:
+                    held = lookup_obtained(obtained_root, digest=hashlib.sha256(raw).hexdigest())
+                    if held is not None:
+                        trail.append(f"reused @ {target[:120]}")
+                        return {"kind": "pdf", "url": target, "reused_path": str(held), "trail": trail}
+                trail.append(f"pdf @ {target[:120]}")
+                return {
+                    "kind": "pdf",
+                    "url": str(header.get("url") or target),
+                    "pdf_bytes": raw,
+                    "pdf_header": header,
+                    "trail": trail,
+                }
+            trail.append(f"pdf-not-opened @ {target[:120]}")
+            continue
         state = navigate(target, session, settle)
         landed = str(state.get("url") or "")
         # The tab never left the previous page: this candidate was not visited,
@@ -636,73 +1012,42 @@ def capture_bytes(session: str, chunk: int = CHUNK_CHARS) -> tuple[bytes, dict[s
     header = evaluate(CAPTURE_JS, session)
     if not isinstance(header, dict) or not header.get("ok"):
         raise BrowserError(str((header or {}).get("error") if isinstance(header, dict) else header))
-    total = int(header.get("b64_length") or 0)
-    chunks: list[str] = []
-    for offset in range(0, total, chunk):
-        piece = evaluate(
-            f"(()=>JSON.stringify(window.__ltzCapture.slice({offset},{offset + chunk})))()", session
-        )
-        if not isinstance(piece, str):
-            raise BrowserError(f"chunk at offset {offset} did not come back as text")
-        chunks.append(piece)
-    evaluate("(()=>{delete window.__ltzCapture;return JSON.stringify('cleared')})()", session)
-    return decode_capture(chunks, str(header.get("sha256") or ""), int(header.get("bytes") or 0)), header
+    return _read_chunks(session, header, chunk), header
 
 
 # ── Commands ───────────────────────────────────────────────────────────────
 
-def command_capture(args: argparse.Namespace) -> int:
-    if getattr(args, "current", False):
-        state = read_state(args.session)
-        state.update({"kind": classify_page(state), "trail": ["capture current authenticated page"]})
-        # Wiley serves an HTML PDF wrapper after successful authentication.
-        # Follow only an actually observed same-origin document, never ad/login
-        # frames or a new publisher URL guessed from the wrapper's address.
-        if state["kind"] in ("landing", "blocked"):
-            origin = urllib.parse.urlparse(str(state.get("url") or ""))
-            for target in state.get("embedded_pdf_urls", []):
-                parsed = urllib.parse.urlparse(target)
-                if (parsed.scheme in ("http", "https") and parsed.netloc == origin.netloc
-                        and parsed.scheme == origin.scheme and target != state.get("url")
-                        and PDF_HREF.search(parsed.path)):
-                    state = walk(target, args.session, args.rounds, args.settle)
-                    break
-    else:
-        if not args.url:
-            raise BrowserError("capture requires --url or --current")
-        state = walk(args.url, args.session, args.rounds, args.settle)
+def _store_capture(
+    output: Path,
+    root: Path,
+    raw: bytes,
+    header: Mapping[str, Any],
+    urls: Sequence[str],
+    title: str,
+    doi: str | None,
+    reused: bool,
+) -> int:
     report: dict[str, Any] = {
         "status": "failed",
-        "kind": state.get("kind"),
-        "requested_url": args.url,
-        "final_url": state.get("url"),
-        "trail": state.get("trail"),
+        "kind": "pdf",
+        "requested_url": urls[0] if urls else None,
+        "final_url": next((url for url in urls if url), None),
+        "reused": reused,
     }
-    if state.get("kind") != "pdf":
-        report["remediation"] = {
-            "challenge_unsolved": "打开 Arc 里这个标签页，手动点一下 Cloudflare 的“验证您是人类”，再重跑本命令。",
-            "blocked": "PDF 链接都被弹回摘要页或页面根本没有全文（本馆无订阅权限）；"
-            "先在 MyLOFT 里打开该出版社完成机构登录再重试，否则改用 OA 镜像或记为 metadata_only。",
-            "error": "浏览器打不开这个地址（网络/代理不可达）；换镜像源或检查代理。",
-        }.get(str(state.get("kind")), "浏览器未到达 PDF 响应。")
-        report["detail"] = report["remediation"]
-        print(json.dumps(public_report(report), ensure_ascii=False))
-        return 2
-    raw, header = capture_bytes(args.session, args.chunk)
     if not is_pdf(raw):
         report["kind"] = "not_a_pdf"
         report["content_type"] = header.get("content_type")
         report["remediation"] = "响应不是 PDF（可能是登录页或错误页）；不要保存，改走其他来源。"
         print(json.dumps(public_report(report), ensure_ascii=False))
         return 2
-    if args.title or args.doi:
+    if title or doi:
         # A valid PDF is not the same as the *right* PDF: MDPI's article page
         # links its journal's marketing flyer, which downloads perfectly. When
         # the caller knows what it asked for, check before writing. Text the
         # builtin reader cannot decode means "unknown", never "mismatch", so
         # the file is still written and left for identity verification.
         text, extractor = paper_artifacts.extract_text_from_bytes(raw)
-        evidence = paper_artifacts.identity_evidence(text, args.title or "", args.doi)
+        evidence = paper_artifacts.identity_evidence(text, title, doi)
         if extractor != "none" and not paper_artifacts.matches(evidence):
             report["kind"] = "wrong_document"
             report["identity_evidence"] = evidence
@@ -712,21 +1057,95 @@ def command_capture(args: argparse.Namespace) -> int:
             )
             print(json.dumps(public_report(report), ensure_ascii=False))
             return 2
-    output = Path(args.output)
+    digest = hashlib.sha256(raw).hexdigest()
+    prior = lookup_obtained(root, digest=digest)
+    payload = prior.read_bytes() if prior is not None and prior.resolve() != output.resolve() else raw
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_bytes(raw)
+    if not output.is_file() or hashlib.sha256(output.read_bytes()).hexdigest() != digest:
+        output.write_bytes(payload)
+    record_obtained(root, urls, digest, output)
     report.update(
         {
             "status": "captured",
             "path": str(output.resolve()),
-            "bytes": len(raw),
-            "sha256": hashlib.sha256(raw).hexdigest(),
+            "bytes": len(payload),
+            "sha256": digest,
             "content_type": header.get("content_type"),
             "observed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         }
     )
     print(json.dumps(public_report(report), ensure_ascii=False))
     return 0
+
+
+def _bytes_from_state(state: Mapping[str, Any], session: str, chunk: int) -> tuple[bytes, dict[str, Any]]:
+    if state.get("pdf_bytes") is not None:
+        return bytes(state["pdf_bytes"]), dict(state.get("pdf_header") or {})
+    if state.get("reused_path"):
+        return Path(str(state["reused_path"])).read_bytes(), {}
+    return capture_bytes(session, chunk)
+
+
+def command_capture(args: argparse.Namespace) -> int:
+    output = Path(args.output)
+    root = run_root_for(output)
+    requested = str(getattr(args, "url", None) or "")
+    title = str(getattr(args, "title", "") or "")
+    doi = getattr(args, "doi", None)
+    held = reusable_pdf(root, output, requested, title, doi)
+    if held is not None:
+        raw, source = held
+        return _store_capture(output, root, raw, {}, [requested, source], title, doi, reused=True)
+    with obtaining(root, pdf_identity(requested) if requested else "") as gate:
+        if gate == "ready":
+            held = reusable_pdf(root, output, requested, title, doi)
+            if held is not None:
+                raw, source = held
+                return _store_capture(output, root, raw, {}, [requested, source], title, doi, reused=True)
+        if getattr(args, "current", False):
+            state = read_state(args.session)
+            state.update({"kind": classify_page(state), "trail": ["capture current authenticated page"]})
+            # Wiley serves an HTML PDF wrapper after successful authentication.
+            # Follow only an actually observed same-origin document, never ad/login
+            # frames or a new publisher URL guessed from the wrapper's address.
+            if state["kind"] in ("landing", "blocked"):
+                origin = urllib.parse.urlparse(str(state.get("url") or ""))
+                for target in state.get("embedded_pdf_urls", []):
+                    parsed = urllib.parse.urlparse(target)
+                    if (parsed.scheme in ("http", "https") and parsed.netloc == origin.netloc
+                            and parsed.scheme == origin.scheme and target != state.get("url")
+                            and PDF_HREF.search(parsed.path)):
+                        state = walk(
+                            target, args.session, args.rounds, args.settle, obtained_root=root,
+                        )
+                        break
+        else:
+            if not requested:
+                raise BrowserError("capture requires --url or --current")
+            state = walk(requested, args.session, args.rounds, args.settle, obtained_root=root)
+        report: dict[str, Any] = {
+            "status": "failed",
+            "kind": state.get("kind"),
+            "requested_url": requested or None,
+            "final_url": state.get("url"),
+            "trail": state.get("trail"),
+        }
+        if state.get("kind") != "pdf":
+            report["remediation"] = {
+                "challenge_unsolved": "打开 Arc 里这个标签页，手动点一下 Cloudflare 的“验证您是人类”，再重跑本命令。",
+                "blocked": "PDF 链接都被弹回摘要页或页面根本没有全文（本馆无订阅权限）；"
+                "先在 MyLOFT 里打开该出版社完成机构登录再重试，否则改用 OA 镜像或记为 metadata_only。",
+                "error": "浏览器打不开这个地址（网络/代理不可达）；换镜像源或检查代理。",
+            }.get(str(state.get("kind")), "浏览器未到达 PDF 响应。")
+            report["detail"] = report["remediation"]
+            print(json.dumps(public_report(report), ensure_ascii=False))
+            return 2
+        raw, header = _bytes_from_state(state, args.session, getattr(args, "chunk", CHUNK_CHARS))
+        return _store_capture(
+            output, root, raw, header,
+            [requested, str(state.get("url") or ""), str(header.get("url") or "")],
+            title, doi, reused=bool(state.get("reused_path")),
+        )
 
 
 def public_report(value: Any) -> Any:

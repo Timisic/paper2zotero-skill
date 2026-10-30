@@ -67,6 +67,6 @@ def test_ingestion_stage_requires_the_write_channel_only(tmp_path: Path) -> None
     payload = json.loads(run_script(
         "preflight.py", "--codex-config", str(config), "--json", "--skip-live", "--stage", "ingestion",
     ).stdout)
-    assert payload["stage_requirements"] == ["zotero_key"]
+    assert payload["stage_requirements"] == ["zotero_write"]
     assert payload["stage_ready"] is False
-    assert payload["stage_missing"] == ["zotero_key"]
+    assert payload["stage_missing"] == ["zotero_write"]

@@ -4,7 +4,7 @@
 
 ## Journaled writer (all runtimes)
 
-Use the same writer with or without Zotero MCP. MCP remains useful for discovery of existing library data; the writer owns this run's mutations and checkpoints.
+When this session has Zotero MCP tools, use them for create, update, attachment, and collection changes. Otherwise run the journaled writer below. It prefers the local Desktop API (`ZOTERO_LOCAL_API`, default `http://127.0.0.1:23119/api`, library `users/0`). A write sends `Zotero-Server-ID`. The first write posts to `/api/local/authorize` and Zotero shows Allow / Always Allow / Deny. Always Allow stores `ZOTERO_LOCAL_API_KEY` so later runs do not prompt. A 401 authorizes once and retries. No `ZOTERO_API_KEY` is required while that local API is writable. Set `ZOTERO_WRITE_BACKEND=web` to force the Web API, or `local` to fail when Desktop is down. `auto` (the default) uses Desktop, then the Web API. MCP remains useful for reading the library either way. The writer owns this run's scripted mutations and checkpoints.
 
 ```bash
 python "$SKILL_DIR/scripts/zotero_ingest.py" --run-dir <run_dir> --dry-run
@@ -17,12 +17,12 @@ For an existing collection, pass `--collection-key` instead. Subsequent calls re
 The writer:
 
 1. Validates what the paper has. Only the source PDF gates ingestion, because its identity must be proven before anything is written; a paper without one must already be explicitly `metadata_only`. Markdown and the summary are checked when present and reported as pending when absent.
-2. Scans every item page for a normalized DOI match. Without DOI it requires title, year and first-author identity. Ambiguous duplicates stop that paper. A supplied `--reuse-map <json>` maps selected candidate IDs to existing keys and is identity-checked.
+2. Scans every item page for a normalized DOI match. Without DOI it requires title, year and first-author identity. Ambiguous duplicates stop that paper. A supplied `--reuse-map <json>` maps selected candidate IDs to existing keys and is identity-checked. One DOI stays one item. The writer adds this run's collection and leaves the item's other collections in place.
 3. Journals a stable key, creation payload and write token before each create. Response loss resumes by reading that key; a version-zero create cannot overwrite a persisted object.
 4. Merges missing metadata, adds collection membership and requested tags using a version precondition, preserving populated fields and other collections. A conflict requires a fresh read on resume.
-5. Reuses matching files by SHA-256. An empty attachment record resumes uploading instead of being treated as complete. Upload uses authorization, storage transfer and registration; storage receives no API key.
-6. Writes a run- and content-versioned summary note when a summary exists. Existing user notes and summaries for other runs remain intact.
-7. Reads back collection membership, the summary and attachment bytes. It verifies the exact local storage paths against source hashes before reporting `read_back_verified`.
+5. Reuses an imported file whose md5 already matches, whatever its filename is. An empty attachment record resumes uploading instead of being treated as complete. A different file that already uses this run's filename (`source.pdf`, `paper.md`) is replaced in place (`If-Match`) instead of gaining a sibling. Upload is authorization, byte transfer, then registration. Web API `/storage` and off-origin signed URLs receive no API key. The local Desktop byte POST goes to `/api/local/uploads/` and sends `Zotero-API-Key` plus `Zotero-Server-ID`. Relative upload URLs are resolved against the API origin.
+6. Writes a run- and content-versioned summary note when a summary exists. The marker is `literature-to-zotero:<run>:<hash>`. A later summary from the same run replaces that note. Notes from other runs, and any note this run does not own, stay as they are. A summary whose text contains `AutoResearch` is not written.
+7. Reads back collection membership, the summary and attachment bytes. On the local API, `GET /file` is a 302 to a `file://` path and the writer reads that path. It verifies the exact local storage paths against source hashes before reporting `read_back_verified`.
 
 Each paper ends in one state, and every one of them is a delivery, not a retry signal:
 

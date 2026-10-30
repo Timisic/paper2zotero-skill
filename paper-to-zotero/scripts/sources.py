@@ -91,6 +91,7 @@ LABELS = {
     "unpaywall": "Unpaywall",
     "arxiv": "arXiv",
     "pmc": "PMC",
+    "kimi": "Kimi",
 }
 
 # The query parameters each source is actually sent, recorded in a run's query
@@ -98,6 +99,7 @@ LABELS = {
 SENT_FIELDS = {
     "openalex": ["search", "filter", "per-page", "sort"],
     "semantic_scholar": ["query", "year", "limit", "fields"],
+    "kimi": ["query"],
 }
 
 S2_FIELDS = ("title,abstract,year,publicationDate,venue,publicationVenue,publicationTypes,"
@@ -625,6 +627,34 @@ def normalize(source: str, record: Mapping[str, Any], timestamp: str) -> dict[st
             "identifiers": identifiers,
         }
         fallback = f"s2:{paper_id}" if paper_id else None
+    elif source == "kimi":
+        doi = canonical_doi(record.get("doi"))
+        authors = record.get("authors") or []
+        if isinstance(authors, str):
+            authors = [authors]
+        try:
+            year = int(record["year"]) if record.get("year") not in (None, "") else None
+        except (TypeError, ValueError):
+            year = None
+        candidate = {
+            "doi": doi,
+            "title": record.get("title"),
+            "year": year,
+            "publication_date": None,
+            "venue": record.get("venue"),
+            "venue_type": None,
+            "work_type": None,
+            "language": None,
+            "authors": [author for author in authors if isinstance(author, str) and author],
+            "abstract": record.get("abstract"),
+            "cited_by_count": record.get("cited_by_count"),
+            "landing_page_url": record.get("url") or record.get("landing"),
+            "oa_pdf_url": record.get("pdf") or record.get("pdf_url"),
+            "is_oa": None,
+            "oa_status": None,
+            "identifiers": {"doi": doi},
+        }
+        fallback = None
     else:
         raise KeyError(f"{source} does not produce candidates")
 
@@ -709,6 +739,9 @@ def locations(source: str, record: Mapping[str, Any]) -> list[dict[str, Any]]:
     elif source == "arxiv":
         add(record.get("pdf_url"), "pdf", "preprint", "repository")
         add(record.get("abs_url"), "landing", "preprint", "repository")
+    elif source == "kimi":
+        add(record.get("pdf") or record.get("pdf_url"), "pdf", None)
+        add(record.get("url") or record.get("landing"), "landing", None)
     elif source == "pmc":
         url = str(record.get("pdf_url") or "")
         if url.startswith("s3://pmc-oa-opendata/"):
@@ -734,7 +767,7 @@ def locations(source: str, record: Mapping[str, Any]) -> list[dict[str, Any]]:
 REQUIRES_SETTING = ("semantic_scholar", "unpaywall")
 
 ROLES = {
-    "openalex": "默认检索来源",
+    "openalex": "可选 HTTP 检索来源",
     "semantic_scholar": "第二检索来源与标识符补全",
     "crossref": "DOI 元数据与出版商登记链接",
     "unpaywall": "开放副本定位",
