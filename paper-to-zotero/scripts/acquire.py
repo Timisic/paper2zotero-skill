@@ -251,6 +251,38 @@ def ordered(locations: Sequence[Mapping[str, Any]], kind: str) -> list[dict[str,
 
 # ── Fetching ───────────────────────────────────────────────────────────────
 
+def held_pdf(request: AcquireRequest, url: str) -> tuple[int, dict[str, Any]] | None:
+    root = browser_pdf.run_root_for(request.output)
+    found = browser_pdf.lookup_obtained(root, url=url)
+    if found is None:
+        return None
+    evidence, status = paper_artifacts.verify(
+        found, str(request.candidate.get("title") or ""), request.candidate.get("doi"))
+    if status == 2:
+        return None
+    digest = str(evidence.get("sha256") or "")
+    destination = request.output
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.resolve() != found.resolve():
+        current = hashlib.sha256(destination.read_bytes()).hexdigest() if destination.is_file() else ""
+        if current != digest:
+            destination.write_bytes(found.read_bytes())
+    if digest and destination.is_file():
+        browser_pdf.record_obtained(root, [url], digest, destination)
+    return status, evidence
+
+
+def remember_pdf(request: AcquireRequest, url: str) -> None:
+    destination = request.output
+    if not destination.is_file():
+        return
+    raw = destination.read_bytes()
+    if not raw.startswith(PDF_MAGIC):
+        return
+    browser_pdf.record_obtained(
+        browser_pdf.run_root_for(destination), [url], hashlib.sha256(raw).hexdigest(), destination)
+
+
 def fetch(url: str, destination: Path, client: Client, limits: Limits,
           budget: float) -> dict[str, Any]:
     """Download one URL into a temporary file. Returns an attempt record.
@@ -385,6 +417,19 @@ def acquire(request: AcquireRequest) -> dict[str, Any]:
         for entry in entries[: limits.max_http_urls]:
             if time.monotonic() >= deadline:
                 break
+            held = held_pdf(request, str(entry["url"]))
+            if held is not None:
+                status, evidence = held
+                trail.append({"url": redact(str(entry["url"])), "channel": "existing", "status": "captured",
+                              "kind": "pdf", "sha256": evidence.get("sha256"),
+                              "verification": "verified" if status == 0 else "unverified"})
+                if status == 0:
+                    return {"ok": True, "path": str(request.output), "channel": "existing",
+                            "source": entry.get("source"), "version": entry.get("version"),
+                            "evidence": evidence, "trail": trail}
+                if kept is None:
+                    kept, unresolved = str(request.output), evidence
+                continue
             attempt = fetch(str(entry["url"]), request.output, client, limits,
                             budget=deadline - time.monotonic())
             attempt.update({"source": entry.get("source"), "version": entry.get("version"),
@@ -394,6 +439,8 @@ def acquire(request: AcquireRequest) -> dict[str, Any]:
                 continue
             verdict, evidence = verified(Path(str(attempt["path"])), request.output, candidate, attempt)
             attempt.pop("path", None)
+            if verdict != "rejected":
+                remember_pdf(request, str(entry["url"]))
             if verdict == "verified":
                 return {"ok": True, "path": str(request.output), "channel": "http",
                         "source": entry.get("source"), "version": entry.get("version"),
@@ -429,6 +476,19 @@ def acquire(request: AcquireRequest) -> dict[str, Any]:
         for entry in browser_locations(locations)[: limits.max_browser_urls]:
             if time.monotonic() >= deadline:
                 break
+            held = held_pdf(request, str(entry["url"]))
+            if held is not None:
+                status, evidence = held
+                trail.append({"url": redact(str(entry["url"])), "channel": "existing", "status": "captured",
+                              "kind": "pdf", "sha256": evidence.get("sha256"),
+                              "verification": "verified" if status == 0 else "unverified"})
+                if status == 0:
+                    return {"ok": True, "path": str(request.output), "channel": "existing",
+                            "source": entry.get("source"), "version": entry.get("version"),
+                            "evidence": evidence, "trail": trail}
+                if kept is None:
+                    kept, unresolved = str(request.output), evidence
+                continue
             temporary = request.output.with_suffix(request.output.suffix + ".part")
             attempt = capture_with_browser(request, entry, candidate, temporary)
             trail.append(attempt)
@@ -436,6 +496,8 @@ def acquire(request: AcquireRequest) -> dict[str, Any]:
                 temporary.unlink(missing_ok=True)
                 continue
             verdict, evidence = verified(temporary, request.output, candidate, attempt)
+            if verdict != "rejected":
+                remember_pdf(request, str(entry["url"]))
             if verdict == "verified":
                 return {"ok": True, "path": str(request.output), "channel": "browser",
                         "source": entry.get("source"), "version": entry.get("version"),

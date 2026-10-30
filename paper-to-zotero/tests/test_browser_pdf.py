@@ -210,43 +210,43 @@ class FakeBrowser:
         return dict(self.pages.get(url, state(url=url, text="Not found")))
 
 
-def run_walk(monkeypatch: pytest.MonkeyPatch, browser: FakeBrowser, start: str) -> dict[str, object]:
+def run_walk(monkeypatch: pytest.MonkeyPatch, browser: FakeBrowser, start: str, fetch=None) -> dict[str, object]:
     monkeypatch.setattr(MODULE, "navigate", browser.navigate)
+    monkeypatch.setattr(MODULE, "fetch_pdf", fetch if fetch is not None else (lambda *args, **kwargs: None))
     monkeypatch.setattr(MODULE, "time", type("_T", (), {"monotonic": staticmethod(lambda: 0.0), "sleep": staticmethod(lambda _s: None)}))
     return MODULE.walk(start, "test-session", rounds=6)
 
 
 def test_a_landing_page_is_followed_to_its_pdf(monkeypatch: pytest.MonkeyPatch) -> None:
+    pdf = b"%PDF-1.4 fixture\n"
+    fetched: list[str] = []
+
+    def fetch(_session: str, url: str, chunk: int = 0) -> tuple[bytes, dict[str, str]] | None:
+        fetched.append(url)
+        if url.endswith("/pdf"):
+            return pdf, {"url": url, "content_type": "application/pdf"}
+        return None
+
     browser = FakeBrowser(
-        {
-            "https://example.org/article/1": state(links=["https://example.org/article/1/pdf"]),
-            "https://example.org/article/1/pdf": state(
-                url="https://example.org/article/1/pdf", content_type="application/pdf"
-            ),
-        }
+        {"https://example.org/article/1": state(links=["https://example.org/article/1/pdf"])}
     )
-    result = run_walk(monkeypatch, browser, "https://example.org/article/1")
+    result = run_walk(monkeypatch, browser, "https://example.org/article/1", fetch=fetch)
     assert result["kind"] == "pdf"
-    assert browser.visits == ["https://example.org/article/1", "https://example.org/article/1/pdf"]
+    assert result["pdf_bytes"] == pdf
+    assert browser.visits == ["https://example.org/article/1"]
+    assert fetched == ["https://example.org/article/1/pdf"]
 
 
 def test_bouncing_pdf_links_end_as_blocked_without_looping(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Wiley's no-entitlement shape: every PDF URL redirects to the abstract."""
+    """Wiley's no-entitlement shape: the PDF URLs are not opened in the tab."""
     abstract = state(
         url="https://example.org/doi/abs/1",
         links=["https://example.org/doi/pdf/1", "https://example.org/doi/pdfdirect/1"],
     )
-    browser = FakeBrowser(
-        {
-            "https://example.org/doi/1": abstract,
-            "https://example.org/doi/pdf/1": abstract,
-            "https://example.org/doi/pdfdirect/1": abstract,
-        }
-    )
+    browser = FakeBrowser({"https://example.org/doi/1": abstract})
     result = run_walk(monkeypatch, browser, "https://example.org/doi/1")
     assert result["kind"] == "blocked"
-    assert len(browser.visits) == 3
-    assert len(set(browser.visits)) == 3
+    assert browser.visits == ["https://example.org/doi/1"]
 
 
 def test_an_unreachable_host_stops_immediately(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -449,13 +449,48 @@ def test_a_cross_origin_citation_url_is_still_followed() -> None:
 
 
 def test_the_walk_stops_rather_than_following_a_foreign_pdf(monkeypatch: pytest.MonkeyPatch) -> None:
+    fetched: list[str] = []
+
+    def fetch(_session: str, url: str, chunk: int = 0) -> None:
+        fetched.append(url)
+        return None
+
     landing = state(url="https://www.mdpi.com/x/1", links=["https://ads.example.net/flyer.pdf"])
     browser = FakeBrowser({"https://www.mdpi.com/x/1": landing})
-    result = run_walk(monkeypatch, browser, "https://www.mdpi.com/x/1")
+    result = run_walk(monkeypatch, browser, "https://www.mdpi.com/x/1", fetch=fetch)
     assert result["kind"] == "blocked"
-    # The platform's own /pdf convention is tried; the foreign flyer never is.
-    assert browser.visits == ["https://www.mdpi.com/x/1", "https://www.mdpi.com/x/1/pdf"]
-    assert not any("ads.example.net" in visited for visited in browser.visits)
+    assert browser.visits == ["https://www.mdpi.com/x/1"]
+    assert fetched == ["https://www.mdpi.com/x/1/pdf"]
+    assert not any("ads.example.net" in url for url in [*browser.visits, *fetched])
+
+
+def test_a_bare_pdf_url_is_not_opened(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_args, **_kwargs):
+        raise AssertionError("the browser was asked to open a PDF URL")
+
+    monkeypatch.setattr(MODULE, "command", boom)
+    monkeypatch.setattr(MODULE, "ensure_tab", boom)
+    result = MODULE.navigate("https://www.frontiersin.org/articles/10.1000/x/pdf", "literature")
+    assert result["refused"] == "pdf-navigation"
+
+
+def test_a_pdf_already_stored_is_not_fetched_again(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "literature-runs" / "demo"
+    saved = root / "papers" / "one" / "source.pdf"
+    pdf = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
+    saved.parent.mkdir(parents=True)
+    saved.write_bytes(pdf)
+    direct = "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1000/alpha"
+    sibling = "https://onlinelibrary.wiley.com/doi/pdf/10.1000/alpha"
+    MODULE.record_obtained(root, [direct], hashlib.sha256(pdf).hexdigest(), saved)
+    opened: list[str] = []
+    monkeypatch.setattr(MODULE, "navigate", lambda *args, **kwargs: opened.append(str(args[0])) or {})
+    monkeypatch.setattr(MODULE, "fetch_pdf", lambda *_args, **_kwargs: opened.append("fetch") or None)
+    result = MODULE.walk(sibling, "literature", obtained_root=root)
+    assert result["kind"] == "pdf"
+    assert result["reused_path"] == str(saved.resolve())
+    assert opened == []
+    assert "Downloads" not in str(saved)
 
 
 def test_a_pdf_endpoint_does_not_get_the_convention_applied_again() -> None:

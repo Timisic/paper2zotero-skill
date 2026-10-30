@@ -70,7 +70,7 @@ python "$SKILL_DIR/scripts/workflow.py" record-paper --run-dir <run_dir> \
   --id '<candidate-id>' --state pdf_acquired --artifact pdf=<paper-dir>/source.pdf
 ```
 
-Save a short handoff note in the run: publisher, observed access state, the portal/database used, action taken, final verification, elapsed time. Do not save cookies or signed query parameters. `save_as_pdf` is a webpage printout and cannot replace the source PDF. A download triggered through the observed publisher interface can be used after the same identity verification; it need not have come through a fixed script.
+Save a short handoff note in the run: publisher, observed access state, the portal/database used, action taken, final verification, elapsed time. Do not save cookies or signed query parameters. `save_as_pdf` is a webpage printout and cannot replace the source PDF. Do not click the publisher Download control, and do not open a PDF URL or SHA-256 this run already holds. `capture` writes that one PDF under the paper directory in `literature-runs/`, not into `~/Downloads`.
 
 `browser_error` means the adapter/session broke; `challenge_unsolved` means the challenge still needs a click; `blocked` means the current page offered no obtainable PDF, not proof that the library has no subscription; `wrong_document` means the bytes belong to another paper. Read `detail` before choosing the next action.
 

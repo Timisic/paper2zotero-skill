@@ -33,7 +33,7 @@ import shlex
 import subprocess
 import sys
 import time
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -282,6 +282,43 @@ def record_trail(run: Path, identity: str, target: Path, result: dict[str, Any])
     workflow.Run.record(run, identity, artifact="acquisition_trail=" + str(path))
 
 
+def conversion_plan(request: ProcessRequest) -> tuple[tuple[str, str] | None, dict[str, Any]]:
+    """Which converter runs, and the health evidence behind that choice.
+
+    The public cloud URL means "use the chain": a healthy self-hosted Tasks
+    host, else a cloud token, else markitdown. Any other base that answers
+    `GET /v1/health` is that Tasks host. A base that does not is a cloud v4
+    mirror, which is how the offline fixtures speak.
+    """
+    override = request.mineru_api_base.rstrip("/")
+    if override != mineru_parse.CLOUD_API:
+        health = mineru_parse.tasks_health(override)
+        if health.get("ok"):
+            return ("mineru-self-hosted", override), {
+                "selected": "mineru-self-hosted", "api_base": override, "health": health,
+            }
+        return ("mineru-cloud", override), {
+            "selected": "mineru-cloud", "api_base": override, "health": health,
+        }
+    info = mineru_parse.converter_plan(live=True)
+    selected = info.get("selected")
+    if selected == "mineru-self-hosted":
+        return ("mineru-self-hosted", str(info.get("api_base") or "")), info
+    if selected == "mineru-cloud":
+        return ("mineru-cloud", mineru_parse.CLOUD_API), info
+    if selected == "markitdown":
+        return ("markitdown", ""), info
+    return None, info
+
+
+def _self_hosted_miss(info: Mapping[str, Any]) -> str:
+    health = info.get("health")
+    if not isinstance(health, dict) or health.get("ok") is not False:
+        return ""
+    detail = health.get("detail") or health.get("status") or "unavailable"
+    return f"self-hosted MinerU unavailable ({detail})"
+
+
 def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, Any]:
     """Convert PDFs. Self-hosted MinerU, then cloud MinerU, then markitdown.
 
@@ -290,8 +327,8 @@ def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, A
     """
     run = request.run_dir
     package = workflow.Run.open(run)
-    explicit = request.mineru_api_base.rstrip("/") != mineru_parse.CLOUD_API
-    plan = ("mineru-cloud", request.mineru_api_base) if explicit else mineru_parse.choose_converter(live=True)
+    plan, info = conversion_plan(request)
+    miss = _self_hosted_miss(info)
     local_only = bool(plan) and plan[0] == "markitdown"
     pending, skipped = {}, {}
     for paper in package.papers(identities):
@@ -308,9 +345,14 @@ def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, A
         return {"converted": [], "failed": {}, "skipped": skipped}
     if plan is None or (plan[0] == "mineru-cloud" and not credentials.mineru_token()):
         reason = "markdown_unavailable: no MinerU token"
+        if miss:
+            reason = f"{reason}; {miss}"
         for identity in pending:
             workflow.Run.record(run, identity, warning=reason)
-        return {"converted": [], "failed": {}, "skipped": {**skipped, **{key: reason for key in pending}}}
+        report = {"converted": [], "failed": {}, "skipped": {**skipped, **{key: reason for key in pending}}}
+        if miss:
+            report["detail"] = miss
+        return report
     try:
         if plan[0] == "mineru-cloud":
             result = mineru_parse.parse(replace(request.parse_request(list(pending.values())), api_base=plan[1]))
@@ -318,9 +360,14 @@ def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, A
             result = mineru_parse.convert_selected(plan[0], plan[1], list(pending.values()), request.poll_timeout)
     except (RequestError, ValueError, OSError) as error:
         reason = f"markdown_unavailable: {error}"
+        if miss and plan[0] == "markitdown":
+            reason = f"{reason}; {miss}"
         for identity in pending:
             workflow.Run.record(run, identity, warning=reason)
-        return {"converted": [], "failed": {key: reason for key in pending}, "skipped": skipped}
+        report = {"converted": [], "failed": {key: reason for key in pending}, "skipped": skipped}
+        if miss and plan[0] == "markitdown":
+            report["detail"] = miss
+        return report
     # Match on content hash, not path: MinerU parses identical bytes once and
     # returns the same record for every path that shares them, so two papers
     # pointing at the same file both need to see that one result.
@@ -333,13 +380,20 @@ def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, A
         try:
             if record.get("state") == "done" and record.get("markdown"):
                 workflow.Run.record(run, identity, "markdown_derived", artifact="markdown=" + str(record["markdown"]))
+                if miss and plan[0] == "markitdown":
+                    workflow.Run.record(run, identity, warning=miss)
                 converted.append(identity)
                 continue
             failed[identity] = "markdown_unavailable: " + str(record.get("reason") or record.get("state") or "not returned")
+            if miss and plan[0] == "markitdown":
+                failed[identity] = f"{failed[identity]}; {miss}"
             workflow.Run.record(run, identity, warning=failed[identity])
         except (ValueError, OSError) as error:
             failed[identity] = f"{type(error).__name__}: {error}"
-    return {"converted": converted, "failed": failed, "skipped": skipped}
+    report = {"converted": converted, "failed": failed, "skipped": skipped}
+    if miss and plan[0] == "markitdown":
+        report["detail"] = miss
+    return report
 
 
 def summary_handoff(package: workflow.Run, identities: list[str],

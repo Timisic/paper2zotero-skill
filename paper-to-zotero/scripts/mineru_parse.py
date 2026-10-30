@@ -356,7 +356,6 @@ def _exchange(method: str, url: str, *, body: bytes | None = None,
 
 
 def tasks_health(base: str, timeout: float = 3) -> dict[str, Any]:
-    """GET /v1/health. A non-200 or an unreachable host is not a usable converter."""
     try:
         status, raw = _exchange("GET", base.rstrip("/") + "/v1/health", timeout=timeout)
     except (OSError, urllib.error.URLError, TimeoutError, ValueError) as exc:
@@ -379,7 +378,6 @@ def markitdown_available() -> bool:
 
 
 def converter_plan(*, live: bool = False) -> dict[str, Any]:
-    """Order: configured self-hosted MinerU, cloud token, then local markitdown."""
     base = credentials.mineru_api_base()
     token = bool(credentials.mineru_token())
     local = markitdown_available()
@@ -443,7 +441,6 @@ def _markdown_from_zip(raw: bytes, target: Path) -> str:
 
 
 def parse_tasks_pdf(pdf: Path, base: str, timeout: float) -> str:
-    """One PDF through MinerU 4.1 Tasks: create, PUT if asked, poll, unpack."""
     raw_pdf = pdf.read_bytes()
     digest = hashlib.sha256(raw_pdf).hexdigest()
     body = json.dumps({
@@ -521,7 +518,12 @@ def convert_selected(kind: str, base: str, pdfs: Sequence[Path], timeout: float)
     for pdf in pdfs:
         digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
         try:
-            markdown = parse_tasks_pdf(pdf, base, timeout) if kind == "mineru-self-hosted" else convert_markitdown(pdf)
+            if kind == "mineru-self-hosted":
+                markdown = parse_tasks_pdf(pdf, base, timeout)
+            elif kind == "markitdown":
+                markdown = convert_markitdown(pdf)
+            else:
+                raise ValueError(f"converter {kind} does not run in this hop")
             files.append({"path": str(pdf), "sha256": digest, "state": "done", "markdown": markdown})
         except (OSError, ValueError, subprocess.SubprocessError, zipfile.BadZipFile, urllib.error.URLError, json.JSONDecodeError) as error:
             files.append({"path": str(pdf), "sha256": digest, "state": "failed", "reason": str(error)})

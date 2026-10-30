@@ -369,6 +369,53 @@ def test_an_unreadable_first_link_still_lets_a_later_link_win(tmp_path: Path) ->
     assert (tmp_path / "source.pdf").read_bytes() == PROBE.read_bytes()
 
 
+def test_the_same_pdf_url_is_downloaded_once(tmp_path: Path) -> None:
+    seen: list[str] = []
+    pdf = PROBE.read_bytes()
+    root = tmp_path / "literature-runs" / "demo"
+
+    def browser(*_args):
+        raise AssertionError("the browser was asked for a PDF already on disk")
+
+    with server(serving({"/paper.pdf": pdf}, seen)) as base:
+        url = base + "/paper.pdf"
+        candidate = {"id": ALPHA, "doi": DOI, "title": PROBE_TITLE, "oa_pdf_url": url}
+        first = acquire.acquire(acquire.AcquireRequest(
+            candidate=candidate, output=root / "papers" / "one" / "source.pdf",
+            browser=browser, lookup=False))
+        second = acquire.acquire(acquire.AcquireRequest(
+            candidate=candidate, output=root / "papers" / "two" / "source.pdf",
+            browser=browser, lookup=False))
+    assert seen == ["/paper.pdf"]
+    assert first["ok"] is True and second["ok"] is True
+    assert second["channel"] == "existing"
+    assert (root / "papers" / "one" / "source.pdf").read_bytes() == pdf
+    assert (root / "papers" / "two" / "source.pdf").read_bytes() == pdf
+    assert "Downloads" not in str(root)
+
+
+def test_the_same_bytes_are_not_fetched_again_from_another_url(tmp_path: Path) -> None:
+    seen: list[str] = []
+    pdf = PROBE.read_bytes()
+    root = tmp_path / "literature-runs" / "demo"
+
+    def browser(*_args):
+        raise AssertionError("browser")
+
+    with server(serving({"/one.pdf": pdf, "/two.pdf": pdf}, seen)) as base:
+        def once(name: str, route: str):
+            return acquire.acquire(acquire.AcquireRequest(
+                candidate={"id": ALPHA, "doi": DOI, "title": PROBE_TITLE, "oa_pdf_url": base + route},
+                output=root / "papers" / name / "source.pdf", browser=browser, lookup=False))
+
+        first, second, third = once("one", "/one.pdf"), once("two", "/two.pdf"), once("three", "/two.pdf")
+    assert seen == ["/one.pdf", "/two.pdf"]
+    assert first["channel"] == "http"
+    assert second["channel"] == "http"
+    assert third["channel"] == "existing"
+    assert (root / "papers" / "three" / "source.pdf").read_bytes() == pdf
+
+
 def test_a_resume_reports_the_kept_file_it_already_had(tmp_path: Path) -> None:
     """A second pass must never diagnose less than the first one did."""
     scanned = b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n"

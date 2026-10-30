@@ -1,6 +1,4 @@
-"""Lab defaults: Kimi search, LAN MinerU, local Zotero writes.
-
-These tests stay on loopback. They do not dial the lab host.
+"""These tests stay on loopback. They do not dial the lab host.
 """
 from __future__ import annotations
 
@@ -16,10 +14,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import credentials  # noqa: E402
 import discovery  # noqa: E402
 import mineru_parse  # noqa: E402
+import process_run  # noqa: E402
+import workflow  # noqa: E402
 import zotero_ingest  # noqa: E402
 from http_fixture import server  # noqa: E402
 from sources import Query  # noqa: E402
 from test_cli import run_script  # noqa: E402
+from test_partial_delivery import run_with_pdf  # noqa: E402
 from test_workflow_resume import selected_run  # noqa: E402
 from zotero_peer import ZoteroLibrary  # noqa: E402
 
@@ -52,13 +53,37 @@ def test_kimi_search_writes_browser_hits_and_a_block_is_unavailable(tmp_path: Pa
         query=Query(text="attention robots"), output=output, sources=("kimi",)))
     assert result["status"] == "ok"
     assert result["returned"] == 1
-    assert calls[0][0] == "navigate"
-    assert "attention" in calls[0][1]["url"]
-    assert "openalex" not in calls[0][1]["url"]
-    assert calls[0][2] == "literature-discovery"
+    navigations = [call for call in calls if call[0] == "navigate"]
+    assert len(navigations) == 1
+    assert navigations[0][1].get("newTab") is not True
+    assert "newTab" not in navigations[0][1]
+    assert "attention" in navigations[0][1]["url"]
+    assert "openalex" not in navigations[0][1]["url"]
+    assert navigations[0][2] == "literature-discovery"
     assert json.loads(output.read_text())[0]["title"] == "Browser Hit"
     blocked = original(Query(text="x"), 5, transport=lambda *args: {"hits": [], "blocked": True})
     assert blocked.status == "unavailable"
+
+
+def test_kimi_search_reuses_the_open_tab() -> None:
+    calls = []
+
+    def transport(action, payload, session, timeout):
+        if isinstance(payload, dict) and payload.get("newTab"):
+            raise TimeoutError("new tab hung")
+        calls.append(action)
+        if action == "list_tabs":
+            return {"tabs": [{"url": "https://www.kimi.com/"}]}
+        if action == "evaluate":
+            return {"hits": [{"title": "Attached Hit"}], "blocked": False}
+        return {}
+
+    answer = discovery.kimi_search(Query(text="robots"), 40, transport=transport)
+    assert answer.status == "ok"
+    assert [record["title"] for record in answer.records] == ["Attached Hit"]
+    assert calls.count("navigate") == 1
+    assert "find_tab" not in calls
+    assert discovery.PER_SOURCE_CEILING == 40.0
 
 
 def test_mineru_default_is_the_lan_host(monkeypatch, tmp_path: Path) -> None:
@@ -91,6 +116,128 @@ def test_unhealthy_self_host_drops_out_of_the_chain(monkeypatch) -> None:
     assert "mineru-self-hosted" in plan["chain"]
     assert "mineru-self-hosted" not in plan["available"]
     assert plan["selected"] == "mineru-cloud"
+
+
+def _consented_pdf(tmp_path: Path) -> tuple[Path, Path]:
+    run, pdf = run_with_pdf(tmp_path)
+    run_script("workflow.py", "consent", "--run-dir", str(run), "--service", "mineru",
+               "--decision", "approved", "--source", "message:fixture")
+    return run, pdf
+
+
+def _tasks_peer(markdown: str, *, health: int = 200, create: int = 200):
+    blob = io.BytesIO()
+    with zipfile.ZipFile(blob, "w") as archive:
+        archive.writestr("out/full.md", markdown)
+    raw = blob.getvalue()
+    holder: dict[str, str] = {}
+
+    def respond(method, path, body, headers):
+        base = holder["base"]
+        if method == "GET" and path == "/v1/health":
+            if health != 200:
+                return health, {"ok": False}, {}
+            return 200, {"ok": True, "version": "fixture"}, {}
+        if method == "POST" and path == "/v1/tasks":
+            if create >= 400:
+                return create, {"error": "no"}, {}
+            receipt = {"task_id": "t1", "files": [{"upload": {"url": base + "/upload/t1", "headers": {}}}]}
+            return 200, receipt, {}
+        if method == "PUT" and path == "/upload/t1":
+            return 200, b"", {}
+        if method == "GET" and path == "/v1/tasks/t1":
+            return 200, {"files": [{"status": "completed", "result_url": base + "/result/t1"}]}, {}
+        if method == "GET" and path == "/result/t1":
+            return 200, raw, {}
+        return 404, {}, {}
+
+    return respond, holder
+
+
+def test_a_healthy_tasks_host_is_used_when_the_flag_names_it(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("MINERU_TOKEN", raising=False)
+    monkeypatch.setattr(
+        mineru_parse, "convert_markitdown",
+        lambda _pdf: (_ for _ in ()).throw(AssertionError("markitdown")),
+    )
+    run, pdf = _consented_pdf(tmp_path)
+    respond, holder = _tasks_peer("# Parsed\n")
+    with server(respond) as base:
+        holder["base"] = base
+        result = process_run.stage_convert(
+            process_run.ProcessRequest(run_dir=run, mineru_api_base=base, poll_timeout=5),
+            ["doi:10.1000/alpha"],
+        )
+    assert result["converted"] == ["doi:10.1000/alpha"], result
+    written = workflow.Run.open(run).paper("doi:10.1000/alpha").markdown
+    assert written is not None and written.read_text(encoding="utf-8") == "# Parsed\n"
+    assert not (pdf.parent / "markitdown").exists()
+
+
+def test_a_healthy_env_host_is_preferred_over_markitdown(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("MINERU_TOKEN", raising=False)
+    monkeypatch.setattr(
+        mineru_parse, "convert_markitdown",
+        lambda _pdf: (_ for _ in ()).throw(AssertionError("markitdown")),
+    )
+    run, _pdf = _consented_pdf(tmp_path)
+    respond, holder = _tasks_peer("# From the lab\n")
+    with server(respond) as base:
+        holder["base"] = base
+        monkeypatch.setenv("MINERU_API_BASE", base)
+        result = process_run.stage_convert(
+            process_run.ProcessRequest(run_dir=run, poll_timeout=5),
+            ["doi:10.1000/alpha"],
+        )
+    assert result["converted"] == ["doi:10.1000/alpha"], result
+    written = workflow.Run.open(run).paper("doi:10.1000/alpha").markdown
+    assert written is not None and written.read_text(encoding="utf-8") == "# From the lab\n"
+
+
+def test_a_tasks_failure_is_reported_and_markitdown_is_not_substituted(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("MINERU_TOKEN", raising=False)
+    monkeypatch.setattr(
+        mineru_parse, "convert_markitdown",
+        lambda _pdf: (_ for _ in ()).throw(AssertionError("markitdown")),
+    )
+    run, pdf = _consented_pdf(tmp_path)
+    respond, holder = _tasks_peer("# Unused\n", create=500)
+    with server(respond) as base:
+        holder["base"] = base
+        monkeypatch.setenv("MINERU_API_BASE", base)
+        result = process_run.stage_convert(
+            process_run.ProcessRequest(run_dir=run, poll_timeout=5),
+            ["doi:10.1000/alpha"],
+        )
+    assert result["converted"] == []
+    assert "HTTP 500" in result["failed"]["doi:10.1000/alpha"]
+    assert not (pdf.parent / "markitdown").exists()
+
+
+def test_markitdown_names_the_self_hosted_health_failure(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("MINERU_TOKEN", raising=False)
+    monkeypatch.setattr(mineru_parse, "markitdown_available", lambda: True)
+
+    def fake(pdf: Path) -> str:
+        dest = pdf.parent / "markitdown" / "paper.md"
+        dest.parent.mkdir(parents=True)
+        dest.write_text("<!-- converter: markitdown; not a MinerU layout parse -->\n\nlocal\n", encoding="utf-8")
+        return str(dest)
+
+    monkeypatch.setattr(mineru_parse, "convert_markitdown", fake)
+    run, _pdf = _consented_pdf(tmp_path)
+    respond, holder = _tasks_peer("# Unused\n", health=500)
+    with server(respond) as base:
+        holder["base"] = base
+        monkeypatch.setenv("MINERU_API_BASE", base)
+        result = process_run.stage_convert(
+            process_run.ProcessRequest(run_dir=run, poll_timeout=5),
+            ["doi:10.1000/alpha"],
+        )
+    assert result["converted"] == ["doi:10.1000/alpha"], result
+    assert "500" in result["detail"]
+    warnings = workflow.Run.open(run).paper("doi:10.1000/alpha").warnings
+    assert any("500" in item for item in warnings)
 
 
 def test_tasks_api_unpacks_full_md(tmp_path: Path) -> None:

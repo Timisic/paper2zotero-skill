@@ -423,7 +423,6 @@ class _FormatMap(dict):
 
 
 def search_page(query: Query) -> str:
-    """The page Kimi WebBridge opens. `KIMI_SEARCH_URL` may replace it."""
     template = credentials.configured_value("KIMI_SEARCH_URL") or DEFAULT_SEARCH_PAGE
     if not template:
         template = DEFAULT_SEARCH_PAGE
@@ -435,8 +434,32 @@ def search_page(query: Query) -> str:
     }))
 
 
+def _attach_search_tab(transport: Callable[..., Any], session: str, timeout: int) -> None:
+    """Use the session's current tab. A new tab does not come back."""
+
+    def tabs() -> list[Any]:
+        try:
+            inventory = transport("list_tabs", {}, session, min(timeout, 10))
+        except (OSError, TimeoutError, RuntimeError, ValueError):
+            return []
+        if isinstance(inventory, dict) and isinstance(inventory.get("tabs"), list):
+            return list(inventory["tabs"])
+        return []
+
+    if tabs():
+        return
+    try:
+        transport("find_tab", {"url": "https://api.crossref.org/", "active": True}, session, min(timeout, 10))
+    except (OSError, TimeoutError, RuntimeError, ValueError):
+        pass
+    if tabs():
+        return
+    import browser_pdf
+    if transport is browser_pdf.command:
+        browser_pdf.ensure_tab(session, "https://api.crossref.org/")
+
+
 def kimi_search(query: Query, budget: float, transport: Callable[..., Any] | None = None) -> Answer:
-    """One literature search through the user's browser, not an HTTP API client."""
     observed = source_module.observed_at()
     if transport is None and os.environ.get("LITERATURE_BROWSER_DISABLED") == "1":
         return Answer(source="kimi", question="search", status="unavailable",
@@ -447,8 +470,10 @@ def kimi_search(query: Query, budget: float, transport: Callable[..., Any] | Non
     url = search_page(query)
     timeout = max(5, int(budget))
     try:
-        transport("navigate", {"url": url, "newTab": True, "group_title": "literature search"},
-                  "literature-discovery", timeout)
+        # newTab hangs until the source ceiling. Attach the session's tab and
+        # navigate there. That path is about a second; a new tab is not.
+        _attach_search_tab(transport, "literature-discovery", timeout)
+        transport("navigate", {"url": url}, "literature-discovery", timeout)
         data = transport("evaluate", {"code": EXTRACT_JS % max(1, min(query.limit, 25))},
                          "literature-discovery", timeout)
     except (OSError, TimeoutError, RuntimeError, ValueError) as exc:
