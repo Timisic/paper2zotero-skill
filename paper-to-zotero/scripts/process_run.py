@@ -385,8 +385,13 @@ def ingest_command(request: ProcessRequest, identities: list[str]) -> list[str]:
         ("--storage-root", request.storage_root), ("--reuse-map", request.reuse_map),
         ("--api-base", request.api_base), ("--retry-budget", request.retry_budget),
     ):
-        if value is not None:
-            command.extend([flag, str(value)])
+        if value is None:
+            continue
+        # The public Web API is the parser default. Leaving it off the resumed
+        # command lets a later ingest prefer the local Desktop API.
+        if flag == "--api-base" and str(value).rstrip("/") == zotero_ingest.WEB_API:
+            continue
+        command.extend([flag, str(value)])
     if request.dry_run:
         command.append("--dry-run")
     return command

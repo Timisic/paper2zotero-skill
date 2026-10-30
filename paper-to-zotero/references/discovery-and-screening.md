@@ -13,7 +13,7 @@ Prefer terminology found in user context and seed papers. Treat model-generated 
 ## Rounds and the stopping rule
 
 - The default round is Kimi WebBridge (`SEARCH_BACKEND=kimi`, also the value when the variable is unset). One command, `discovery.py`, still runs the round. Set `SEARCH_BACKEND=http` or pass `--sources openalex,semantic_scholar` when OpenAlex and Semantic Scholar should answer together; those results are merged and deduplicated. An explicit `--sources` list wins over `SEARCH_BACKEND`. One initial round may contain a few controlled queries; do not dress each query up as its own supplementary round.
-- **At most one supplementary round by default**, and only when reliable candidates are clearly too few or missing information genuinely blocks a relevance judgement. Choose one existing source with a specific job — do not chain every provider.
+- **At most one supplementary round by default**, and only when reliable candidates are clearly too few or missing information genuinely blocks a relevance judgement. With `SEARCH_BACKEND=kimi` (the default, including when the variable is unset), that supplementary round stays on Kimi. A blocked or failed Kimi page is `unavailable`, not a reason to query OpenAlex or Semantic Scholar. OpenAlex is used only when `SEARCH_BACKEND` is `openalex` or `http`, or the user explicitly passes `--sources`. Do not chain every provider.
 - Network retries and the configured direct/proxy switch are not supplementary rounds, but they spend the same run-level time budget. An outer layer never resets an inner one.
 - Stop and show the list when reliable candidates suffice, when the supplementary budget is spent, or when the run's time budget (~5 minutes, `workflow.py status` reports it) is reached. At the boundary, finish the bounded request already in flight and return results with a coverage note — do not start another round.
 
@@ -51,7 +51,7 @@ The command records its round, reason and elapsed time in the run and refuses a 
 
 ## Provider roles
 
-- Kimi WebBridge: default discovery source. It opens a search page in the user's browser. A blocked page is `unavailable`. `SEARCH_BACKEND=kimi`.
+- Kimi WebBridge: default discovery source. It opens a search page in the user's browser. A blocked page is `unavailable`. `SEARCH_BACKEND=kimi`. That status is not a reason to add OpenAlex or Semantic Scholar to the same round.
 - OpenAlex: optional HTTP discovery source and one citation-count observer. Setup asks for a verified OpenAlex API key when `SEARCH_BACKEND` is `http` or `openalex`. Runtime requests still report their actual source status and can continue with available sources when configuration is incomplete.
 - Semantic Scholar: second discovery source and identifier backfill (arXiv, PubMed, Corpus ID). Its key is one request per second across *every* endpoint; without the key the source reports `not_configured` and the round continues without it.
 - Crossref: DOI metadata and the publisher's registered full-text links. A contact address (`CROSSREF_MAILTO`) buys the polite pool.
