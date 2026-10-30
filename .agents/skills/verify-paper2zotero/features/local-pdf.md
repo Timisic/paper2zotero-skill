@@ -10,7 +10,7 @@ Import a selected source PDF, validate identity, and resume without replacing ex
 
 ## How to get to it (user POV)
 
-Provide existing PDFs to the agent. The fast path is `paper-to-zotero/scripts/local_pdf.py`. It extracts a DOI or title, completes the record, then calls `workflow.py import-pdfs`. Default conversion is MinerU through `process_run.stage_convert` after recorded consent. `--backend local` writes on-machine text and does not record consent. This starter map still drives only the `import-pdfs` verifier (`tests/test_import_pdfs.py`). The fast-path cases live in `paper-to-zotero/tests/test_local_pdf.py` and are not part of these two checks.
+Provide existing PDFs to the agent. The fast path is `paper-to-zotero/scripts/local_pdf.py`. It extracts a DOI or title, completes the record, then calls `workflow.py import-pdfs`. Default `--backend cloud` calls `process_run.stage_convert` after recorded MinerU consent. The order is self-hosted MinerU at `http://192.168.8.167:8000` when `GET /v1/health` succeeds, then MinerU cloud when `MINERU_TOKEN` is set, then markitdown. `--backend local` writes on-machine text and does not record consent. This starter map still drives only the `import-pdfs` verifier (`tests/test_import_pdfs.py`). Those two checks do not run the converter chain. The fast-path cases live in `paper-to-zotero/tests/test_local_pdf.py` and are not part of these two checks. Live health of `192.168.8.167` is a separate prerequisite.
 
 ## Driving it with verify_runner
 
