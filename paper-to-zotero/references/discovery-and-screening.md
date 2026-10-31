@@ -51,7 +51,7 @@ The command records its round, reason and elapsed time in the run and refuses a 
 
 ## Provider roles
 
-- Kimi WebBridge: default discovery source. It opens a search page in the user's browser. A blocked page is `unavailable`. `SEARCH_BACKEND=kimi`.
+- Kimi WebBridge: default discovery source. It opens one search page in the user's browser (`KIMI_SEARCH_URL`, otherwise the Semantic Scholar search page). A blocked, unreadable, or outage page is `unavailable` and ends the search. Kimi does not open a second search engine and does not call the OpenAlex or Semantic Scholar APIs. `SEARCH_BACKEND=kimi`.
 - OpenAlex: optional HTTP discovery source and one citation-count observer. Setup asks for a verified OpenAlex API key when `SEARCH_BACKEND` is `http` or `openalex`. Runtime requests still report their actual source status and can continue with available sources when configuration is incomplete.
 - Semantic Scholar: second discovery source and identifier backfill (arXiv, PubMed, Corpus ID). Its key is one request per second across *every* endpoint; without the key the source reports `not_configured` and the round continues without it.
 - Crossref: DOI metadata and the publisher's registered full-text links. A contact address (`CROSSREF_MAILTO`) buys the polite pool.

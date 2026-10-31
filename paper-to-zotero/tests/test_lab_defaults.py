@@ -111,7 +111,7 @@ def test_wrapped_evaluate_hits_still_become_candidates(tmp_path: Path, monkeypat
     assert json.loads(output.read_text())[0]["title"] == "Wrapped Hit"
 
 
-def test_a_down_default_page_opens_the_other_search_surface() -> None:
+def test_a_down_default_page_is_unavailable() -> None:
     outage = json.dumps({"hits": [], "blocked": False, "trouble": True, "title": "Semantic Scholar"})
     navigated: list[str] = []
 
@@ -122,26 +122,20 @@ def test_a_down_default_page_opens_the_other_search_surface() -> None:
             navigated.append(payload["url"])
             return {}
         if action == "evaluate":
-            if navigated and "scholar.google.com" in navigated[-1]:
-                return {"type": "string", "value": json.dumps({
-                    "hits": [{"title": "Scholar Hit", "url": "https://example.edu/s"}],
-                    "blocked": False,
-                })}
             return {"type": "string", "value": outage}
         return {}
 
-    answer = discovery.kimi_search(Query(text="robots"), 40, transport=transport)
-    assert answer.status == "ok"
-    assert [record["title"] for record in answer.records] == ["Scholar Hit"]
-    assert len(navigated) == 2
-    assert "semanticscholar.org" in navigated[0]
-    assert "scholar.google.com" in navigated[1]
-    assert "robots" in navigated[1]
-    assert answer.detail == navigated[1]
+    query = Query(text="robots")
+    answer = discovery.kimi_search(query, 40, transport=transport)
+    assert answer.status == "unavailable"
+    assert answer.records == []
+    assert answer.detail == "search page was not readable"
+    assert navigated == [discovery.search_page(query)]
+    assert navigated[0].startswith("https://www.semanticscholar.org/search?")
     assert "servers are having a bit of trouble" in discovery.EXTRACT_JS
 
 
-def test_an_unreadable_evaluate_tries_the_next_surface() -> None:
+def test_an_unreadable_evaluate_is_unavailable() -> None:
     navigated: list[str] = []
 
     def transport(action, payload, session, timeout):
@@ -151,21 +145,26 @@ def test_an_unreadable_evaluate_tries_the_next_surface() -> None:
             navigated.append(payload["url"])
             return {}
         if action == "evaluate":
-            if navigated and "scholar.google.com" in navigated[-1]:
-                return {"hits": [{"title": "Recovered Hit"}], "blocked": False}
             return {"type": "string", "value": "not json"}
         return {}
 
-    answer = discovery.kimi_search(Query(text="robots"), 40, transport=transport)
-    assert answer.status == "ok"
-    assert [record["title"] for record in answer.records] == ["Recovered Hit"]
-    assert len(navigated) == 2
+    query = Query(text="robots")
+    answer = discovery.kimi_search(query, 40, transport=transport)
+    assert answer.status == "unavailable"
+    assert answer.records == []
+    assert answer.detail == "search page was not readable"
+    assert navigated == [discovery.search_page(query)]
 
 
-def test_an_outage_on_every_surface_is_unavailable_not_empty() -> None:
+def test_an_outage_page_is_unavailable() -> None:
+    navigated: list[str] = []
+
     def transport(action, payload, session, timeout):
         if action == "list_tabs":
             return {"tabs": [{"url": "https://www.kimi.com/"}]}
+        if action == "navigate":
+            navigated.append(payload["url"])
+            return {}
         if action == "evaluate":
             return {"type": "string", "value": json.dumps({"hits": [], "blocked": False, "trouble": True})}
         return {}
@@ -174,6 +173,7 @@ def test_an_outage_on_every_surface_is_unavailable_not_empty() -> None:
     assert answer.status == "unavailable"
     assert answer.records == []
     assert answer.detail == "search page was not readable"
+    assert len(navigated) == 1
 
 
 def test_a_real_empty_page_does_not_open_another_search() -> None:
