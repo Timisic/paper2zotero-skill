@@ -12,7 +12,7 @@ Prefer terminology found in user context and seed papers. Treat model-generated 
 
 ## Rounds and the stopping rule
 
-- The default round is Kimi WebBridge (`SEARCH_BACKEND=kimi`, also the value when the variable is unset). One command, `discovery.py`, still runs the round. Set `SEARCH_BACKEND=http` or pass `--sources openalex,semantic_scholar` when OpenAlex and Semantic Scholar should answer together; those results are merged and deduplicated. An explicit `--sources` list wins over `SEARCH_BACKEND`. One initial round may contain a few controlled queries; do not dress each query up as its own supplementary round.
+- The default round is scansci. That is the source when `SEARCH_BACKEND` is unset. One command, `discovery.py`, still runs the round. Set `SEARCH_BACKEND=kimi` for Kimi WebBridge. Set `SEARCH_BACKEND=http` or pass `--sources openalex,semantic_scholar` when OpenAlex and Semantic Scholar should answer together. Those results are merged and deduplicated. An explicit `--sources` list wins over `SEARCH_BACKEND`. One initial round may contain a few controlled queries. Do not dress each query up as its own supplementary round.
 - **At most one supplementary round by default**, and only when reliable candidates are clearly too few or missing information genuinely blocks a relevance judgement. It uses the same sources as the first round. Do not chain every provider.
 - Network retries and the configured direct/proxy switch are not supplementary rounds, but they spend the same run-level time budget. An outer layer never resets an inner one.
 - Stop and show the list when reliable candidates suffice, when the supplementary budget is spent, or when the run's time budget (~5 minutes, `workflow.py status` reports it) is reached. At the boundary, finish the bounded request already in flight and return results with a coverage note — do not start another round.
@@ -26,8 +26,11 @@ python "$SKILL_DIR/scripts/discovery.py" \
   --run-dir <run_dir> \
   --output <run_dir>/candidates-round1.json
 
-# HTTP APIs instead of the Kimi default
+# OpenAlex and Semantic Scholar together
 # SEARCH_BACKEND=http python "$SKILL_DIR/scripts/discovery.py" --sources openalex,semantic_scholar ...
+
+# Kimi WebBridge
+# SEARCH_BACKEND=kimi python "$SKILL_DIR/scripts/discovery.py" ...
 
 # only when the initial round is genuinely thin
 python "$SKILL_DIR/scripts/discovery.py" --round supplementary \
@@ -51,7 +54,8 @@ The command records its round, reason and elapsed time in the run and refuses a 
 
 ## Provider roles
 
-- Kimi WebBridge: default discovery source. It opens one search page in the user's browser (`KIMI_SEARCH_URL`, otherwise the Semantic Scholar search page). A blocked, unreadable, or outage page is `unavailable` and ends the search. Kimi does not open a second search engine and does not call the OpenAlex or Semantic Scholar APIs. `SEARCH_BACKEND=kimi`.
+- ScanSci: default discovery source when `SEARCH_BACKEND` is unset. Install with `pip install 'scansci-pdf==1.19.0'` and no browser extra. A missing install is `not_configured`. A library error is `unavailable`. An empty result list is `empty`. `SEARCH_BACKEND=scansci` selects the same source. PDF download, including the grey-source default and the `--legal-only` opt-out, is in [acquisition-and-artifacts.md](acquisition-and-artifacts.md).
+- Kimi WebBridge: optional discovery source when `SEARCH_BACKEND=kimi` or `--sources kimi`. It opens one search page in the user's browser (`KIMI_SEARCH_URL`, otherwise the Semantic Scholar search page). A blocked, unreadable, or outage page is `unavailable` and ends the search. Kimi does not open a second search engine and does not call the OpenAlex or Semantic Scholar APIs.
 - OpenAlex: optional HTTP discovery source and one citation-count observer. Setup asks for a verified OpenAlex API key when `SEARCH_BACKEND` is `http` or `openalex`. Runtime requests still report their actual source status and can continue with available sources when configuration is incomplete.
 - Semantic Scholar: second discovery source and identifier backfill (arXiv, PubMed, Corpus ID). Its key is one request per second across *every* endpoint; without the key the source reports `not_configured` and the round continues without it.
 - Crossref: DOI metadata and the publisher's registered full-text links. A contact address (`CROSSREF_MAILTO`) buys the polite pool.

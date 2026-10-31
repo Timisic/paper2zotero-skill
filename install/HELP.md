@@ -1,6 +1,6 @@
 # 安装与使用帮助
 
-文献任务默认是 Kimi 检索、局域网 MinerU（`http://192.168.8.167:8000`）、本机 Zotero。OpenAlex 不是默认检索通道。夹具验收见仓库的 `.agents/skills/verify-paper2zotero`。向导的基础检查仍可能要求 OpenAlex Key；缺少 Key 时基础配置检查不会通过。已知 DOI 或本地 PDF 仍按其自身依赖处理。
+文献任务默认是 ScanSci 检索和 PDF 下载（灰色来源开启，`--legal-only` 或 `SCANSCI_LEGAL_ONLY=1` 改为只要合法来源）、局域网 MinerU（`http://192.168.8.167:8000`）、本机 Zotero。Kimi 仍用 `SEARCH_BACKEND=kimi`。OpenAlex 不是默认检索通道。夹具验收见仓库的 `.agents/skills/verify-paper2zotero`。向导的基础检查仍可能要求 OpenAlex Key；缺少 Key 时基础配置检查不会通过。已知 DOI 或本地 PDF 仍按其自身依赖处理。
 
 ## Windows
 

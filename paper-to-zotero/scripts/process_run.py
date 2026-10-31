@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acquire  # noqa: E402
 import capability  # noqa: E402
 import credentials  # noqa: E402
+import scansci_retrieval  # noqa: E402
 import mineru_parse  # noqa: E402
 import sources  # noqa: E402
 import summary_artifact  # noqa: E402
@@ -78,6 +79,7 @@ class ProcessRequest:
     acquire_timeout: float = 240
     source_lookup: bool = True
     check_ingestion: bool = False
+    legal_only: bool = False
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> ProcessRequest:
@@ -93,7 +95,7 @@ class ProcessRequest:
             mineru_model=args.mineru_model, retry_budget=args.retry_budget,
             poll_timeout=args.poll_timeout, browser_timeout=args.browser_timeout,
             acquire_timeout=args.acquire_timeout, source_lookup=not args.no_source_lookup,
-            check_ingestion=args.check_ingestion,
+            check_ingestion=args.check_ingestion, legal_only=args.legal_only,
         )
 
     def ingest_request(self, ids: Sequence[str]) -> zotero_ingest.IngestRequest:
@@ -216,7 +218,8 @@ def stage_acquire(request: ProcessRequest, identities: list[str], candidates: di
             result = acquire.acquire(acquire.AcquireRequest(
                 candidate=candidates[identity], output=target / "source.pdf",
                 browser=channel, client=client, lookup=request.source_lookup,
-                limits=acquire.Limits(total_seconds=request.acquire_timeout)))
+                limits=acquire.Limits(total_seconds=request.acquire_timeout),
+                policy=scansci_retrieval.grey_policy(legal_only=request.legal_only)))
             # State first, then the trail: a bookkeeping hiccup must not undo
             # a download that already succeeded.
             if result.get("ok"):
@@ -614,6 +617,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-source-lookup", action="store_true",
                         help="acquire only from links already recorded; ask no metadata source "
                              "for further open copies")
+    parser.add_argument("--legal-only", action="store_true",
+                        help="Download from legal sources only. Grey sources stay on unless "
+                             "this flag or SCANSCI_LEGAL_ONLY is set.")
     return parser
 
 

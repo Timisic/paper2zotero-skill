@@ -12,7 +12,8 @@
 | 配置项 | 解决什么问题 | 需要准备 |
 | --- | --- | --- |
 | Zotero 本地 API | 把论文和笔记写进本机文库 | Zotero 10 开着，并在授权框选「始终允许」 |
-| Kimi WebBridge | 默认文献检索 | 浏览器扩展已连接 |
+| scansci-pdf | 默认文献检索和 PDF 下载（灰色来源开启） | `pip install 'scansci-pdf==1.19.0'`，不要加浏览器扩展 |
+| Kimi WebBridge | 可选检索，`SEARCH_BACKEND=kimi` | 浏览器扩展已连接 |
 | 自建 MinerU | 将 PDF 转成 Markdown | 下面的 `MINERU_API_BASE` |
 
 OpenAlex、MinerU 云端 Token、Zotero Web API 仍可用，都不是默认必配。向导里的对应步骤只在你改用这些可选通道时需要。
@@ -20,7 +21,9 @@ OpenAlex、MinerU 云端 Token、Zotero Web API 仍可用，都不是默认必�
 实验室环境变量（写在 `~/.config/literature-to-zotero/env`，也可临时放在进程环境里）：
 
 ```bash
-SEARCH_BACKEND=kimi
+# 不设置 SEARCH_BACKEND 时，检索和下载走 scansci，灰色来源开启。
+# 只要合法来源：SCANSCI_LEGAL_ONLY=1，或 process_run.py --legal-only
+# 改用 Kimi：SEARCH_BACKEND=kimi
 MINERU_API_BASE=http://192.168.8.167:8000
 ```
 
@@ -58,7 +61,7 @@ MINERU_API_BASE=http://192.168.8.167:8000
 
 ### 检查
 
-向导结束即完成配置。文献流程的夹具验收用仓库里的 [verify-paper2zotero](../.agents/skills/verify-paper2zotero/SKILL.md)。默认路径仍是上一节的 Kimi 检索、`MINERU_API_BASE=http://192.168.8.167:8000`、本机 Zotero。
+向导结束即完成配置。文献流程的夹具验收用仓库里的 [verify-paper2zotero](../.agents/skills/verify-paper2zotero/SKILL.md)。默认路径仍是上一节的 scansci 检索与 PDF 下载、`MINERU_API_BASE=http://192.168.8.167:8000`、本机 Zotero。
 
 ## 4. 平时怎么用
 

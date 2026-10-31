@@ -92,6 +92,7 @@ LABELS = {
     "arxiv": "arXiv",
     "pmc": "PMC",
     "kimi": "Kimi",
+    "scansci": "ScanSci",
 }
 
 # The query parameters each source is actually sent, recorded in a run's query
@@ -100,6 +101,7 @@ SENT_FIELDS = {
     "openalex": ["search", "filter", "per-page", "sort"],
     "semantic_scholar": ["query", "year", "limit", "fields"],
     "kimi": ["query"],
+    "scansci": ["query", "limit", "year_from", "year_to"],
 }
 
 S2_FIELDS = ("title,abstract,year,publicationDate,venue,publicationVenue,publicationTypes,"
@@ -655,6 +657,38 @@ def normalize(source: str, record: Mapping[str, Any], timestamp: str) -> dict[st
             "identifiers": {"doi": doi},
         }
         fallback = None
+    elif source == "scansci":
+        doi = canonical_doi(record.get("doi"))
+        authors = record.get("authors") or []
+        if isinstance(authors, str):
+            authors = [authors]
+        year = record.get("year")
+        if isinstance(year, bool) or year in (None, ""):
+            year = None
+        elif not isinstance(year, int):
+            try:
+                year = int(year)
+            except (TypeError, ValueError):
+                year = None
+        candidate = {
+            "doi": doi,
+            "title": record.get("title"),
+            "year": year,
+            "publication_date": None,
+            "venue": None,
+            "venue_type": None,
+            "work_type": None,
+            "language": None,
+            "authors": [author for author in authors if isinstance(author, str) and author],
+            "abstract": record.get("abstract"),
+            "cited_by_count": record.get("cited_by_count"),
+            "landing_page_url": record.get("landing_page_url"),
+            "oa_pdf_url": record.get("oa_pdf_url"),
+            "is_oa": record.get("is_oa") if isinstance(record.get("is_oa"), bool) else None,
+            "oa_status": None,
+            "identifiers": {"doi": doi},
+        }
+        fallback = None
     else:
         raise KeyError(f"{source} does not produce candidates")
 
@@ -742,6 +776,9 @@ def locations(source: str, record: Mapping[str, Any]) -> list[dict[str, Any]]:
     elif source == "kimi":
         add(record.get("pdf") or record.get("pdf_url"), "pdf", None)
         add(record.get("url") or record.get("landing"), "landing", None)
+    elif source == "scansci":
+        add(record.get("oa_pdf_url"), "pdf", None)
+        add(record.get("landing_page_url"), "landing", None)
     elif source == "pmc":
         url = str(record.get("pdf_url") or "")
         if url.startswith("s3://pmc-oa-opendata/"):

@@ -9,12 +9,15 @@ that `urllib` can fetch in a second.
 
 So the route is chosen, not assumed:
 
-1. **Links already known** — the open PDF URLs discovery recorded — fetched
+1. **An existing source.pdf** that already verifies. Nothing is downloaded.
+2. **scansci-pdf** for a DOI, or an arXiv id when there is no DOI. Grey
+   sources are on unless the request policy is legal-only. A miss continues.
+3. **Links already known**, the open PDF URLs discovery recorded, fetched
    directly over HTTP.
-2. **Links worth asking for** — Unpaywall, OpenAlex, Crossref and Semantic
-   Scholar for a DOI's open copies, arXiv for a preprint — asked for only when
-   step 1 has not produced a verified file, and asked of one source at a time.
-3. **The browser** (`browser_pdf.py`, ADR-0002) — for the three walls HTTP
+4. **Links worth asking for**. Unpaywall, OpenAlex, Crossref and Semantic
+   Scholar for a DOI's open copies, arXiv for a preprint. Asked only when
+   the earlier steps have not produced a verified file, one source at a time.
+5. **The browser** (`browser_pdf.py`, ADR-0002), for the three walls HTTP
    cannot climb: an institutional entitlement, an anti-bot challenge, and a
    host the shell cannot open but the browser can.
 
@@ -45,6 +48,7 @@ from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -55,6 +59,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import browser_pdf  # noqa: E402
 import paper_artifacts  # noqa: E402
+import scansci_retrieval  # noqa: E402
 import sources as source_module  # noqa: E402
 from http_client import Client, RequestError  # noqa: E402
 from sources import Sources  # noqa: E402
@@ -114,6 +119,7 @@ class AcquireRequest:
     client: Sources | None = None
     limits: Limits = field(default_factory=Limits)
     lookup: bool = True
+    policy: scansci_retrieval.GreyPolicy = scansci_retrieval.GreyPolicy.GREY
 
 
 def redact(url: str) -> str:
@@ -411,6 +417,36 @@ def acquire(request: AcquireRequest) -> dict[str, Any]:
             # fallback from the start, so a resume can only improve on the
             # diagnosis it already gave — never report less than last time.
             kept, unresolved = str(request.output), existing
+
+    staging = request.output.with_suffix(request.output.suffix + ".scansci")
+    try:
+        outcome = None if scansci_retrieval.retrieval_disabled() else scansci_retrieval.fetch_candidate(
+            candidate, staging, request.policy)
+        if isinstance(outcome, scansci_retrieval.FetchHit):
+            attempt = {
+                "channel": scansci_retrieval.SOURCE,
+                "source": outcome.source,
+                "version": outcome.version,
+                "status": "captured",
+                "path": str(outcome.path),
+            }
+            verdict, evidence = verified(outcome.path, request.output, candidate, attempt)
+            attempt.pop("path", None)
+            trail.append(attempt)
+            if verdict == "verified":
+                return {"ok": True, "path": str(request.output), "channel": scansci_retrieval.SOURCE,
+                        "source": outcome.source, "version": outcome.version,
+                        "evidence": evidence, "trail": trail}
+            if verdict == "unverified" and kept is None:
+                kept, unresolved = str(request.output), evidence
+        elif isinstance(outcome, scansci_retrieval.FetchMiss):
+            trail.append({"channel": scansci_retrieval.SOURCE, "status": "failed",
+                          "kind": outcome.status, "detail": outcome.detail})
+    finally:
+        if staging.is_symlink() or staging.is_file():
+            staging.unlink(missing_ok=True)
+        else:
+            shutil.rmtree(staging, ignore_errors=True)
 
     def try_http(entries: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
         nonlocal kept, unresolved
