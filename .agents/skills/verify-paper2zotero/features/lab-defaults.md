@@ -20,7 +20,7 @@ Preconditions: run Doctor from the parent SKILL.md. Python, pytest, and Poppler 
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature lab-defaults
 ```
 
-The eight nodes in `tests/test_lab_defaults.py` stay on loopback. `test_mineru_default_is_the_lan_host` checks the default origin with `live=False`, so it does not open `192.168.8.167`. `test_tasks_api_unpacks_full_md` unpacks a zip from `http_fixture.server`. `test_ingest_uses_the_local_api_without_a_web_key` creates one item on an in-process peer and does not attach a file.
+The nine nodes in `tests/test_lab_defaults.py` stay on loopback. `test_wrapped_evaluate_hits_still_become_candidates` writes one candidate when `command("evaluate")` returns `{type, value}` and the page JSON is in `value`. That node uses the fixture transport and does not open the Kimi daemon. `test_mineru_default_is_the_lan_host` checks the default origin with `live=False`, so it does not open `192.168.8.167`. `test_tasks_api_unpacks_full_md` unpacks a zip from `http_fixture.server`. `test_ingest_uses_the_local_api_without_a_web_key` creates one item on an in-process peer and does not attach a file.
 
 Inspect `commands.jsonl`, `results.xml`, and `state/`. Run cleanup is automatic and must leave evidence intact.
 

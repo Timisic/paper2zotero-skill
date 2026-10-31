@@ -63,6 +63,7 @@ CASES = {
     'lab-defaults': [
         'test_lab_defaults.py::test_search_backend_defaults_to_kimi',
         'test_lab_defaults.py::test_kimi_search_writes_browser_hits_and_a_block_is_unavailable',
+        'test_lab_defaults.py::test_wrapped_evaluate_hits_still_become_candidates',
         'test_lab_defaults.py::test_mineru_default_is_the_lan_host',
         'test_lab_defaults.py::test_unhealthy_self_host_drops_out_of_the_chain',
         'test_lab_defaults.py::test_tasks_api_unpacks_full_md',
