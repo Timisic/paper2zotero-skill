@@ -43,7 +43,10 @@ CASES = {
     'discovery': [
         'test_discovery.py::test_one_paper_found_twice_becomes_one_candidate_with_both_accounts',
         'test_discovery.py::test_a_failed_source_never_looks_like_an_empty_shelf',
-        'test_candidate_list.py::test_a_short_list_is_returned_as_is_without_padding'],
+        'test_candidate_list.py::test_a_short_list_is_returned_as_is_without_padding',
+        'test_candidate_list.py::test_default_list_budget_is_fifteen_and_is_explicitly_overridable'],
+    'scansci': [
+        'test_scansci_retrieval.py'],
     'selection': [
         'test_single_gate_flow.py::test_clear_intent_reaches_candidates_without_a_plan_gate',
         'test_process_run.py::test_processing_refuses_before_the_user_confirms_the_list',
@@ -119,7 +122,7 @@ def runnable(repo, feature):
 
 
 def doctor(repo):
-    required = ['workflow.py', 'process_run.py', 'discovery.py', 'summary_artifact.py', 'zotero_ingest.py', 'local_pdf.py']
+    required = ['workflow.py', 'process_run.py', 'discovery.py', 'summary_artifact.py', 'zotero_ingest.py', 'local_pdf.py', 'scansci_retrieval.py']
     files = [repo / 'paper-to-zotero/scripts' / name for name in required]
     checks = {
         'python': sys.version.split()[0], 'interpreter': sys.executable,
@@ -167,6 +170,7 @@ def main():
             shutil.copytree(repo / 'paper-to-zotero' / folder, app / folder,
                             ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         shutil.copytree(repo / 'paper-to-zotero/references', app / 'references')
+        shutil.copy2(repo / 'paper-to-zotero' / 'SKILL.md', app / 'SKILL.md')
         profile = scratch / 'profile'
         profile.mkdir()
         temp = scratch / 'tmp'
