@@ -4,13 +4,13 @@ Check the current search, conversion, and Zotero write defaults on loopback peer
 
 ## Sub-features
 
-- `search`: unset `SEARCH_BACKEND` resolves to `kimi`
+- `search`: unset `SEARCH_BACKEND` resolves to `kimi`. Kimi opens one WebBridge page. A blocked, unreadable, or outage page is `unavailable`. A readable page with no hits is `empty`.
 - `convert`: unset `MINERU_API_BASE` resolves to `http://192.168.8.167:8000`, then cloud, then markitdown
 - `write`: a loopback local API accepts one item with no Web API key
 
 ## How to get to it (user POV)
 
-Leave `SEARCH_BACKEND`, `MINERU_API_BASE`, and `ZOTERO_WRITE_BACKEND` unset. Search uses Kimi. Conversion uses self-hosted MinerU when `GET /v1/health` succeeds, otherwise MinerU cloud when `MINERU_TOKEN` is set, otherwise markitdown. A Zotero write aimed at `https://api.zotero.org` prefers `http://127.0.0.1:23119/api` and falls back to the Web API.
+Leave `SEARCH_BACKEND`, `MINERU_API_BASE`, and `ZOTERO_WRITE_BACKEND` unset. Search uses Kimi WebBridge on one page: `KIMI_SEARCH_URL` when set, otherwise the Semantic Scholar search URL. A blocked, unreadable, or outage page is `unavailable`. A readable page with no hits is `empty`. That search does not open a second page and does not call the OpenAlex or Semantic Scholar APIs. Conversion uses self-hosted MinerU when `GET /v1/health` succeeds, otherwise MinerU cloud when `MINERU_TOKEN` is set, otherwise markitdown. A Zotero write aimed at `https://api.zotero.org` prefers `http://127.0.0.1:23119/api` and falls back to the Web API.
 
 ## Driving it with verify_runner
 
@@ -20,7 +20,7 @@ Preconditions: run Doctor from the parent SKILL.md. Python, pytest, and Poppler 
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature lab-defaults
 ```
 
-The nine nodes in `tests/test_lab_defaults.py` stay on loopback. `test_wrapped_evaluate_hits_still_become_candidates` writes one candidate when `command("evaluate")` returns `{type, value}` and the page JSON is in `value`. That node uses the fixture transport and does not open the Kimi daemon. `test_mineru_default_is_the_lan_host` checks the default origin with `live=False`, so it does not open `192.168.8.167`. `test_tasks_api_unpacks_full_md` unpacks a zip from `http_fixture.server`. `test_ingest_uses_the_local_api_without_a_web_key` creates one item on an in-process peer and does not attach a file.
+The fourteen nodes in `tests/test_lab_defaults.py` stay on loopback. `test_wrapped_evaluate_hits_still_become_candidates` writes one candidate when `command("evaluate")` returns `{type, value}` and the page JSON is in `value`. Five nodes drive the one-page failure contract on the same fixture transport: a down, unreadable, or outage page is `unavailable` after a single navigate; a readable page with no hits is `empty` and does not open `scholar.google.com`; a configured `KIMI_SEARCH_URL` is the only page when that page is down. None of these nodes open the Kimi daemon. `test_mineru_default_is_the_lan_host` checks the default origin with `live=False`, so it does not open `192.168.8.167`. `test_tasks_api_unpacks_full_md` unpacks a zip from `http_fixture.server`. `test_ingest_uses_the_local_api_without_a_web_key` creates one item on an in-process peer and does not attach a file.
 
 Inspect `commands.jsonl`, `results.xml`, and `state/`. Run cleanup is automatic and must leave evidence intact.
 
