@@ -46,7 +46,7 @@ Once doctor passes:
 
 The ordinary project `run-python.sh` reads the real user's runtime configuration, so this harness deliberately runs the chosen interpreter directly. The environment is reusable and is not part of per-run scratch cleanup.
 
-`run` snapshots current scripts, tests and references into a unique temporary directory, drives the 23 fixture tests whose modules are present, and tears down that snapshot. It collects `lab-defaults` from `tests/test_lab_defaults.py`. It does not collect `local-parser` or `unified-local`, because those test modules are not in this branch. Source edits must be finished before launching. No build is required. Test peers bind only `127.0.0.1:0` and are ready when their fixture context returns. Never point the helper at an existing service or a real Zotero data directory. A sandbox that refuses local bind needs narrowly scoped host approval for these fixture peers; do not disable the network guard.
+`run` snapshots current scripts, tests and references into a unique temporary directory, drives the 24 fixture tests whose modules are present, and tears down that snapshot. It collects `lab-defaults` from `tests/test_lab_defaults.py`. It does not collect `local-parser` or `unified-local`, because those test modules are not in this branch. Source edits must be finished before launching. No build is required. Test peers bind only `127.0.0.1:0` and are ready when their fixture context returns. Never point the helper at an existing service or a real Zotero data directory. A sandbox that refuses local bind needs narrowly scoped host approval for these fixture peers; do not disable the network guard.
 
 ## Doctor
 
@@ -73,7 +73,7 @@ The runner reuses `tests/http_fixture.py`, `zotero_peer.py`, `mineru_peer.py`, `
 
 ## Evidence
 
-A pass requires exit 0, every selected present test passed (23 for a full run), `guard.json` exit 0, and `cleanup.json` showing removed scratch and no listening owned ports. Check `pytest.log` and `results.xml`, not merely file existence. `doctor.json` identifies the interpreter and source hashes; `invocation.json` identifies the exact test nodes.
+A pass requires exit 0, every selected present test passed (24 for a full run), `guard.json` exit 0, and `cleanup.json` showing removed scratch and no listening owned ports. Check `pytest.log` and `results.xml`, not merely file existence. `doctor.json` identifies the interpreter and source hashes; `invocation.json` identifies the exact test nodes.
 
 `commands.jsonl` retains action, stdout, stderr and exit status. `state/` retains disposable run manifests, candidates, PDFs, acquisition trails, hashes, conversion journals, summary handoffs and simulated Zotero storage after teardown. Paths in transcripts retain the original temporary location: map `<scratch>/cases/` to `<evidence>/state/` using `cleanup.json`. `network.jsonl` records allowed/blocked Python socket attempts; a blocked probe of 23119 is expected, as are unavailable-source attempts to closed fixture URLs. No real credentials are included; known test-secret strings are redacted in command transcripts. State can contain dummy fixture credentials and signed fixture URLs only.
 
