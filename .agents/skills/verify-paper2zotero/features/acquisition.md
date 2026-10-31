@@ -1,10 +1,10 @@
 # Acquire a verified source PDF
 
-Download an open PDF through HTTP, verify the paper identity, and reject misleading or wrong files.
+Download a verified PDF. scansci-pdf runs first for a DOI or an arXiv id. A miss continues to known HTTP links. These three nodes disable that first fetch and prove the HTTP route, including identity and content checks.
 
 ## Sub-features
 
-- `http`: acquire source bytes without starting a browser
+- `http`: acquire source bytes over HTTP after scansci is disabled, without starting a browser
 - `identity`: reject valid PDF of the wrong paper
 - `content`: reject HTML served as application/pdf
 
@@ -26,4 +26,4 @@ Inspect `commands.jsonl` for the action and return value, `results.xml` for each
 
 ## Gotchas
 
-Only ephemeral local HTTP is used. Browser non-use is observed via the absent marker file; it is not inferred from a flag. Institutional access, live redirects and real Kimi sessions remain unverified.
+The suite sets `LITERATURE_SCANSCI_DISABLED=1` and replaces `fetch_candidate` with `NotAddressable`, so these nodes record channel `http` from an ephemeral local peer. Browser non-use is observed via the absent marker file. `run --feature scansci` drives the mocked scansci download, including the grey default and `--legal-only`. A green HTTP run is not live scansci-pdf acceptance. Institutional access, live redirects and real Kimi sessions remain unverified.
