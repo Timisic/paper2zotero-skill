@@ -236,7 +236,15 @@ def mineru_token() -> str:
 # MINERU_ENDPOINT disables the self-hosted hop.
 LAB_MINERU_API_BASE = "http://192.168.8.167:8000"
 LAB_MINERU_API_BASE_TAILSCALE = "http://100.92.231.38:8000"
-SEARCH_BACKENDS = ("kimi", "openalex", "semantic_scholar", "http")
+# Unset SEARCH_BACKEND selects the first key.
+DISCOVERY_BY_BACKEND: dict[str, tuple[str, ...]] = {
+    "scansci": ("scansci",),
+    "kimi": ("kimi",),
+    "openalex": ("openalex",),
+    "semantic_scholar": ("semantic_scholar",),
+    "http": ("openalex", "semantic_scholar"),
+}
+SEARCH_BACKENDS = tuple(DISCOVERY_BY_BACKEND)
 WRITE_BACKENDS = ("auto", "local", "web")
 
 
@@ -272,8 +280,8 @@ def mineru_api_base() -> str:
 
 
 def search_backend() -> str:
-    """Literature search channel. `kimi` is the default; HTTP APIs are opt-in."""
-    return _choice("SEARCH_BACKEND", "kimi", SEARCH_BACKENDS, {
+    """Literature search channel. Unset, empty, or whitespace selects scansci."""
+    return _choice("SEARCH_BACKEND", "scansci", SEARCH_BACKENDS, {
         "openalex,semantic_scholar": "http",
         "openalex+semantic_scholar": "http",
     })
@@ -281,12 +289,11 @@ def search_backend() -> str:
 
 def discovery_sources_for(backend: str | None = None) -> tuple[str, ...]:
     chosen = search_backend() if backend is None else backend
-    return {
-        "kimi": ("kimi",),
-        "openalex": ("openalex",),
-        "semantic_scholar": ("semantic_scholar",),
-        "http": ("openalex", "semantic_scholar"),
-    }[chosen]
+    return DISCOVERY_BY_BACKEND[chosen]
+
+
+def known_discovery_sources() -> frozenset[str]:
+    return frozenset(name for names in DISCOVERY_BY_BACKEND.values() for name in names)
 
 
 def write_backend() -> str:

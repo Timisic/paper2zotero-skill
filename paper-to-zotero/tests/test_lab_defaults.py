@@ -27,11 +27,11 @@ from zotero_peer import ZoteroLibrary  # noqa: E402
 LAN = "http://192.168.8.167:8000"
 
 
-def test_search_backend_defaults_to_kimi(monkeypatch, tmp_path: Path) -> None:
+def test_search_backend_defaults_to_scansci(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(credentials, "SKILL_ENV_FILE", tmp_path / "missing.env")
     monkeypatch.delenv("SEARCH_BACKEND", raising=False)
-    assert credentials.search_backend() == "kimi"
-    assert credentials.discovery_sources_for() == ("kimi",)
+    assert credentials.search_backend() == "scansci"
+    assert credentials.discovery_sources_for() == ("scansci",)
     monkeypatch.setenv("SEARCH_BACKEND", "openalex")
     assert credentials.discovery_sources_for() == ("openalex",)
 
@@ -394,7 +394,7 @@ def test_tasks_api_unpacks_full_md(tmp_path: Path) -> None:
     assert Path(markdown).read_text(encoding="utf-8") == "# Parsed\n"
 
 
-def test_preflight_names_kimi_and_the_lan_host(monkeypatch) -> None:
+def test_preflight_names_scansci_and_the_lan_host(monkeypatch) -> None:
     monkeypatch.delenv("SEARCH_BACKEND", raising=False)
     monkeypatch.delenv("MINERU_API_BASE", raising=False)
     monkeypatch.delenv("MINERU_ENDPOINT", raising=False)
@@ -404,7 +404,7 @@ def test_preflight_names_kimi_and_the_lan_host(monkeypatch) -> None:
     assert conversion["converter"]["selected"] == "mineru-self-hosted"
     assert "token" not in conversion["converter"]
     discovered = json.loads(run_script("preflight.py", "--json", "--skip-live", "--stage", "discovery").stdout)
-    assert discovered["search"] == {"backend": "kimi", "sources": ["kimi"]}
+    assert discovered["search"] == {"backend": "scansci", "sources": ["scansci"]}
 
 
 def test_ingestion_stage_is_ready_from_local_write_without_calling_the_web_key(monkeypatch) -> None:

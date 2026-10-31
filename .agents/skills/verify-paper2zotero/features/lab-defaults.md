@@ -4,13 +4,13 @@ Check the current search, conversion, and Zotero write defaults on loopback peer
 
 ## Sub-features
 
-- `search`: unset `SEARCH_BACKEND` resolves to `kimi`. Kimi opens one WebBridge page. A blocked, unreadable, or outage page is `unavailable`. A readable page with no hits is `empty`.
+- `search`: unset `SEARCH_BACKEND` resolves to `scansci`. Grey PDF sources are on. `--legal-only` or `SCANSCI_LEGAL_ONLY=1` forces legal sources. Kimi stays `SEARCH_BACKEND=kimi` and opens one WebBridge page. A blocked, unreadable, or outage page is `unavailable`. A readable page with no hits is `empty`.
 - `convert`: unset `MINERU_API_BASE` resolves to `http://192.168.8.167:8000`, then cloud, then markitdown
 - `write`: a loopback local API accepts one item with no Web API key
 
 ## How to get to it (user POV)
 
-Leave `SEARCH_BACKEND`, `MINERU_API_BASE`, and `ZOTERO_WRITE_BACKEND` unset. Search uses Kimi WebBridge on one page: `KIMI_SEARCH_URL` when set, otherwise the Semantic Scholar search URL. A blocked, unreadable, or outage page is `unavailable`. A readable page with no hits is `empty`. That search does not open a second page and does not call the OpenAlex or Semantic Scholar APIs. Conversion uses self-hosted MinerU when `GET /v1/health` succeeds, otherwise MinerU cloud when `MINERU_TOKEN` is set, otherwise markitdown. A Zotero write aimed at `https://api.zotero.org` prefers `http://127.0.0.1:23119/api` and falls back to the Web API.
+Leave `SEARCH_BACKEND`, `MINERU_API_BASE`, and `ZOTERO_WRITE_BACKEND` unset. Search uses scansci. Grey PDF sources are on unless `--legal-only` or `SCANSCI_LEGAL_ONLY=1` is set. Kimi is `SEARCH_BACKEND=kimi` and then opens one page: `KIMI_SEARCH_URL` when set, otherwise the Semantic Scholar search URL. A blocked, unreadable, or outage page is `unavailable`. A readable page with no hits is `empty`. That Kimi search does not open a second page and does not call the OpenAlex or Semantic Scholar APIs. Conversion uses self-hosted MinerU when `GET /v1/health` succeeds, otherwise MinerU cloud when `MINERU_TOKEN` is set, otherwise markitdown. A Zotero write aimed at `https://api.zotero.org` prefers `http://127.0.0.1:23119/api` and falls back to the Web API.
 
 ## Driving it with verify_runner
 

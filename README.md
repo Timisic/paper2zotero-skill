@@ -10,7 +10,7 @@
 
 它会准备需要的工具，再打开配置向导。你只需按向导提示，打开对应的网页获取相关的API KEY，粘贴回向导中。
 
-默认文献路径是 **Kimi 检索 → 局域网 MinerU（`http://192.168.8.167:8000`）→ 本机 Zotero**。OpenAlex、MinerU 云端和 Zotero Web API 是可选项。最后还会询问你是否想换用自己的总结提示词。
+默认文献路径是 **ScanSci 检索与 PDF 下载 → 局域网 MinerU（`http://192.168.8.167:8000`）→ 本机 Zotero**。灰色来源默认开启。只要合法来源时，处理命令加 `--legal-only`，或设置 `SCANSCI_LEGAL_ONLY=1`。Kimi 仍用 `SEARCH_BACKEND=kimi`。OpenAlex、MinerU 云端和 Zotero Web API 是可选项。最后还会询问你是否想换用自己的总结提示词。
 
 ## 装好后怎么用
 
@@ -48,7 +48,7 @@ flowchart TD
     H --> I[保存到 Zotero，读回核验并报告结果]
 ```
 
-检索默认走 Kimi WebBridge。有公开 PDF 时直接下载，需要机构访问时才用已登录浏览器。PDF 转 Markdown 默认用局域网 MinerU（`http://192.168.8.167:8000`），笔记写入本机 Zotero。**阅读分析由当前 AI 助手完成**。
+检索和 PDF 下载默认走 scansci-pdf（`pip install 'scansci-pdf==1.19.0'`，不装浏览器扩展）。灰色来源（含 Sci-Hub）开启。`--legal-only` 或 `SCANSCI_LEGAL_ONLY=1` 只走合法来源。Kimi 仍是 `SEARCH_BACKEND=kimi`。scansci 没有拿到已核验的 PDF 时，公开链接仍用 HTTPS 下载，需要机构访问时才用已登录浏览器。PDF 转 Markdown 默认用局域网 MinerU（`http://192.168.8.167:8000`），笔记写入本机 Zotero。**阅读分析由当前 AI 助手完成**。
 
 笔记默认跟随论文语种，没有固定字数限制。你可以换用自己的总结提示词：编辑当前已安装 skill 中的 `references/paper-summary.md`。setup 末尾会显示实际路径；[修改位置与方法](install/HELP.md#更换总结提示词)也可随时查阅。
 

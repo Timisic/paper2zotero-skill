@@ -27,7 +27,7 @@ absence, and a failed source is never allowed to look like one.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
 import os
 from pathlib import Path
@@ -40,6 +40,7 @@ from typing import Any, Callable, Mapping, Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import credentials  # noqa: E402
+import scansci_retrieval  # noqa: E402
 import sources as source_module  # noqa: E402
 import workflow  # noqa: E402
 from sources import Answer, Query, Sources  # noqa: E402
@@ -57,7 +58,7 @@ class DiscoveryRequest:
     """One retrieval round, in checkable types."""
     query: Query
     output: Path
-    sources: Sequence[str] = source_module.DISCOVERY_SOURCES
+    sources: Sequence[str] | None = None
     run_dir: Path | None = None
     round: str = "initial"
     reason: str = ""
@@ -238,6 +239,8 @@ class Budget:
 
 def discover(request: DiscoveryRequest, client: Sources | None = None) -> dict[str, Any]:
     """Run one retrieval round over every requested source and write the list."""
+    names = tuple(request.sources) if request.sources is not None else credentials.discovery_sources_for()
+    request = replace(request, sources=names)
     client = client or Sources()
     budget = Budget(request.run_dir)
     timestamp = source_module.observed_at()
@@ -259,6 +262,11 @@ def discover(request: DiscoveryRequest, client: Sources | None = None) -> dict[s
                             detail="retrieval budget spent", observed_at=timestamp)
         elif name == "kimi":
             answer = kimi_search(request.query, budget=min(budget.remaining(), PER_SOURCE_CEILING))
+        elif name == scansci_retrieval.SOURCE:
+            answer = scansci_retrieval.search(
+                request.query,
+                budget=min(budget.remaining(), PER_SOURCE_CEILING),
+            )
         else:
             answer = client.search(name, request.query,
                                    budget=min(budget.remaining(), PER_SOURCE_CEILING, client.budget))
@@ -526,8 +534,10 @@ def kimi_search(query: Query, budget: float, transport: Callable[..., Any] | Non
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     add_arguments(parser)
+    known = ", ".join(dict.fromkeys(
+        name for names in credentials.DISCOVERY_BY_BACKEND.values() for name in names))
     parser.add_argument("--sources", default=None,
-                        help="Comma-separated subset of kimi, " + ", ".join(source_module.DISCOVERY_SOURCES)
+                        help="Comma-separated subset of " + known
                         + ". Default follows SEARCH_BACKEND.")
     parser.add_argument("--limit", type=int, default=50, help="records requested per source")
     parser.add_argument("--input-json", action="append", metavar="SOURCE=PATH",
@@ -550,14 +560,13 @@ def request_from_args(args: argparse.Namespace, names: Sequence[str]) -> Discove
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.sources:
-        names = [name for name in args.sources.split(",") if name.strip()]
+        names = [name.strip() for name in args.sources.split(",") if name.strip()]
     else:
         try:
             names = list(credentials.discovery_sources_for())
         except ValueError as error:
             workflow.fail(str(error))
-    allowed = set(source_module.DISCOVERY_SOURCES) | {"kimi"}
-    unknown = [name for name in names if name not in allowed]
+    unknown = [name for name in names if name not in credentials.known_discovery_sources()]
     if unknown:
         workflow.fail("unknown discovery source(s): " + ", ".join(unknown))
     request = request_from_args(args, names)

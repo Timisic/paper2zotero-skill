@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 import shutil
 from pathlib import Path
+
+import pytest
 
 if os.name == 'nt':
     git = shutil.which('git.exe')
@@ -42,8 +45,8 @@ CLOSED = "http://127.0.0.1:9"
 SOURCES = ("openalex", "semantic_scholar", "crossref", "unpaywall", "arxiv", "pmc")
 
 os.environ.setdefault("LITERATURE_SOURCE_BASES", json.dumps({name: CLOSED for name in SOURCES}))
-# Production defaults are Kimi search and the lab MinerU host. The suite
-# keeps the HTTP discovery pair and does not dial that host.
+# Production search is scansci. The suite keeps the HTTP discovery pair and
+# does not dial the lab MinerU host.
 os.environ["SEARCH_BACKEND"] = "http"
 os.environ["MINERU_API_BASE"] = ""
 os.environ.setdefault("LITERATURE_THROTTLE_DIR",
@@ -51,3 +54,28 @@ os.environ.setdefault("LITERATURE_THROTTLE_DIR",
 # Subprocess tests inherit this. Explicit fixture adapters remain usable;
 # the installed Kimi daemon and the user's real tabs are never test peers.
 os.environ["LITERATURE_BROWSER_DISABLED"] = "1"
+
+
+@pytest.fixture(autouse=True)
+def scansci_fetch_not_addressable(monkeypatch):
+    """In-process acquire calls the patched function. Subprocesses inherit the env.
+
+    Both return NotAddressable before scansci-pdf is imported. A test that
+    needs the real adapter deletes the env and calls the function it imported.
+    """
+    scripts = Path(__file__).resolve().parents[1] / "scripts"
+    entry = str(scripts)
+    added = entry not in sys.path
+    if added:
+        sys.path.insert(0, entry)
+    try:
+        import scansci_retrieval
+    finally:
+        if added:
+            sys.path.remove(entry)
+    monkeypatch.setenv(scansci_retrieval._FETCH_DISABLED_ENV, "1")
+
+    def not_addressable(*_args, **_kwargs):
+        return scansci_retrieval.NotAddressable()
+
+    monkeypatch.setattr(scansci_retrieval, "fetch_candidate", not_addressable)

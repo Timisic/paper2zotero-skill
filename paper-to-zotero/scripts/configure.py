@@ -12,6 +12,7 @@ import sys
 import agent_installation
 import credentials
 import capability
+import scansci_retrieval
 from runtime_io import private_text, file_lock
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -105,9 +106,14 @@ def check(*, as_json: bool = False) -> int:
         records.append(record)
         if not as_json:
             render(record)
-    if credentials.search_backend() == 'kimi':
+    backend = credentials.search_backend()
+    if backend == 'scansci':
+        ready = scansci_retrieval.library_ready()
+        search_record = {'name': '论文检索（ScanSci）', 'ok': ready.ok, 'detail': ready.detail,
+                         'action': '' if ready.ok else scansci_retrieval.INSTALL_LINE}
+    elif backend == 'kimi':
         search_record = {'name': '论文检索（Kimi WebBridge）', 'ok': True,
-                         'detail': '默认检索走 Kimi WebBridge', 'action': ''}
+                         'detail': '当前检索后端是 Kimi WebBridge', 'action': ''}
     else:
         discovery = capability.probe_discovery_search()
         search_record = {'name': CHECKS['openalex'][0], **discovery,

@@ -61,7 +61,7 @@ CASES = {
         'test_full_chain.py::test_a_conversion_failure_still_delivers_the_pdf',
         'test_full_chain.py::test_a_lost_mineru_submission_does_not_strand_the_chain'],
     'lab-defaults': [
-        'test_lab_defaults.py::test_search_backend_defaults_to_kimi',
+        'test_lab_defaults.py::test_search_backend_defaults_to_scansci',
         'test_lab_defaults.py::test_kimi_search_writes_browser_hits_and_a_block_is_unavailable',
         'test_lab_defaults.py::test_wrapped_evaluate_hits_still_become_candidates',
         'test_lab_defaults.py::test_a_down_default_page_is_unavailable',
@@ -72,7 +72,7 @@ CASES = {
         'test_lab_defaults.py::test_mineru_default_is_the_lan_host',
         'test_lab_defaults.py::test_unhealthy_self_host_drops_out_of_the_chain',
         'test_lab_defaults.py::test_tasks_api_unpacks_full_md',
-        'test_lab_defaults.py::test_preflight_names_kimi_and_the_lan_host',
+        'test_lab_defaults.py::test_preflight_names_scansci_and_the_lan_host',
         'test_lab_defaults.py::test_ingestion_stage_is_ready_from_local_write_without_calling_the_web_key',
         'test_lab_defaults.py::test_ingest_uses_the_local_api_without_a_web_key'],
 }
