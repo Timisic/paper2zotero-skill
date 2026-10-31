@@ -45,24 +45,15 @@ CLOSED = "http://127.0.0.1:9"
 SOURCES = ("openalex", "semantic_scholar", "crossref", "unpaywall", "arxiv", "pmc")
 
 os.environ.setdefault("LITERATURE_SOURCE_BASES", json.dumps({name: CLOSED for name in SOURCES}))
-# Production search is scansci. The suite keeps the HTTP discovery pair and
-# does not dial the lab MinerU host.
 os.environ["SEARCH_BACKEND"] = "http"
 os.environ["MINERU_API_BASE"] = ""
 os.environ.setdefault("LITERATURE_THROTTLE_DIR",
                       tempfile.mkdtemp(prefix="literature-throttle-"))
-# Subprocess tests inherit this. Explicit fixture adapters remain usable;
-# the installed Kimi daemon and the user's real tabs are never test peers.
 os.environ["LITERATURE_BROWSER_DISABLED"] = "1"
 
 
 @pytest.fixture(autouse=True)
 def scansci_fetch_not_addressable(monkeypatch):
-    """In-process acquire calls the patched function. Subprocesses inherit the env.
-
-    Both return NotAddressable before scansci-pdf is imported. A test that
-    needs the real adapter deletes the env and calls the function it imported.
-    """
     scripts = Path(__file__).resolve().parents[1] / "scripts"
     entry = str(scripts)
     added = entry not in sys.path

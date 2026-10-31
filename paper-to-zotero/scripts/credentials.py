@@ -236,7 +236,6 @@ def mineru_token() -> str:
 # MINERU_ENDPOINT disables the self-hosted hop.
 LAB_MINERU_API_BASE = "http://192.168.8.167:8000"
 LAB_MINERU_API_BASE_TAILSCALE = "http://100.92.231.38:8000"
-# Unset SEARCH_BACKEND selects the first key.
 DISCOVERY_BY_BACKEND: dict[str, tuple[str, ...]] = {
     "scansci": ("scansci",),
     "kimi": ("kimi",),

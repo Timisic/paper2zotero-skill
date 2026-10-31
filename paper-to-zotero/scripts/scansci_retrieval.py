@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""Search and download through scansci-pdf 1.19.0.
-
-This module is the only importer of scansci_pdf.
-"""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -28,6 +24,7 @@ __all__ = [
     "NotAddressable",
     "LibraryStatus",
     "grey_policy",
+    "retrieval_disabled",
     "search",
     "fetch_candidate",
     "library_ready",
@@ -37,10 +34,8 @@ SOURCE: Final = "scansci"
 PIN: Final = "1.19.0"
 INSTALL_LINE: Final = f"pip install 'scansci-pdf=={PIN}'"
 LEGAL_ONLY_ENV: Final = "SCANSCI_LEGAL_ONLY"
-# Subprocess tests inherit this and must not import scansci-pdf.
 _FETCH_DISABLED_ENV: Final = "LITERATURE_SCANSCI_DISABLED"
 
-# Winning labels LEGAL must not keep. Exact match after strip and lower.
 # local_cache and late_capture hide which lane wrote the file.
 _OPAQUE_UNDER_LEGAL: Final = frozenset({
     "",
@@ -91,7 +86,7 @@ class FetchMiss:
 
 @dataclass(frozen=True)
 class NotAddressable:
-    """No DOI and no arXiv id. Acquire records no scansci row."""
+    """No DOI and no arXiv id."""
 
 
 @dataclass(frozen=True)
@@ -99,6 +94,10 @@ class LibraryStatus:
     ok: bool
     detail: str
     install: str
+
+
+def retrieval_disabled() -> bool:
+    return os.environ.get(_FETCH_DISABLED_ENV) == "1"
 
 
 def grey_policy(*, legal_only: bool = False) -> GreyPolicy:
@@ -150,8 +149,6 @@ def fetch_candidate(
     directory: Path,
     policy: GreyPolicy,
 ) -> FetchHit | FetchMiss | NotAddressable:
-    if os.environ.get(_FETCH_DISABLED_ENV) == "1":
-        return NotAddressable()
     identifier, from_arxiv = _identifier(candidate)
     if identifier is None:
         return NotAddressable()
@@ -162,10 +159,9 @@ def fetch_candidate(
         browser_first = _browser_first(module)
     except Exception as exc:
         return FetchMiss(status="unavailable", detail=type(exc).__name__)
-    # This flag starts a long-lived browser. The default path does not.
     if browser_first:
         return FetchMiss(status="unavailable", detail="scihub_browser_first_enabled is set")
-    # A crashed download leaves a PDF here. The next attempt must not treat it as a hit.
+    # download() treats an existing PDF in the target directory as success.
     _wipe_staging(directory)
     directory.mkdir(parents=True, exist_ok=True)
     try:
@@ -275,8 +271,6 @@ def _within(path: Path, directory: Path) -> bool:
 
 
 def _copy_into_staging(path: Path, directory: Path) -> Path:
-    # verified() moves the file it accepts. A cache hit outside staging is copied
-    # in so that move does not take scansci's cache file.
     if _within(path, directory):
         return path
     directory.mkdir(parents=True, exist_ok=True)

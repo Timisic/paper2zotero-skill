@@ -1,4 +1,3 @@
-"""scansci-pdf stays behind a fake module. No network, no Sci-Hub, no paywall."""
 from __future__ import annotations
 
 import json
@@ -26,15 +25,6 @@ from scansci_retrieval import (  # noqa: E402
     search,
 )
 from sources import Query  # noqa: E402
-
-# Bound before the suite patch replaces scansci_retrieval.fetch_candidate.
-_fetch = fetch_candidate
-
-
-@pytest.fixture
-def fetch(monkeypatch):
-    monkeypatch.delenv(scansci_retrieval._FETCH_DISABLED_ENV, raising=False)
-    return _fetch
 
 
 def _install(monkeypatch, **parts):
@@ -142,7 +132,7 @@ def test_a_spent_budget_does_not_call_the_library(monkeypatch) -> None:
     assert answer.records == []
 
 
-def test_download_policy_reaches_the_library(tmp_path: Path, fetch, monkeypatch) -> None:
+def test_download_policy_reaches_the_library(tmp_path: Path, monkeypatch) -> None:
     seen = []
 
     def download(identifier, directory, **kwargs):
@@ -153,8 +143,8 @@ def test_download_policy_reaches_the_library(tmp_path: Path, fetch, monkeypatch)
 
     _install(monkeypatch, download=download, config=SimpleNamespace(load_config=lambda: {}))
     candidate = {"doi": "10.1000/policy", "title": "Policy"}
-    grey = fetch(candidate, tmp_path / "grey", GreyPolicy.GREY)
-    legal = fetch(candidate, tmp_path / "legal", GreyPolicy.LEGAL)
+    grey = fetch_candidate(candidate, tmp_path / "grey", GreyPolicy.GREY)
+    legal = fetch_candidate(candidate, tmp_path / "legal", GreyPolicy.LEGAL)
     assert isinstance(grey, FetchHit)
     assert isinstance(legal, FetchHit)
     assert seen[0] == {
@@ -175,17 +165,17 @@ def test_download_policy_reaches_the_library(tmp_path: Path, fetch, monkeypatch)
     }
 
 
-def test_grey_keeps_a_scihub_file(tmp_path: Path, fetch, monkeypatch) -> None:
+def test_grey_keeps_a_scihub_file(tmp_path: Path, monkeypatch) -> None:
     _install(monkeypatch, download=_pdf_download(source="Sci-Hub"),
              config=SimpleNamespace(load_config=lambda: {}))
-    result = fetch({"doi": "10.1000/grey", "title": "Grey"}, tmp_path / "stage", GreyPolicy.GREY)
+    result = fetch_candidate({"doi": "10.1000/grey", "title": "Grey"}, tmp_path / "stage", GreyPolicy.GREY)
     assert isinstance(result, FetchHit)
     assert result.source == "Sci-Hub"
     assert result.path.is_file()
 
 
 @pytest.mark.parametrize("label", ["Sci-Hub", "local_cache"])
-def test_a_grey_win_under_legal_is_not_a_hit(tmp_path: Path, fetch, monkeypatch, label: str) -> None:
+def test_a_grey_win_under_legal_is_not_a_hit(tmp_path: Path, monkeypatch, label: str) -> None:
     written = {}
 
     def download(identifier, directory, **kwargs):
@@ -195,14 +185,14 @@ def test_a_grey_win_under_legal_is_not_a_hit(tmp_path: Path, fetch, monkeypatch,
         return {"success": True, "file": str(path), "source": label, "doi": identifier}
 
     _install(monkeypatch, download=download, config=SimpleNamespace(load_config=lambda: {}))
-    result = fetch({"doi": "10.1000/legal", "title": "Legal"}, tmp_path / "stage", GreyPolicy.LEGAL)
+    result = fetch_candidate({"doi": "10.1000/legal", "title": "Legal"}, tmp_path / "stage", GreyPolicy.LEGAL)
     assert not isinstance(result, FetchHit)
     assert isinstance(result, FetchMiss)
     assert result.status == "not_found"
     assert not written["path"].exists()
 
 
-def test_legal_leaves_a_scihub_file_outside_staging(tmp_path: Path, fetch, monkeypatch) -> None:
+def test_legal_leaves_a_scihub_file_outside_staging(tmp_path: Path, monkeypatch) -> None:
     cache = tmp_path / "cache.pdf"
     cache.write_bytes(b"%PDF-scihub")
 
@@ -210,31 +200,31 @@ def test_legal_leaves_a_scihub_file_outside_staging(tmp_path: Path, fetch, monke
         return {"success": True, "file": str(cache), "source": "Sci-Hub", "doi": identifier}
 
     _install(monkeypatch, download=download, config=SimpleNamespace(load_config=lambda: {}))
-    result = fetch({"doi": "10.1000/outside", "title": "Outside"}, tmp_path / "stage", GreyPolicy.LEGAL)
+    result = fetch_candidate({"doi": "10.1000/outside", "title": "Outside"}, tmp_path / "stage", GreyPolicy.LEGAL)
     assert isinstance(result, FetchMiss)
     assert result.status == "not_found"
     assert cache.read_bytes() == b"%PDF-scihub"
 
 
-def test_a_candidate_without_doi_or_arxiv_is_not_addressable(tmp_path: Path, fetch, monkeypatch) -> None:
+def test_a_candidate_without_doi_or_arxiv_is_not_addressable(tmp_path: Path, monkeypatch) -> None:
     called = []
     _install(monkeypatch, download=lambda *_args, **_kwargs: called.append(True))
-    result = fetch({"title": "No identifiers"}, tmp_path, GreyPolicy.GREY)
+    result = fetch_candidate({"title": "No identifiers"}, tmp_path, GreyPolicy.GREY)
     assert isinstance(result, NotAddressable)
     assert called == []
 
 
-def test_browser_first_does_not_call_download(tmp_path: Path, fetch, monkeypatch) -> None:
+def test_browser_first_does_not_call_download(tmp_path: Path, monkeypatch) -> None:
     called = []
     config = SimpleNamespace(load_config=lambda: {"scihub_browser_first_enabled": True})
     _install(monkeypatch, download=lambda *_args, **_kwargs: called.append(True), config=config)
-    result = fetch({"doi": "10.1000/browser", "title": "Browser"}, tmp_path / "stage", GreyPolicy.GREY)
+    result = fetch_candidate({"doi": "10.1000/browser", "title": "Browser"}, tmp_path / "stage", GreyPolicy.GREY)
     assert called == []
     assert isinstance(result, FetchMiss)
     assert result.status == "unavailable"
 
 
-def test_a_stale_staging_file_cannot_satisfy_the_next_download(tmp_path: Path, fetch, monkeypatch) -> None:
+def test_a_stale_staging_file_cannot_satisfy_the_next_download(tmp_path: Path, monkeypatch) -> None:
     staging = tmp_path / "stage"
     staging.mkdir()
     stale = staging / "old.pdf"
@@ -245,13 +235,13 @@ def test_a_stale_staging_file_cannot_satisfy_the_next_download(tmp_path: Path, f
                 "source": "unpaywall", "doi": identifier}
 
     _install(monkeypatch, download=download, config=SimpleNamespace(load_config=lambda: {}))
-    result = fetch({"doi": "10.1000/stale", "title": "Stale"}, staging, GreyPolicy.GREY)
+    result = fetch_candidate({"doi": "10.1000/stale", "title": "Stale"}, staging, GreyPolicy.GREY)
     assert isinstance(result, FetchMiss)
     assert result.status == "unavailable"
     assert not stale.exists()
 
 
-def test_a_cache_file_outside_staging_is_copied_and_left_in_place(tmp_path: Path, fetch, monkeypatch) -> None:
+def test_a_cache_file_outside_staging_is_copied_and_left_in_place(tmp_path: Path, monkeypatch) -> None:
     cache = tmp_path / "cache.pdf"
     cache.write_bytes(b"%PDF-cache-bytes")
 
@@ -260,7 +250,7 @@ def test_a_cache_file_outside_staging_is_copied_and_left_in_place(tmp_path: Path
 
     _install(monkeypatch, download=download, config=SimpleNamespace(load_config=lambda: {}))
     staging = tmp_path / "stage"
-    result = fetch({"doi": "10.1000/cache", "title": "Cache"}, staging, GreyPolicy.GREY)
+    result = fetch_candidate({"doi": "10.1000/cache", "title": "Cache"}, staging, GreyPolicy.GREY)
     assert isinstance(result, FetchHit)
     assert result.path.parent == staging
     assert result.path.read_bytes() == cache.read_bytes()
@@ -268,7 +258,7 @@ def test_a_cache_file_outside_staging_is_copied_and_left_in_place(tmp_path: Path
     assert result.path.resolve() != cache.resolve()
 
 
-def test_doi_wins_over_arxiv_and_an_arxiv_id_is_a_preprint(tmp_path: Path, fetch, monkeypatch) -> None:
+def test_doi_wins_over_arxiv_and_an_arxiv_id_is_a_preprint(tmp_path: Path, monkeypatch) -> None:
     seen = []
 
     def download(identifier, directory, **kwargs):
@@ -280,8 +270,8 @@ def test_doi_wins_over_arxiv_and_an_arxiv_id_is_a_preprint(tmp_path: Path, fetch
 
     _install(monkeypatch, download=download, config=SimpleNamespace(load_config=lambda: {}))
     both = {"title": "Both", "doi": "10.1000/doiwins", "identifiers": {"arxiv": "2401.00001"}}
-    doi_hit = fetch(both, tmp_path / "doi", GreyPolicy.GREY)
-    arxiv_hit = fetch({"title": "Preprint", "identifiers": {"arxiv": "2401.00001"}},
+    doi_hit = fetch_candidate(both, tmp_path / "doi", GreyPolicy.GREY)
+    arxiv_hit = fetch_candidate({"title": "Preprint", "identifiers": {"arxiv": "2401.00001"}},
                       tmp_path / "arxiv", GreyPolicy.GREY)
     assert seen == ["10.1000/doiwins", "2401.00001"]
     assert isinstance(doi_hit, FetchHit) and doi_hit.version == "unknown"

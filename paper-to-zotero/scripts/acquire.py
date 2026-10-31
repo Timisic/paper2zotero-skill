@@ -420,7 +420,8 @@ def acquire(request: AcquireRequest) -> dict[str, Any]:
 
     staging = request.output.with_suffix(request.output.suffix + ".scansci")
     try:
-        outcome = scansci_retrieval.fetch_candidate(candidate, staging, request.policy)
+        outcome = None if scansci_retrieval.retrieval_disabled() else scansci_retrieval.fetch_candidate(
+            candidate, staging, request.policy)
         if isinstance(outcome, scansci_retrieval.FetchHit):
             attempt = {
                 "channel": scansci_retrieval.SOURCE,
