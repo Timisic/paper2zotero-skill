@@ -86,6 +86,132 @@ def test_kimi_search_reuses_the_open_tab() -> None:
     assert discovery.PER_SOURCE_CEILING == 40.0
 
 
+def test_wrapped_evaluate_hits_still_become_candidates(tmp_path: Path, monkeypatch) -> None:
+    """command('evaluate') returns {type, value}; hits are inside value."""
+    page = {"hits": [{"title": "Wrapped Hit", "year": 2024, "authors": ["Ada Lovelace"],
+                      "url": "https://example.edu/paper"}], "blocked": False}
+    assert discovery._unwrap_evaluate({"type": "string", "value": json.dumps(page)})["hits"] == page["hits"]
+    assert discovery._unwrap_evaluate({"type": "object", "value": page})["hits"] == page["hits"]
+    assert discovery._unwrap_evaluate(page)["hits"] == page["hits"]
+
+    def transport(action, payload, session, timeout):
+        if action == "list_tabs":
+            return {"tabs": [{"url": "https://www.kimi.com/"}]}
+        if action == "evaluate":
+            return {"type": "string", "value": json.dumps(page)}
+        return {}
+
+    original = discovery.kimi_search
+    monkeypatch.setattr(discovery, "kimi_search", lambda query, budget: original(query, budget, transport=transport))
+    output = tmp_path / "candidates.json"
+    result = discovery.discover(discovery.DiscoveryRequest(
+        query=Query(text="attention robots"), output=output, sources=("kimi",)))
+    assert result["status"] == "ok"
+    assert result["returned"] == 1
+    assert json.loads(output.read_text())[0]["title"] == "Wrapped Hit"
+
+
+def test_a_down_default_page_opens_the_other_search_surface() -> None:
+    outage = json.dumps({"hits": [], "blocked": False, "trouble": True, "title": "Semantic Scholar"})
+    navigated: list[str] = []
+
+    def transport(action, payload, session, timeout):
+        if action == "list_tabs":
+            return {"tabs": [{"url": "https://www.kimi.com/"}]}
+        if action == "navigate":
+            navigated.append(payload["url"])
+            return {}
+        if action == "evaluate":
+            if navigated and "scholar.google.com" in navigated[-1]:
+                return {"type": "string", "value": json.dumps({
+                    "hits": [{"title": "Scholar Hit", "url": "https://example.edu/s"}],
+                    "blocked": False,
+                })}
+            return {"type": "string", "value": outage}
+        return {}
+
+    answer = discovery.kimi_search(Query(text="robots"), 40, transport=transport)
+    assert answer.status == "ok"
+    assert [record["title"] for record in answer.records] == ["Scholar Hit"]
+    assert len(navigated) == 2
+    assert "semanticscholar.org" in navigated[0]
+    assert "scholar.google.com" in navigated[1]
+    assert "robots" in navigated[1]
+    assert answer.detail == navigated[1]
+    assert "servers are having a bit of trouble" in discovery.EXTRACT_JS
+
+
+def test_an_unreadable_evaluate_tries_the_next_surface() -> None:
+    navigated: list[str] = []
+
+    def transport(action, payload, session, timeout):
+        if action == "list_tabs":
+            return {"tabs": [{"url": "https://www.kimi.com/"}]}
+        if action == "navigate":
+            navigated.append(payload["url"])
+            return {}
+        if action == "evaluate":
+            if navigated and "scholar.google.com" in navigated[-1]:
+                return {"hits": [{"title": "Recovered Hit"}], "blocked": False}
+            return {"type": "string", "value": "not json"}
+        return {}
+
+    answer = discovery.kimi_search(Query(text="robots"), 40, transport=transport)
+    assert answer.status == "ok"
+    assert [record["title"] for record in answer.records] == ["Recovered Hit"]
+    assert len(navigated) == 2
+
+
+def test_an_outage_on_every_surface_is_unavailable_not_empty() -> None:
+    def transport(action, payload, session, timeout):
+        if action == "list_tabs":
+            return {"tabs": [{"url": "https://www.kimi.com/"}]}
+        if action == "evaluate":
+            return {"type": "string", "value": json.dumps({"hits": [], "blocked": False, "trouble": True})}
+        return {}
+
+    answer = discovery.kimi_search(Query(text="robots"), 40, transport=transport)
+    assert answer.status == "unavailable"
+    assert answer.records == []
+    assert answer.detail == "search page was not readable"
+
+
+def test_a_real_empty_page_does_not_open_another_search() -> None:
+    navigated: list[str] = []
+
+    def transport(action, payload, session, timeout):
+        if action == "list_tabs":
+            return {"tabs": [{"url": "https://www.kimi.com/"}]}
+        if action == "navigate":
+            navigated.append(payload["url"])
+        if action == "evaluate":
+            return {"hits": [], "blocked": False}
+        return {}
+
+    answer = discovery.kimi_search(Query(text="very specific absent phrase"), 40, transport=transport)
+    assert answer.status == "empty"
+    assert len(navigated) == 1
+    assert "scholar.google.com" not in navigated[0]
+
+
+def test_a_configured_search_url_is_not_replaced_when_it_is_down(monkeypatch) -> None:
+    monkeypatch.setenv("KIMI_SEARCH_URL", "https://example.edu/search?q={query}")
+    navigated: list[str] = []
+
+    def transport(action, payload, session, timeout):
+        if action == "list_tabs":
+            return {"tabs": [{"url": "https://www.kimi.com/"}]}
+        if action == "navigate":
+            navigated.append(payload["url"])
+        if action == "evaluate":
+            return {"hits": [], "blocked": False, "trouble": True}
+        return {}
+
+    answer = discovery.kimi_search(Query(text="robots"), 40, transport=transport)
+    assert answer.status == "unavailable"
+    assert navigated == ["https://example.edu/search?q=robots"]
+
+
 def test_mineru_default_is_the_lan_host(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(credentials, "SKILL_ENV_FILE", tmp_path / "missing.env")
     monkeypatch.delenv("MINERU_API_BASE", raising=False)

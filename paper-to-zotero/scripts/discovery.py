@@ -389,6 +389,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 DEFAULT_SEARCH_PAGE = "https://www.semanticscholar.org/search?q={query}&sort=relevance"
+# `.gs_ri` is already in EXTRACT_JS. Open it only when the default page cannot answer.
+FALLBACK_SEARCH_PAGE = "https://scholar.google.com/scholar?q={query}"
 EXTRACT_JS = r"""
 (() => {
   const take = %d;
@@ -396,6 +398,8 @@ EXTRACT_JS = r"""
   const seen = new Set();
   const text = (document.body && document.body.innerText || '').slice(0, 800);
   const blocked = /are you a robot|just a moment|verify you are|人机验证|人機驗證/i.test(text);
+  const trouble = /servers are having a bit of trouble/i.test(text + " " + (document.title || ""))
+    || /^chrome-error:/.test(location.href);
   function push(title, url, year) {
     title = (title || '').replace(/\s+/g, ' ').trim();
     if (!title || seen.has(title) || hits.length >= take) return;
@@ -412,7 +416,7 @@ EXTRACT_JS = r"""
   if (!hits.length) {
     for (const link of document.querySelectorAll('a[href*="/paper/"]')) push(link.innerText, link.href, null);
   }
-  return JSON.stringify({hits: hits, blocked: blocked, url: location.href, title: document.title});
+  return JSON.stringify({hits: hits, blocked: blocked, trouble: trouble, url: location.href, title: document.title});
 })()
 """
 
@@ -422,16 +426,61 @@ class _FormatMap(dict):
         return ""
 
 
-def search_page(query: Query) -> str:
-    template = credentials.configured_value("KIMI_SEARCH_URL") or DEFAULT_SEARCH_PAGE
-    if not template:
-        template = DEFAULT_SEARCH_PAGE
+def _search_url(template: str, query: Query) -> str:
     return template.format_map(_FormatMap({
         "query": urllib.parse.quote(query.text),
         "limit": str(query.limit),
         "from_year": "" if query.from_year is None else str(query.from_year),
         "to_year": "" if query.to_year is None else str(query.to_year),
     }))
+
+
+def search_page(query: Query) -> str:
+    template = credentials.configured_value("KIMI_SEARCH_URL") or DEFAULT_SEARCH_PAGE
+    if not template:
+        template = DEFAULT_SEARCH_PAGE
+    return _search_url(template, query)
+
+
+def search_targets(query: Query) -> list[str]:
+    """Pages to open, in order. A configured URL is the only one."""
+    primary = search_page(query)
+    if credentials.configured_value("KIMI_SEARCH_URL"):
+        return [primary]
+    fallback = _search_url(FALLBACK_SEARCH_PAGE, query)
+    if fallback == primary:
+        return [primary]
+    return [primary, fallback]
+
+
+def _unwrap_evaluate(data: Any, depth: int = 0) -> Any:
+    """Read the page JSON out of a Kimi evaluate result.
+
+    ``command("evaluate")`` returns ``{type, value}`` and leaves the snippet's
+    JSON string in ``value``. ``browser_pdf.evaluate`` unwraps that; discovery
+    calls ``command``. A dict that already contains ``hits`` is the page.
+    """
+    if depth > 3:
+        return data
+    if isinstance(data, str):
+        try:
+            return _unwrap_evaluate(json.loads(data), depth + 1)
+        except json.JSONDecodeError:
+            return data
+    if isinstance(data, dict) and "hits" not in data and "value" in data:
+        return _unwrap_evaluate(data.get("value"), depth + 1)
+    return data
+
+
+def _page_failure(report: Any) -> str | None:
+    """Why this page cannot answer. None means it did, even with no hits."""
+    if not isinstance(report, dict) or "hits" not in report:
+        return "search page was not readable"
+    if report.get("blocked"):
+        return "search page is blocked"
+    if report.get("trouble"):
+        return "search page was not readable"
+    return None
 
 
 def _attach_search_tab(transport: Callable[..., Any], session: str, timeout: int) -> None:
@@ -467,27 +516,35 @@ def kimi_search(query: Query, budget: float, transport: Callable[..., Any] | Non
     if transport is None:
         import browser_pdf
         transport = browser_pdf.command
-    url = search_page(query)
     timeout = max(5, int(budget))
+    session = "literature-discovery"
     try:
         # newTab hangs until the source ceiling. Attach the session's tab and
         # navigate there. That path is about a second; a new tab is not.
-        _attach_search_tab(transport, "literature-discovery", timeout)
-        transport("navigate", {"url": url}, "literature-discovery", timeout)
-        data = transport("evaluate", {"code": EXTRACT_JS % max(1, min(query.limit, 25))},
-                         "literature-discovery", timeout)
+        _attach_search_tab(transport, session, timeout)
     except (OSError, TimeoutError, RuntimeError, ValueError) as exc:
         return Answer(source="kimi", question="search", status="unavailable",
                       detail=str(exc), observed_at=observed)
-    if not isinstance(data, dict) or "hits" not in data:
-        return Answer(source="kimi", question="search", status="unavailable",
-                      detail="search page was not readable", observed_at=observed)
-    hits = [hit for hit in data.get("hits") or [] if isinstance(hit, dict) and hit.get("title")]
-    if data.get("blocked"):
-        return Answer(source="kimi", question="search", status="unavailable",
-                      detail="search page is blocked", observed_at=observed)
-    return Answer(source="kimi", question="search", status="ok" if hits else "empty",
-                  records=hits, detail=url, observed_at=observed)
+    code = EXTRACT_JS % max(1, min(query.limit, 25))
+    # An outage, a block, or a payload with no page JSON is not an empty
+    # literature. The next target is the other DOM EXTRACT_JS already reads.
+    last_detail = "search page was not readable"
+    for url in search_targets(query):
+        try:
+            transport("navigate", {"url": url}, session, timeout)
+            report = _unwrap_evaluate(transport("evaluate", {"code": code}, session, timeout))
+        except (OSError, TimeoutError, RuntimeError, ValueError) as exc:
+            last_detail = str(exc)
+            continue
+        reason = _page_failure(report)
+        if reason:
+            last_detail = reason
+            continue
+        hits = [hit for hit in report.get("hits") or [] if isinstance(hit, dict) and hit.get("title")]
+        return Answer(source="kimi", question="search", status="ok" if hits else "empty",
+                      records=hits, detail=url, observed_at=observed)
+    return Answer(source="kimi", question="search", status="unavailable",
+                  detail=last_detail, observed_at=observed)
 
 
 def build_parser() -> argparse.ArgumentParser:
