@@ -108,6 +108,33 @@ def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_pa
     assert not (tmp_path / '.claude').exists()
 
 
+def test_demo_accepts_windows_newlines_from_extra_names(tmp_path):
+    env = environment(tmp_path)
+    config = tmp_path / '.config/literature-to-zotero/env'
+    config.parent.mkdir(parents=True)
+    config.write_text('MINERU_TOKEN=private-fixture\n')
+    before = config.read_bytes()
+    wrapper = tmp_path / 'python'
+    wrapper.write_text(
+        '#!/bin/sh\n'
+        'if [ "$1" = -c ] && printf %s "$2" | grep -q wizard_extras; then\n'
+        "  printf 'zotero\\r\\nmineru\\r\\nkimi\\r\\nsemantic_scholar\\r\\ncrossref\\r\\nunpaywall\\r\\n'\n"
+        '  exit 0\n'
+        'fi\n'
+        'exec "$REAL" "$@"\n',
+        encoding='utf-8')
+    wrapper.chmod(0o755)
+    env['PYTHON_BIN'] = str(wrapper)
+    env['REAL'] = sys.executable
+    result = subprocess.run(
+        [shutil.which('bash') or 'bash', str(ROOT / 'install/setup.sh'), '--demo', '--agent', 'claude-code'],
+        input='\n' * 50, env=env, text=True, encoding='utf-8', capture_output=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+    assert 'Semantic Scholar' in result.stdout
+    assert '必配' not in result.stdout
+    assert config.read_bytes() == before
+
+
 def test_private_writer_preserves_unicode_and_literal_shell_text(tmp_path):
     env = environment(tmp_path)
     config = tmp_path / '.config/literature-to-zotero/env'
@@ -174,8 +201,17 @@ def test_bootstrap_installs_default_tools_after_the_python_path(tmp_path):
     call = text.index('ensure_default_tools')
     runtime = text.index('if [[ "${1:-}" == --runtime-only ]]; then exit 0; fi')
     assert probe < check < saved < call < runtime
-    if not shutil.which('pdftotext'):
-        pytest.skip('pdftotext required')
+    bad = tmp_path / 'bad-pdf'
+    good = tmp_path / 'good-pdf'
+    blocker = tmp_path / 'no-install'
+    for directory in (bad, good, blocker):
+        directory.mkdir()
+    (bad / 'pdftotext').write_text('#!/bin/sh\nexit 99\n', encoding='utf-8')
+    (good / 'pdftotext').write_text('#!/bin/sh\nexit 0\n', encoding='utf-8')
+    for name in ('apt-get', 'brew', 'sudo'):
+        (blocker / name).write_text('#!/bin/sh\nexit 1\n', encoding='utf-8')
+    for path in (bad / 'pdftotext', good / 'pdftotext', *((blocker / name) for name in ('apt-get', 'brew', 'sudo'))):
+        path.chmod(0o755)
     fake = tmp_path / 'python'
     fake.write_text('''#!/bin/sh
 if [ "$1" = -c ]; then
@@ -192,6 +228,7 @@ printf '%s\\n' "$@" >> "$OUT"
     env = environment(home)
     env['PYTHON_BIN'] = str(fake)
     env['OUT'] = str(recorded)
+    env['PATH'] = os.pathsep.join((str(bad), str(good), str(blocker), env['PATH']))
     bash = shutil.which('bash') or 'bash'
     result = subprocess.run([bash, str(SCRIPTS / 'bootstrap.sh'), '--runtime-only'],
                             env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)
