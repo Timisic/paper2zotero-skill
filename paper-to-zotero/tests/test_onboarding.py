@@ -78,7 +78,7 @@ def test_target_verification_rejects_empty_directory_and_other_agent(tmp_path, m
     assert agent_installation.installed_paths(tmp_path) == [str(codex)]
 
 
-@pytest.mark.parametrize('advanced,last_stage', [(False, '6/6'), (True, '2/2')])
+@pytest.mark.parametrize('advanced,last_stage', [(False, '4/4'), (True, '2/2')])
 @pytest.mark.parametrize('customize', [False, True])
 def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_path, advanced, last_stage, customize):
     env = environment(tmp_path)
@@ -96,8 +96,8 @@ def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_pa
     assert f'Stage {last_stage}' in result.stdout
     assert '更多配置（可选）' in result.stdout
     assert 'Kimi WebBridge' in result.stdout and 'Semantic Scholar' in result.stdout
-    assert ('连接 OpenAlex（必配）：检索论文' in result.stdout) != advanced
-    assert ('连接 Zotero：保存你的论文' in result.stdout) != advanced
+    assert '必配' not in result.stdout
+    assert ('Zotero Desktop · 本机附件' in result.stdout) != advanced
     assert 'private-fixture' not in result.stdout + result.stderr
     assert config.read_bytes() == before
     assert ('[演示路径]' in result.stdout) == customize
@@ -146,6 +146,24 @@ exec bash "$@"
     assert '待安装：Python' in result.stdout
     assert '更多配置（可选）' in result.stdout and 'Semantic Scholar' in result.stdout
     assert not (tmp_path / '.config/literature-to-zotero/env').exists()
+
+
+def test_bootstrap_check_forwards_group(tmp_path):
+    fake = tmp_path / 'python'
+    fake.write_text('#!/bin/sh\nif [ "$1" = -c ]; then exit 0; fi\nprintf "%s\\n" "$@" > "$OUT"\n', encoding='utf-8')
+    fake.chmod(0o755)
+    recorded = tmp_path / 'args'
+    for extra, forwarded in ((['--group'], True), ([], False)):
+        recorded.unlink(missing_ok=True)
+        env = environment(tmp_path / 'home')
+        env['PYTHON_BIN'] = str(fake)
+        env['OUT'] = str(recorded)
+        result = subprocess.run([shutil.which('bash') or 'bash', str(SCRIPTS / 'bootstrap.sh'), '--check', *extra],
+                                env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)
+        assert result.returncode == 0, result.stdout + result.stderr
+        lines = recorded.read_text(encoding='utf-8').splitlines()
+        assert lines[-1] == '--check' or lines[-2:] == ['--check', '--group']
+        assert ('--group' in lines) is forwarded
 
 
 def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):

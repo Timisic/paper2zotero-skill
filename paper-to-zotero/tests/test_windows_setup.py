@@ -47,7 +47,7 @@ def check_native_repeat_install_and_removed_download(tmp_path):
     assert not list(home.rglob('.literature-backup-*')), 'identical reinstall should not publish another copy'
     result = run_setup(package, env, '-Check')
     assert result.returncode == 1, result.stdout + result.stderr
-    assert '全文阅读材料' in result.stdout
+    assert 'Zotero Desktop · 本机附件' in result.stdout
     assert '安装已保存' in result.stdout
     shutil.rmtree(package)
     result = subprocess.run([sys.executable,
@@ -172,7 +172,7 @@ printf 'masked-input-restored' > "$PAPER2ZOTERO_TEST_RESULT"
             git = shutil.which('git.exe')
             self.assertIsNotNone(git)
             bash = Path(git).parent.parent / 'bin/bash.exe'
-            for extra, stage in [([], '6/6'), (['--advanced'], '2/2')]:
+            for extra, stage in [([], '4/4'), (['--advanced'], '2/2')]:
                 result = subprocess.run([str(bash), str(ROOT / 'install/windows-wizard.sh'),
                                          '--demo', *extra], env=env, input='\n' * 40, capture_output=True,
                                         text=True, encoding='utf-8', errors='replace', timeout=20)

@@ -46,7 +46,9 @@ fi
 if [[ "${1:-}" == --probe ]]; then exit 0; fi
 if [[ "${1:-}" == --check ]]; then
   find_python || { echo 'Python 缺失，请运行 setup.sh'; exit 1; }
-  exec "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --check
+  check_args=(--check)
+  if [[ "${2:-}" == --group ]]; then check_args+=(--group); fi
+  exec "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" "${check_args[@]}"
 fi
 if [[ "$python_ready" != 1 || "$pdf_ready" != 1 ]]; then
   echo '正在安装运行依赖（Python、PDF 文本工具）；系统可能要求管理员密码。'

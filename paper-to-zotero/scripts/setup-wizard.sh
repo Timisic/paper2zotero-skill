@@ -184,7 +184,7 @@ finish() {
 # Replace the example below. Set TOTAL_STAGES to match the stages you write.
 # ──────────────────────────────────────────────────────────────────────────
 
-TOTAL_STAGES=6
+BASIC_COUNT=1
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SKILL_DIR/scripts/setup-input.sh"
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -212,10 +212,22 @@ while (( $# )); do
   shift
 done
 case "$PAPER2ZOTERO_AGENT" in auto|codex|claude-code|pi|all) ;; *) echo 'Unknown agent; use --help' >&2; exit 2;; esac
-if [[ "$MODE" == --dependencies-only || "$MODE" == --check ]]; then
-  exec bash "$SKILL_DIR/scripts/bootstrap.sh" "$MODE"
+if [[ "$MODE" == --dependencies-only ]]; then
+  exec bash "$SKILL_DIR/scripts/bootstrap.sh" --dependencies-only
 fi
-if [[ "$ADVANCED" == 1 ]]; then TOTAL_STAGES=2; fi
+if [[ "$MODE" == --check ]]; then
+  if [[ "$GROUP_LIBRARY" == 1 ]]; then
+    exec bash "$SKILL_DIR/scripts/bootstrap.sh" --check --group
+  fi
+  exec bash "$SKILL_DIR/scripts/bootstrap.sh" --check
+fi
+if [[ "$ADVANCED" == 1 ]]; then
+  TOTAL_STAGES=2
+  [[ "$GROUP_LIBRARY" == 1 ]] && TOTAL_STAGES=3
+else
+  TOTAL_STAGES=$((3 + BASIC_COUNT))
+  [[ "$GROUP_LIBRARY" == 1 ]] && TOTAL_STAGES=$((TOTAL_STAGES + 1))
+fi
 # The library remains verbatim. Setup-specific behavior lives below STAGES.
 umask 077
 ENV_FILE="$HOME/.config/literature-to-zotero/env"
@@ -279,12 +291,14 @@ existing_ok() {
 shared_guide() {
   if [[ "$DEMO" == 1 ]]; then
     case "$1" in
-      openalex) say 'OpenAlex（必配）：注册或登录，在 API 设置复制授权码。' ;;
-      kimi) say 'Kimi WebBridge（可选）：连接本地服务和浏览器扩展，获取机构全文。' ;;
-      semantic_scholar) say 'Semantic Scholar（可选）：申请 API Key，申请未完成可稍后回来。' ;;
-      crossref) say 'Crossref（可选）：填写题录查询的联系邮箱。' ;;
-      unpaywall) say 'Unpaywall（可选）：填写开放全文查询的联系邮箱。' ;;
-      desktop) say 'Zotero Desktop（可选）：开启本地 API 和附件自动下载。' ;;
+      zotero) say '连接 Zotero Web API：群组文库或 ZOTERO_WRITE_BACKEND=web 才需要。' ;;
+      openalex) say '连接 OpenAlex：只有 SEARCH_BACKEND=http 或 openalex 时才需要。' ;;
+      mineru) say 'MinerU 云端 Token：实验室地址留空，云端 Token 不是完成条件。' ;;
+      kimi) say 'Kimi WebBridge：连接本地服务和浏览器扩展，获取机构全文。' ;;
+      semantic_scholar) say 'Semantic Scholar：申请 API Key，申请未完成可稍后回来。' ;;
+      crossref) say 'Crossref：填写题录查询的联系邮箱。' ;;
+      unpaywall) say 'Unpaywall：填写开放全文查询的联系邮箱。' ;;
+      desktop) say 'Zotero Desktop：打开本机应用，本地接口要返回 Zotero-Server-ID。' ;;
     esac
     note '[模拟说明；正式向导提供官网及详细步骤]'
   else
@@ -334,9 +348,10 @@ open_setup_url() {
 
 _clear
 printf '\n%s%s  把论文和阅读笔记放进 Zotero%s\n\n' "$BOLD" "$BLUE" "$RESET"
-say '工具由安装器准备；你只需要登录账号，复制网页上的授权码。'
-say '基础配置连接 Zotero、OpenAlex 和 MinerU。OpenAlex 是必配检索来源；暂时跳过会保留进度，补齐后才算完成。'
-note '输入授权码时会显示星号作为提示。Ctrl-C 可退出，已保存内容会保留。'
+say '工具由安装器准备。先打开本机 Zotero。可选授权码在后面的步骤。'
+say '基础配置检查三件事。scansci-pdf 1.19.0 能导入，全文转换有一条可用通路，本机 Zotero 能写入。'
+say 'scansci 下载 PDF 时默认包含灰色来源。只要合法来源，设置 SCANSCI_LEGAL_ONLY=1，或在处理时加 --legal-only。'
+note 'Ctrl-C 可退出，已保存内容会保留。'
 if [[ "$ADVANCED" == 1 ]]; then note '已打开更多设置：检索来源、电脑同步、浏览器全文。'; fi
 pause '按回车开始'
 
@@ -379,107 +394,61 @@ else
   bash "$SKILL_DIR/scripts/install-skill.sh"
 fi
 if [[ "$ADVANCED" == 0 ]]; then
-pause '准备完成，回车连接 Zotero'
+pause '准备完成，回车检查本机 Zotero'
 
-stage "连接 Zotero：保存你的论文"
-say 'Zotero 是保存和整理文献的工具。这一步允许助手把论文和笔记存入你的账号。'
-say '授权码相当于给这个工具的一把专用钥匙；不要填写账号密码。'
-if [[ "$GROUP_LIBRARY" == 0 ]] && existing_ok zotero-key; then
-  note '✓ 已有凭据通过验证，跳过填写。'
+stage "Zotero Desktop · 本机附件"
+say '基础配置要本机 Zotero 能写入。打开应用后，这一步检查本地接口。'
+say '授权框选「始终允许」。附件同步不在这一步。'
+if [[ "$DEMO" == 1 ]]; then
+  note '[模拟检查通过，不连接服务或保存]'
 else
-  open_setup_url 'https://www.zotero.org/settings/keys'
-  step '1. 登录 Zotero；还没有账号，可先在网页上注册。'
-  step '2. 点击 Create new private key / New Key，新建一个授权码，名称填 paper2zotero。'
-  step '3. 个人文库勾选 Allow library access、Allow notes access、Allow write access，然后保存。'
-  if [[ "$GROUP_LIBRARY" == 1 ]]; then step '你选择了群组文库：还需要允许目标群组的读取和写入。'; fi
-  step '4. 复制刚生成的 Key，粘贴到下方。'
-  while true; do
-    ask_authorization ZOTERO_API_KEY '粘贴 Zotero 授权码（没有则回车跳过）：'
-    if [[ -n "$ZOTERO_API_KEY" ]]; then
-      if [[ "$GROUP_LIBRARY" == 1 ]]; then
-        ask ZOTERO_LIBRARY_ID '填写要保存到的群组文库 ID（数字；回车稍后配置）：'
-      else
-        note '保留已有文库目标；首次配置自动识别个人文库。'
-      fi
-      if connect_account zotero "$ZOTERO_API_KEY"; then
-        unset ZOTERO_API_KEY ZOTERO_LIBRARY_ID ZOTERO_LIBRARY_TYPE
-      else
-        unset ZOTERO_API_KEY ZOTERO_LIBRARY_ID ZOTERO_LIBRARY_TYPE
-        warn '连接未完成；原有账号已保留，无需手动查找个人文库 ID。'
-        if retry_connection; then continue; fi
-      fi
-    else
-      note '已跳过 Zotero 凭据；检索仍可使用，写入文库需稍后补齐。'
-    fi
-    break
-  done
+  prepare_extra desktop
+  if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra desktop; then
+    warn '尚未启用，已保存的配置保留；可在准备完成后回来检查。'
+  fi
 fi
 pause '按回车继续'
+fi
 
-stage "连接 OpenAlex（必配）：检索论文"
-if existing_ok openalex; then
-  note '✓ 已有 OpenAlex 授权通过验证，跳过填写。'
-else
-shared_guide openalex
-open_setup_url 'https://openalex.org/settings/api'
+if [[ "$GROUP_LIBRARY" == 1 ]]; then
+stage "连接 Zotero Web API"
+say '群组文库需要 Web API 授权码。个人文库写入走本机 Desktop，不在这一步手填个人文库 ID。'
+open_setup_url 'https://www.zotero.org/settings/keys'
+step '1. 登录 Zotero。还没有账号，可先在网页上注册。'
+step '2. 新建授权码，勾选 Allow library access、Allow notes access、Allow write access。'
+step '3. 允许目标群组的读取和写入。'
+step '4. 复制 Key，粘贴到下方。'
 while true; do
-  ask_authorization OPENALEX_API_KEY '粘贴 OpenAlex API Key（回车保留已有值；没有则暂存进度）：'
-  if [[ -n "$OPENALEX_API_KEY" ]]; then
-    if connect_account openalex "$OPENALEX_API_KEY"; then
-      unset OPENALEX_API_KEY
+  ask_authorization ZOTERO_API_KEY '粘贴 Zotero 授权码（没有则回车跳过）：'
+  if [[ -n "$ZOTERO_API_KEY" ]]; then
+    ask ZOTERO_LIBRARY_ID '填写要保存到的群组文库 ID（数字；回车稍后配置）：'
+    if connect_account zotero "$ZOTERO_API_KEY"; then
+      unset ZOTERO_API_KEY ZOTERO_LIBRARY_ID ZOTERO_LIBRARY_TYPE
     else
-      unset OPENALEX_API_KEY
-      warn 'OpenAlex 尚未连接，基础检索配置未完成；原有授权会保留。'
+      unset ZOTERO_API_KEY ZOTERO_LIBRARY_ID ZOTERO_LIBRARY_TYPE
+      warn '连接未完成；原有账号已保留，无需手动查找个人文库 ID。'
       if retry_connection; then continue; fi
     fi
   else
-    note 'OpenAlex 为必配项。已保留进度，补齐并验证后基础配置才算完成。'
+    note '已跳过 Zotero Web API；群组写入需稍后补齐。'
   fi
   break
 done
+pause 'Web API 这一步结束，按回车继续'
 fi
-pause '按回车继续'
 
-stage "启用全文阅读：整理 PDF"
-say '这一步使用 MinerU，把论文 PDF 转成适合阅读和总结的文字，也能识别扫描页。'
-say '它是独立的在线服务，需要另一个账号；下面会打开注册和授权页面。'
-note '配置时不上传论文。以后处理时，助手会说明论文将上传到 MinerU，并取得你的许可。'
-note '暂时跳过仍可检索和保存 PDF；格式化阅读材料需要以后补齐。'
-if existing_ok mineru; then
-  note '✓ 已有授权通过验证，跳过填写。'
-else
-  open_setup_url 'https://mineru.net/apiManage/token'
-  step '1. 登录或注册 MinerU。'
-  step '2. 在 API 管理页面创建 Token（授权码），名称可填 paper2zotero。'
-  step '3. 复制刚生成的完整授权码，粘贴到下方。'
-  note '页面上的 API / Token 是网站使用的名称，你不需要编写代码。'
-  while true; do
-    ask_authorization MINERU_TOKEN '粘贴全文阅读授权码（没有则回车跳过）：'
-    if [[ -n "$MINERU_TOKEN" ]]; then
-      if connect_account mineru "$MINERU_TOKEN"; then
-        unset MINERU_TOKEN
-      else
-        unset MINERU_TOKEN
-        warn '还未连接全文阅读服务，请检查授权码和网络。'
-        if retry_connection; then continue; fi
-      fi
-    else
-      note '已跳过；需要格式化阅读材料时，再来连接这个账号。'
-    fi
-    break
-  done
-fi
-pause '按回车继续'
-
+if [[ "$ADVANCED" == 0 ]]; then
 stage "检查结果，开始使用"
 if [[ "$DEMO" == 1 ]]; then
-  note '[模拟检查通过] 正式版会验证核心服务及选中的可选功能。'
+  note '[模拟检查通过] 正式版会验证本机 Zotero、检索和全文转换。'
   pause '回车查看演示结果'
   _clear
   say '✓ 配置演示结束。'
   warn '以上结果均为模拟，不代表真实环境就绪；临时配置即将删除。'
 else
-  if "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --check; then
+  check_args=(--check)
+  [[ "$GROUP_LIBRARY" == 1 ]] && check_args+=(--group)
+  if "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" "${check_args[@]}"; then
     pause '检查通过，回车查看结果'
     _clear
     say '✓ 配置完成。回到你的 AI 助手，试着说：'
@@ -493,9 +462,36 @@ else
 fi
 fi
 
+extra_names() {
+  local py="${PYTHON_BIN:-}"
+  if [[ -n "$py" && -x "$py" ]]; then
+    "$py" -c 'import sys; sys.path.insert(0, sys.argv[1]); from setup_connection import wizard_extras
+print("\n".join(wizard_extras()))' "$SKILL_DIR/scripts"
+    return
+  fi
+  printf '%s\n' zotero mineru kimi semantic_scholar crossref unpaywall
+}
+
 stage "更多配置（可选）"
-say 'Kimi WebBridge、Semantic Scholar 及其他可选项目已依次展开。留空或跳过会保留已有配置。'
-for service in kimi semantic_scholar crossref unpaywall desktop; do
+say '可选项目已依次展开。留空或跳过会保留已有配置。'
+services=()
+if names="$(extra_names)"; then
+  while IFS= read -r name; do
+    [[ -n "$name" ]] && services+=("$name")
+  done <<<"$names"
+else
+  while IFS= read -r name; do
+    services+=("$name")
+  done <<'FALLBACK'
+zotero
+mineru
+kimi
+semantic_scholar
+crossref
+unpaywall
+FALLBACK
+fi
+for service in "${services[@]}"; do
   shared_guide "$service"
   if [[ "$service" == kimi || "$service" == desktop ]]; then
     if confirm '现在准备并连接这项功能'; then
@@ -510,6 +506,9 @@ for service in kimi semantic_scholar crossref unpaywall desktop; do
     fi
   else
     case "$service" in
+      zotero) setting=ZOTERO_API_KEY; ask_authorization "$setting" '粘贴 Zotero 授权码（可留空）：' ;;
+      openalex) setting=OPENALEX_API_KEY; ask_authorization "$setting" '粘贴 OpenAlex 授权码（可留空）：' ;;
+      mineru) setting=MINERU_TOKEN; ask_authorization "$setting" '粘贴 MinerU Token（可留空）：' ;;
       semantic_scholar) setting=SEMANTIC_SCHOLAR_API_KEY; ask_authorization "$setting" 'Semantic Scholar API Key（可留空，申请未完成可稍后回来）：' ;;
       crossref) setting=CROSSREF_MAILTO; ask "$setting" 'Crossref 联系邮箱（可留空）：' ;;
       unpaywall) setting=UNPAYWALL_EMAIL; ask "$setting" 'Unpaywall 联系邮箱（可留空）：' ;;
