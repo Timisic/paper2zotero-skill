@@ -16,14 +16,34 @@ import capability
 import configure
 import credentials
 
-BASIC_SERVICES = ('zotero', 'openalex', 'mineru')
+BASIC_SERVICES = ('desktop',)
+CONNECT_SERVICES = ('zotero', 'openalex', 'mineru')
 SERVICES = {
-    'zotero': ('连接 Zotero', 'https://www.zotero.org/settings/keys', 'ZOTERO_API_KEY',
-               'Zotero 用来保存论文和笔记。\n① 登录后创建授权码，勾选 Library access、Notes access 和 Write access。\n② 复制完整 Key，粘贴后验证。个人文库 ID 会自动识别。'),
-    'openalex': ('连接 OpenAlex（必配）', 'https://openalex.org/settings/api', 'OPENALEX_API_KEY',
-                'OpenAlex 是基础论文检索来源，本工具要求配置授权码。\n① 免费注册或登录，进入 Settings → API key。\n② 复制 API Key，粘贴后验证。无需填写账号密码，额度以账号页面为准。'),
-    'mineru': ('启用全文阅读', 'https://mineru.net/apiManage/token', 'MINERU_TOKEN',
-               'MinerU 将 PDF 转成便于阅读的文字；配置时不会上传论文。\n① 登录或注册，在 API 管理页面创建 Token。\n② 复制完整 Token，粘贴后验证。'),
+    'zotero': (
+        '连接 Zotero Web API',
+        'https://www.zotero.org/settings/keys',
+        'ZOTERO_API_KEY',
+        '默认写入走本机 Desktop。群组文库，或 ZOTERO_WRITE_BACKEND=web，才需要这个授权码。\n'
+        '① 创建授权码，勾选 Library access、Notes access 和 Write access。\n'
+        '② 粘贴完整 Key。个人文库 ID 会自动识别。',
+    ),
+    'openalex': (
+        '连接 OpenAlex',
+        'https://openalex.org/settings/api',
+        'OPENALEX_API_KEY',
+        '只有 SEARCH_BACKEND=http 或 SEARCH_BACKEND=openalex 时，完成检查才需要这个授权码。\n'
+        '① 打开 API key 页面并复制 Key。\n'
+        '② 粘贴后验证。scansci 不读取这个 Key。',
+    ),
+    'mineru': (
+        'MinerU 云端 Token',
+        'https://mineru.net/apiManage/token',
+        'MINERU_TOKEN',
+        '云端那一跳才需要 Token。不要把实验室地址写进 MINERU_API_BASE。\n'
+        '留空时先试实验室 MinerU，失败再用这个 Token，再失败用本机 markitdown。\n'
+        '① 在 API 管理页面创建 Token。\n'
+        '② 粘贴后验证。',
+    ),
     'kimi': ('Kimi WebBridge · 浏览器全文', 'https://www.kimi.com/products/kimi-webbridge', '',
              '需要从已登录的学校或机构网页获取全文时使用。\n① 打开页面，选择“搭配本地 Agent”，按当前系统（macOS / Windows / Linux）的说明安装本地连接服务。\n② 安装并启用浏览器扩展，按扩展提示授权连接。\n③ 完成后启动并检查连接。机构账号需要你自己在浏览器中登录；只下载公开全文可跳过。'),
     'semantic_scholar': ('Semantic Scholar · 补充学术检索', 'https://www.semanticscholar.org/product/api', 'SEMANTIC_SCHOLAR_API_KEY',
@@ -32,10 +52,40 @@ SERVICES = {
                 '为 Crossref 题录查询提供联系邮箱。\n填写你可收信的邮箱即可，不需要授权码或邮箱密码。\n查询时邮箱会发送给 Crossref，用于服务方联系。'),
     'unpaywall': ('Unpaywall · 查找开放全文', 'https://unpaywall.org/products/api', 'UNPAYWALL_EMAIL',
                  '帮助查找合法开放的论文全文。\n填写你可收信的邮箱即可，不需要授权码或邮箱密码。\n查询时邮箱会发送给 Unpaywall；全文是否可得取决于论文。'),
-    'desktop': ('Zotero Desktop · 本机附件', 'https://www.zotero.org/download', '',
-                '希望在电脑上的 Zotero 阅读附件时使用。\n① 安装并打开 Zotero，登录账号。\n② 在高级设置开启本地 API。\n③ 在同步设置启用附件同步与自动下载，完成后检查本机连接。'),
+    'desktop': (
+        'Zotero Desktop · 本机附件',
+        'https://www.zotero.org/download',
+        '',
+        '基础配置要本机 Zotero 能写入。\n'
+        '① 安装并打开 Zotero Desktop。\n'
+        '② 在高级设置开启本地 API。\n'
+        '③ 授权框选「始终允许」，然后点检查。\n'
+        '附件同步不在这一步。',
+    ),
 }
 EXTRAS = {name: record for name, record in SERVICES.items() if name not in BASIC_SERVICES}
+
+
+def wizard_extras() -> tuple[str, ...]:
+    backend = credentials.search_backend()
+    names = []
+    for name in SERVICES:
+        if name in BASIC_SERVICES:
+            continue
+        if name == 'openalex' and backend not in ('http', 'openalex'):
+            continue
+        names.append(name)
+    return tuple(names)
+
+
+def accept(service: str, value: str = '', *, group_id: str = '', group: bool | None = None) -> dict[str, str]:
+    if service == 'desktop':
+        return enable_desktop()
+    if service == 'kimi':
+        return enable_kimi()
+    if service in CONNECT_SERVICES:
+        return connect(service, value, group_id=group_id, group=group)
+    return extra_settings(service, value)
 
 
 def extra_value(service: str) -> str:
@@ -43,7 +93,8 @@ def extra_value(service: str) -> str:
 
 
 def extra_settings(service: str, value: str) -> dict[str, str]:
-    if service not in SERVICES or not SERVICES[service][2]:
+    if (service in CONNECT_SERVICES or service in BASIC_SERVICES
+            or service not in SERVICES or not SERVICES[service][2]):
         raise ValueError('请选择一个文献来源。')
     value = normalize_key(value)
     if service in ('crossref', 'unpaywall'):
@@ -73,10 +124,8 @@ def enable_kimi() -> dict[str, str]:
 
 
 def enable_desktop() -> dict[str, str]:
-    for name in ('zotero-local', 'zotero-sync'):
-        record = configure.probe(name)
-        if not record['ok']:
-            raise ValueError(str(record['action']))
+    if not capability.probe_zotero_local_write():
+        raise ValueError(capability.GUIDE['zotero_local']['do'])
     return {'SETUP_DESKTOP': '1'}
 
 
@@ -88,9 +137,14 @@ def normalize_key(value: str) -> str:
 
 
 def existing_key(service: str) -> str:
-    value = (credentials.zotero_credentials()['api_key'] if service == 'zotero'
-             else credentials.source_setting('openalex') if service == 'openalex'
-             else credentials.mineru_token())
+    if service == 'zotero':
+        value = credentials.zotero_credentials()['api_key']
+    elif service == 'openalex':
+        value = credentials.source_setting('openalex')
+    elif service == 'mineru':
+        value = credentials.mineru_token()
+    else:
+        return ''
     try:
         return normalize_key(value)
     except ValueError:
@@ -106,6 +160,8 @@ def library_target(group: bool | None = None, group_id: str = '') -> tuple[bool,
 
 
 def connect(service: str, value: str, *, group_id: str = '', group: bool | None = None) -> dict:
+    if service not in CONNECT_SERVICES:
+        raise ValueError('未知服务。')
     key = normalize_key(value)
     if service == 'openalex':
         record = capability.probe_discovery_search(key)
@@ -140,6 +196,21 @@ def save_account(values: dict[str, str]) -> None:
         os.environ.pop(key, None)
 
 
+def ensure_default_tools() -> None:
+    import mineru_parse
+    import scansci_retrieval
+    if scansci_retrieval.library_ready().ok and mineru_parse.markitdown_available():
+        return
+    command = [sys.executable, '-m', 'pip', 'install',
+               f'scansci-pdf=={scansci_retrieval.PIN}', 'markitdown[pdf]']
+    try:
+        result = subprocess.run(command, capture_output=True, timeout=180)
+    except (OSError, subprocess.SubprocessError):
+        result = None
+    if result is None or result.returncode != 0:
+        raise ValueError(scansci_retrieval.INSTALL_LINE)
+
+
 def prepare(agent: str) -> None:
     directory = Path.home() / '.config/literature-to-zotero'
     pdf = os.environ.get('PAPER2ZOTERO_PDF_BIN', '')
@@ -150,6 +221,7 @@ def prepare(agent: str) -> None:
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     if result.returncode:
         raise ValueError('PDF 工具无法运行，请从 install/setup.cmd 重新打开。')
+    ensure_default_tools()
     with contextlib.redirect_stdout(io.StringIO()):
         importlib.import_module('install').install(agent)
     directory.mkdir(parents=True, exist_ok=True)
@@ -158,9 +230,12 @@ def prepare(agent: str) -> None:
     (directory / 'pdf-bin').write_text(str(tool.parent) + '\n', encoding='utf-8')
 
 
-def check(agent: str) -> dict:
+def check(agent: str, *, group: bool = False) -> dict:
     executable = Path(sys.executable).with_name('python.exe') if os.name == 'nt' else Path(sys.executable)
-    result = subprocess.run([str(executable), str(Path(__file__).with_name('configure.py')), '--check', '--json'],
+    command = [str(executable), str(Path(__file__).with_name('configure.py')), '--check', '--json']
+    if group:
+        command.append('--group')
+    result = subprocess.run(command,
                             capture_output=True, text=True, encoding='utf-8', timeout=150,
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
                             env={**os.environ, 'PYTHONUTF8': '1', 'PAPER2ZOTERO_AGENT': agent})

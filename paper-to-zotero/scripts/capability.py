@@ -56,7 +56,7 @@ GUIDE: dict[str, dict[str, str]] = {
     "zotero_local": {
         "label": "Zotero Desktop 本地 API",
         "url": "https://www.zotero.org/download",
-        "do": "打开 Zotero Desktop 并保持运行；首次需在设置开启本地 API（高级 → 本地接口）。",
+        "do": "打开 Zotero Desktop 并保持运行。本地接口要返回 Zotero-Server-ID。授权框选「始终允许」。",
     },
     "zotero_sync": {
         "label": "Zotero 附件文件同步",
@@ -71,7 +71,7 @@ GUIDE: dict[str, dict[str, str]] = {
     "zotero_key": {
         "label": "Zotero Web API key",
         "url": "https://www.zotero.org/settings/keys",
-        "do": "New API key（名称随意）→ 勾选个人文库 Read/Write（含 Notes/Files）→ Save Key → 立即复制（只显示一次）。把 key 交给向导隐藏录入（文库 ID 由向导自动获取）；不用向导时也可存入 env 的 ZOTERO_API_KEY / ZOTERO_LIBRARY_ID。凭据绝不进入聊天/日志/命令。",
+        "do": "可选。群组文库或 ZOTERO_WRITE_BACKEND=web 才需要。New API key，勾选个人文库 Read/Write（含 Notes/Files），Save Key 后立即复制。向导隐藏录入。凭据不进入聊天、日志或命令。",
     },
     "kimi": {
         "label": "Kimi WebBridge",
@@ -79,14 +79,14 @@ GUIDE: dict[str, dict[str, str]] = {
         "do": "安装 daemon：curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash；再按产品页安装并启用浏览器扩展（Chrome/Arc/Edge）。扩展刚启用时 daemon 需约 30 秒重连。",
     },
     "mineru": {
-        "label": "MinerU token",
+        "label": "全文转换",
         "url": "https://mineru.net/apiManage/token",
-        "do": "登录 mineru.net → API 管理 → 创建 Token（名称随意；数量已满先删旧 token）→ 立即复制（只显示一次，token 以 sk- 开头才是 API token）。把 token 交给向导隐藏录入，或保存到 ~/.config/mineru/token（0600）与 $MINERU_TOKEN。",
+        "do": "pip install 'markitdown[pdf]'。MINERU_API_BASE 留空时先试实验室 MinerU，再试云端 Token，再试本机 markitdown。云端 Token 不是完成条件。",
     },
     "discovery_sources": {
         "label": "文献检索来源",
         "url": "https://www.semanticscholar.org/product/api",
-        "do": "在配置向导的“连接 OpenAlex（必配）”填写授权码并验证。Semantic Scholar、Crossref 和 Unpaywall 在最后的“更多配置”中按需填写。实际检索仍按各来源的响应报告可用情况。",
+        "do": "默认检索是 scansci。SEARCH_BACKEND 为 http 或 openalex 时，在更多配置里连接 OpenAlex。Semantic Scholar、Crossref 和 Unpaywall 按需填写。",
     },
     "skill_links": {
         "label": "skill 安装",
@@ -189,18 +189,21 @@ def probe_zotero_local_write(timeout: int = 3, url: str | None = None) -> bool:
         return False
 
 
-def probe_discovery_search(key: str | None = None) -> dict[str, Any]:
-    """Setup requires an explicit OpenAlex key and a successful real query.
+def refuse_anonymous_openalex_setup(key: str | None) -> dict[str, Any] | None:
+    import credentials
+    if credentials.usable_secret(key):
+        return None
+    return {'ok': False, 'detail': '请先配置 OpenAlex 授权码，基础论文检索尚未完成。',
+            'sources': {'OpenAlex': 'not_configured'}}
 
-    Runtime source fallback remains independent of onboarding completeness.
-    A candidate key is scoped to this probe, never saved or put in the process env.
-    """
+
+def probe_discovery_search(key: str | None = None) -> dict[str, Any]:
     import credentials
     from sources import Sources, Query
     key = credentials.source_setting('openalex') if key is None else key
-    if not credentials.usable_secret(key):
-        return {'ok': False, 'detail': '请先配置 OpenAlex 授权码，基础论文检索尚未完成。',
-                'sources': {'OpenAlex': 'not_configured'}}
+    refused = refuse_anonymous_openalex_setup(key)
+    if refused is not None:
+        return refused
     client = Sources(timeout=10, budget=15, attempts=1,
                      setting=lambda source: key if source == 'openalex' else '')
     try:

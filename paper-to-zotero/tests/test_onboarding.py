@@ -78,7 +78,7 @@ def test_target_verification_rejects_empty_directory_and_other_agent(tmp_path, m
     assert agent_installation.installed_paths(tmp_path) == [str(codex)]
 
 
-@pytest.mark.parametrize('advanced,last_stage', [(False, '6/6'), (True, '2/2')])
+@pytest.mark.parametrize('advanced,last_stage', [(False, '4/4'), (True, '2/2')])
 @pytest.mark.parametrize('customize', [False, True])
 def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_path, advanced, last_stage, customize):
     env = environment(tmp_path)
@@ -96,8 +96,8 @@ def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_pa
     assert f'Stage {last_stage}' in result.stdout
     assert '更多配置（可选）' in result.stdout
     assert 'Kimi WebBridge' in result.stdout and 'Semantic Scholar' in result.stdout
-    assert ('连接 OpenAlex（必配）：检索论文' in result.stdout) != advanced
-    assert ('连接 Zotero：保存你的论文' in result.stdout) != advanced
+    assert '必配' not in result.stdout
+    assert ('Zotero Desktop · 本机附件' in result.stdout) != advanced
     assert 'private-fixture' not in result.stdout + result.stderr
     assert config.read_bytes() == before
     assert ('[演示路径]' in result.stdout) == customize
@@ -106,6 +106,33 @@ def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_pa
         assert 'Save and continue' in result.stdout
     assert (SCRIPTS.parent / 'references/paper-summary.md').read_bytes() == prompt_before
     assert not (tmp_path / '.claude').exists()
+
+
+def test_demo_accepts_windows_newlines_from_extra_names(tmp_path):
+    env = environment(tmp_path)
+    config = tmp_path / '.config/literature-to-zotero/env'
+    config.parent.mkdir(parents=True)
+    config.write_text('MINERU_TOKEN=private-fixture\n')
+    before = config.read_bytes()
+    wrapper = tmp_path / 'python'
+    wrapper.write_text(
+        '#!/bin/sh\n'
+        'if [ "$1" = -c ] && printf %s "$2" | grep -q wizard_extras; then\n'
+        "  printf 'zotero\\r\\nmineru\\r\\nkimi\\r\\nsemantic_scholar\\r\\ncrossref\\r\\nunpaywall\\r\\n'\n"
+        '  exit 0\n'
+        'fi\n'
+        'exec "$REAL" "$@"\n',
+        encoding='utf-8')
+    wrapper.chmod(0o755)
+    env['PYTHON_BIN'] = str(wrapper)
+    env['REAL'] = sys.executable
+    result = subprocess.run(
+        [shutil.which('bash') or 'bash', str(ROOT / 'install/setup.sh'), '--demo', '--agent', 'claude-code'],
+        input='\n' * 50, env=env, text=True, encoding='utf-8', capture_output=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+    assert 'Semantic Scholar' in result.stdout
+    assert '必配' not in result.stdout
+    assert config.read_bytes() == before
 
 
 def test_private_writer_preserves_unicode_and_literal_shell_text(tmp_path):
@@ -148,6 +175,75 @@ exec bash "$@"
     assert not (tmp_path / '.config/literature-to-zotero/env').exists()
 
 
+def test_bootstrap_check_forwards_group(tmp_path):
+    fake = tmp_path / 'python'
+    fake.write_text('#!/bin/sh\nif [ "$1" = -c ]; then exit 0; fi\nprintf "%s\\n" "$@" > "$OUT"\n', encoding='utf-8')
+    fake.chmod(0o755)
+    recorded = tmp_path / 'args'
+    for extra, forwarded in ((['--group'], True), ([], False)):
+        recorded.unlink(missing_ok=True)
+        env = environment(tmp_path / 'home')
+        env['PYTHON_BIN'] = str(fake)
+        env['OUT'] = str(recorded)
+        result = subprocess.run([shutil.which('bash') or 'bash', str(SCRIPTS / 'bootstrap.sh'), '--check', *extra],
+                                env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)
+        assert result.returncode == 0, result.stdout + result.stderr
+        lines = recorded.read_text(encoding='utf-8').splitlines()
+        assert lines[-1] == '--check' or lines[-2:] == ['--check', '--group']
+        assert ('--group' in lines) is forwarded
+
+
+def test_bootstrap_installs_default_tools_after_the_python_path(tmp_path):
+    text = (SCRIPTS / 'bootstrap.sh').read_text(encoding='utf-8')
+    probe = text.index('if [[ "${1:-}" == --probe ]]; then exit 0; fi')
+    check = text.index('if [[ "${1:-}" == --check ]]; then')
+    saved = text.index('literature-to-zotero/python-path')
+    call = text.index('ensure_default_tools')
+    runtime = text.index('if [[ "${1:-}" == --runtime-only ]]; then exit 0; fi')
+    assert probe < check < saved < call < runtime
+    bad = tmp_path / 'bad-pdf'
+    good = tmp_path / 'good-pdf'
+    blocker = tmp_path / 'no-install'
+    for directory in (bad, good, blocker):
+        directory.mkdir()
+    (bad / 'pdftotext').write_text('#!/bin/sh\nexit 99\n', encoding='utf-8')
+    (good / 'pdftotext').write_text('#!/bin/sh\nexit 0\n', encoding='utf-8')
+    for name in ('apt-get', 'brew', 'sudo'):
+        (blocker / name).write_text('#!/bin/sh\nexit 1\n', encoding='utf-8')
+    for path in (bad / 'pdftotext', good / 'pdftotext', *((blocker / name) for name in ('apt-get', 'brew', 'sudo'))):
+        path.chmod(0o755)
+    fake = tmp_path / 'python'
+    fake.write_text('''#!/bin/sh
+if [ "$1" = -c ]; then
+  case "$2" in
+    *ensure_default_tools*) printf 'tools\\n' >> "$OUT" ;;
+  esac
+  exit 0
+fi
+printf '%s\\n' "$@" >> "$OUT"
+''', encoding='utf-8')
+    fake.chmod(0o755)
+    recorded = tmp_path / 'log'
+    home = tmp_path / 'home'
+    env = environment(home)
+    env['PYTHON_BIN'] = str(fake)
+    env['OUT'] = str(recorded)
+    env['PATH'] = os.pathsep.join((str(bad), str(good), str(blocker), env['PATH']))
+    bash = shutil.which('bash') or 'bash'
+    result = subprocess.run([bash, str(SCRIPTS / 'bootstrap.sh'), '--runtime-only'],
+                            env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'tools' in recorded.read_text(encoding='utf-8')
+    assert 'good-pdf' in result.stdout
+    assert (home / '.config/literature-to-zotero/python-path').is_file()
+    assert (home / '.config/literature-to-zotero/pdf-bin').read_text(encoding='utf-8').rstrip().endswith('good-pdf')
+    recorded.unlink()
+    result = subprocess.run([bash, str(SCRIPTS / 'bootstrap.sh'), '--probe'],
+                            env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not recorded.exists()
+
+
 def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):
     env = environment(tmp_path)
     tools = tmp_path / '工具 with spaces'
@@ -167,21 +263,22 @@ def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):
 
 
 def test_service_timeout_is_actionable_and_other_checks_continue(tmp_path, monkeypatch, capsys):
+    import mineru_parse
     monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', tmp_path / 'absent')
-    monkeypatch.setattr(agent_installation, 'installation_ok', lambda _: True)
-    monkeypatch.setattr(agent_installation, 'installed_paths', lambda **_: ['/fixture'])
-    calls = []
-    def run(command, **kwargs):
-        calls.append(command[-1])
-        if command[-1] == 'zotero-key':
-            raise subprocess.TimeoutExpired(command, 60)
-        return subprocess.CompletedProcess(command, 0, '{"ok": true}', '')
-    monkeypatch.setattr(configure.subprocess, 'run', run)
-    monkeypatch.setattr(configure.capability, 'probe_discovery_search', lambda: {'ok': True, 'detail': 'fixture'})
+    monkeypatch.setattr(agent_installation, 'installation_ok', lambda _: False)
+    monkeypatch.setattr(agent_installation, 'installed_paths', lambda **_: [])
+    monkeypatch.setattr(configure.subprocess, 'run', lambda *a, **k: subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(configure.capability, 'probe_discovery_search',
+                        lambda: {'ok': True, 'detail': 'fixture', 'sources': {}})
+    monkeypatch.setattr(configure.capability, 'probe_zotero_local_write', lambda *a, **k: True)
+    monkeypatch.setattr(mineru_parse, 'converter_plan', lambda live=True: {
+        'selected': 'markitdown', 'api_base': None, 'markitdown_install': "pip install 'markitdown[pdf]'"})
     assert configure.check(as_json=True) == 1
     report = json.loads(capsys.readouterr().out)
     assert not report['ready']
-    assert 'mineru' in calls
     missing = [row for row in report['items'] if not row['ok']]
     assert len(missing) == 1
+    assert missing[0]['name'] == '连接 AI 助手'
     assert missing[0]['action']
+    names = [row['name'] for row in report['items']]
+    assert names.index('连接 AI 助手') < names.index('Zotero Desktop · 本机附件')

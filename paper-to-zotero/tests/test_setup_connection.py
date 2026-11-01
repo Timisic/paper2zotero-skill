@@ -50,15 +50,17 @@ def test_setup_requires_openalex_even_when_other_search_sources_work(tmp_path, m
     monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', tmp_path / 'absent')
     monkeypatch.delenv('OPENALEX_API_KEY', raising=False)
     monkeypatch.setenv('SEMANTIC_SCHOLAR_API_KEY', 'other-key')
-    monkeypatch.setattr(configure, 'probe', lambda _: {'ok': True, 'name': 'fixture'})
-    monkeypatch.setattr(configure.subprocess, 'run', lambda *a, **k: subprocess.CompletedProcess([], 0))
+    _stub_check_surroundings(monkeypatch)
     import sources
     monkeypatch.setattr(sources.Sources, 'search', lambda *a, **k: pytest.fail('missing key must not use anonymous/fallback search'))
     assert configure.check(as_json=True) == 1
     result = json.loads(capsys.readouterr().out)
     missing = [row for row in result['items'] if not row['ok']]
-    assert len(missing) == 1 and missing[0]['sources'] == {'OpenAlex': 'not_configured'}
-    assert '连接 OpenAlex' in missing[0]['action']
+    assert len(missing) == 1
+    assert missing[0]['name'] == '论文检索（OpenAlex）'
+    assert missing[0]['sources'] == {'OpenAlex': 'not_configured'}
+    assert missing[0]['action'] == (
+        '当前检索后端需要 OpenAlex 授权码。在更多配置里连接 OpenAlex，或删除 SEARCH_BACKEND 恢复 scansci。')
 
 
 def test_openalex_setup_allows_a_slow_successful_response(monkeypatch):
@@ -187,7 +189,6 @@ def test_browser_uses_windows_url_association(monkeypatch):
 
 @pytest.mark.parametrize('service,value,setting', [
     ('semantic_scholar', 'fixture-key', 'SEMANTIC_SCHOLAR_API_KEY'),
-    ('openalex', 'fixture-key', 'OPENALEX_API_KEY'),
     ('crossref', 'name@example.org', 'CROSSREF_MAILTO'),
     ('unpaywall', 'name@example.org', 'UNPAYWALL_EMAIL'),
 ])
@@ -267,6 +268,185 @@ def test_unix_private_save_never_calls_powershell(tmp_path, monkeypatch):
     assert path.read_text() == 'SEMANTIC_SCHOLAR_API_KEY=fixture\n'
 
 
+def _stub_check_surroundings(monkeypatch, *, write=True, read=False, search='http', conversion=True):
+    monkeypatch.setattr(configure.agent_installation, 'installation_ok', lambda _: True)
+    monkeypatch.setattr(configure.agent_installation, 'installed_paths', lambda **_: ['/fixture'])
+    real_run = subprocess.run
+
+    def run(command, **kwargs):
+        if command and command[0] == 'pdftotext':
+            return subprocess.CompletedProcess(command, 0, '', '')
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(configure.subprocess, 'run', run)
+    monkeypatch.setattr(configure.capability, 'probe_zotero_local_write', lambda *a, **k: write)
+    monkeypatch.setattr(configure.capability, 'probe_zotero_local', lambda *a, **k: read)
+    if conversion:
+        import mineru_parse
+        monkeypatch.setattr(mineru_parse, 'converter_plan', lambda live=True: {
+            'selected': 'markitdown', 'api_base': None,
+            'markitdown_install': "pip install 'markitdown[pdf]'"})
+    if search == 'scansci':
+        import scansci_retrieval
+        monkeypatch.setattr(configure.scansci_retrieval, 'library_ready', lambda: scansci_retrieval.LibraryStatus(
+            ok=True, detail='scansci-pdf 1.19.0', install=scansci_retrieval.INSTALL_LINE))
+
+
+def _product_env(monkeypatch, tmp_path):
+    env = tmp_path / 'env'
+    monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', env)
+    for name in ('SEARCH_BACKEND', 'MINERU_API_BASE', 'MINERU_ENDPOINT', 'MINERU_TOKEN',
+                 'OPENALEX_API_KEY', 'SETUP_DESKTOP', 'SETUP_BROWSER', 'ZOTERO_API_KEY',
+                 'ZOTERO_LIBRARY_TYPE', 'ZOTERO_LIBRARY_ID'):
+        monkeypatch.delenv(name, raising=False)
+    return env
+
+
+def test_product_default_check_passes_without_openalex_or_a_cloud_token(tmp_path, monkeypatch, capsys):
+    import mineru_parse
+    env = _product_env(monkeypatch, tmp_path)
+    before = env.read_bytes() if env.exists() else None
+    seen = []
+
+    def health(base, timeout=3):
+        seen.append(base)
+        return {'ok': False, 'detail': 'stub'}
+
+    monkeypatch.setattr(mineru_parse, 'tasks_health', health)
+    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: True)
+    _stub_check_surroundings(monkeypatch, search='scansci', conversion=False)
+    assert configure.check(as_json=True) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report['ready'] is True
+    assert [item['name'] for item in report['items']] == [
+        '运行工具', 'PDF 文本工具', '连接 AI 助手', '论文检索（ScanSci）', '全文转换',
+        'Zotero Desktop · 本机附件']
+    assert report['items'][3]['detail'] == 'scansci-pdf 1.19.0'
+    assert report['items'][3]['action'] == ''
+    assert 'selected=markitdown' in report['items'][4]['detail']
+    assert report['items'][4]['action'] == ''
+    assert report['items'][5] == {
+        'name': 'Zotero Desktop · 本机附件', 'ok': True, 'detail': '127.0.0.1:23119', 'action': ''}
+    assert all('OpenAlex' not in item['name'] for item in report['items'])
+    assert seen == [configure.credentials.LAB_MINERU_API_BASE]
+    assert 'MINERU_API_BASE' not in os.environ
+    assert (env.read_bytes() if env.exists() else None) == before
+
+
+def test_closed_desktop_fails_even_with_a_saved_web_api_key(tmp_path, monkeypatch, capsys):
+    env = _product_env(monkeypatch, tmp_path)
+    env.write_text('ZOTERO_API_KEY=fixture-key\n', encoding='utf-8')
+    before = env.read_bytes()
+    _stub_check_surroundings(monkeypatch, write=False, read=False, search='scansci')
+    assert configure.check(as_json=True) == 1
+    report = json.loads(capsys.readouterr().out)
+    missing = [row for row in report['items'] if not row['ok']]
+    assert [row['name'] for row in missing] == ['Zotero Desktop · 本机附件']
+    assert missing[0]['detail'] == configure.capability.zotero_local(False)['detail']
+    assert missing[0]['action'] == configure.capability.GUIDE['zotero_local']['do']
+    assert all(row['name'] != '保存到 Zotero' for row in report['items'])
+    assert env.read_bytes() == before
+    assert configure.check(as_json=False) == 1
+    text = capsys.readouterr().out
+    assert '待完成 Zotero Desktop · 本机附件' in text
+    assert '下一步：' + configure.capability.GUIDE['zotero_local']['do'] in text
+
+
+def test_readable_desktop_without_a_server_id_is_not_a_write_target(tmp_path, monkeypatch, capsys):
+    env = _product_env(monkeypatch, tmp_path)
+    env.write_text('SETUP_DESKTOP=1\n', encoding='utf-8')
+    _stub_check_surroundings(monkeypatch, write=False, read=True, search='scansci')
+    assert configure.check(as_json=True) == 1
+    report = json.loads(capsys.readouterr().out)
+    missing = [row for row in report['items'] if not row['ok']]
+    assert len(missing) == 1
+    assert missing[0]['detail'] == '本地 API 没有返回 Zotero-Server-ID，不能作为写入目标。'
+    assert missing[0]['action'] == configure.capability.GUIDE['zotero_local']['do']
+
+
+def test_group_check_still_requires_the_web_api_row(tmp_path, monkeypatch, capsys):
+    env = _product_env(monkeypatch, tmp_path)
+    _stub_check_surroundings(monkeypatch, search='scansci')
+    assert configure.check(as_json=True, group=True) == 1
+    report = json.loads(capsys.readouterr().out)
+    missing = [row['name'] for row in report['items'] if not row['ok']]
+    assert missing == ['保存到 Zotero']
+    capsys.readouterr()
+    env.write_text('ZOTERO_LIBRARY_TYPE=group\n', encoding='utf-8')
+    assert configure.check(as_json=True) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert [row['name'] for row in report['items'] if not row['ok']] == ['保存到 Zotero']
+
+
+def test_unknown_basic_service_has_no_check_row(monkeypatch):
+    _stub_check_surroundings(monkeypatch)
+    monkeypatch.setattr(connection, 'BASIC_SERVICES', ('openalex',))
+    with pytest.raises(ValueError, match='basic service has no check: openalex'):
+        configure.check(as_json=True)
+
+
+def test_wizard_extras_hide_openalex_until_that_backend_is_selected(monkeypatch):
+    assert set(connection.BASIC_SERVICES).isdisjoint(connection.CONNECT_SERVICES)
+    monkeypatch.setattr(connection.credentials, 'search_backend', lambda: 'scansci')
+    assert connection.wizard_extras() == (
+        'zotero', 'mineru', 'kimi', 'semantic_scholar', 'crossref', 'unpaywall')
+    monkeypatch.setattr(connection.credentials, 'search_backend', lambda: 'http')
+    assert connection.wizard_extras()[:2] == ('zotero', 'openalex')
+    assert 'desktop' not in connection.wizard_extras()
+
+
+def test_accept_openalex_probes_and_extra_settings_rejects_it(monkeypatch):
+    with pytest.raises(ValueError):
+        connection.extra_settings('openalex', 'fixture-key')
+    seen = []
+
+    def probe(key=None):
+        seen.append(key)
+        return {'ok': True, 'detail': 'ok', 'sources': {'OpenAlex': 'ok'}}
+
+    monkeypatch.setattr(connection.capability, 'probe_discovery_search', probe)
+    assert connection.accept('openalex', 'fixture-key') == {'OPENALEX_API_KEY': 'fixture-key'}
+    assert seen == ['fixture-key']
+
+
+def test_existing_key_is_empty_for_any_service_other_than_the_three_accounts(monkeypatch):
+    monkeypatch.setattr(connection.credentials, 'mineru_token', lambda: 'secret-token')
+    assert connection.existing_key('desktop') == ''
+    assert connection.existing_key('kimi') == ''
+    assert connection.existing_key('semantic_scholar') == ''
+
+
+def test_enable_desktop_returns_the_flag_without_reading_sync_prefs(monkeypatch):
+    monkeypatch.setattr(connection.capability, 'probe_zotero_local_write', lambda *a, **k: True)
+    monkeypatch.setattr(connection.capability, 'zotero_prefs', lambda *a, **k: pytest.fail('sync prefs'))
+    assert connection.enable_desktop() == {'SETUP_DESKTOP': '1'}
+    monkeypatch.setattr(connection.capability, 'probe_zotero_local_write', lambda *a, **k: False)
+    with pytest.raises(ValueError, match='Zotero-Server-ID'):
+        connection.enable_desktop()
+
+
+def test_verify_mineru_reports_the_conversion_hop_without_writing_env(tmp_path, monkeypatch, capsys):
+    import mineru_parse
+    import verify
+    env = tmp_path / 'missing-env'
+    monkeypatch.setattr(verify.credentials, 'SKILL_ENV_FILE', env)
+    monkeypatch.delenv('MINERU_API_BASE', raising=False)
+    monkeypatch.delenv('MINERU_ENDPOINT', raising=False)
+    monkeypatch.delenv('MINERU_TOKEN', raising=False)
+    monkeypatch.setattr(mineru_parse, 'tasks_health', lambda *a, **k: {'ok': False, 'detail': 'stub'})
+    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: True)
+    assert verify.cmd_mineru() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload['ok'] is True
+    assert 'selected=markitdown' in payload['detail']
+    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: False)
+    assert verify.cmd_mineru() == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload['ok'] is False
+    assert "pip install 'markitdown[pdf]'" in payload['detail']
+    assert not env.exists()
+
+
 def test_kimi_status_uses_platform_executable_and_parses_connection(tmp_path, monkeypatch):
     expected_name = 'kimi-webbridge.exe' if os.name == 'nt' else 'kimi-webbridge'
     assert connection.capability.KIMI_BINARY.name == expected_name
@@ -278,3 +458,92 @@ def test_kimi_status_uses_platform_executable_and_parses_connection(tmp_path, mo
     monkeypatch.setattr(connection.capability.subprocess, 'run', run)
     state = connection.capability.probe_kimi(binary)
     assert state['running'] and state['extension_connected']
+
+
+def test_ensure_default_tools_skips_pip_when_both_are_present(monkeypatch, tmp_path):
+    import mineru_parse
+    import scansci_retrieval
+    env = tmp_path / 'env'
+    env.write_bytes(b'KEEP=1\n')
+    monkeypatch.setattr(connection.credentials, 'SKILL_ENV_FILE', env)
+    monkeypatch.setattr(scansci_retrieval, 'library_ready',
+                        lambda: scansci_retrieval.LibraryStatus(True, 'scansci-pdf', scansci_retrieval.INSTALL_LINE))
+    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: True)
+    monkeypatch.setattr(connection.subprocess, 'run', lambda *a, **k: pytest.fail('pip'))
+    connection.ensure_default_tools()
+    connection.ensure_default_tools()
+    assert env.read_bytes() == b'KEEP=1\n'
+
+
+def test_ensure_default_tools_installs_the_pinned_packages(monkeypatch, tmp_path):
+    import mineru_parse
+    import scansci_retrieval
+    env = tmp_path / 'env'
+    env.write_bytes(b'KEEP=1\n')
+    monkeypatch.setattr(connection.credentials, 'SKILL_ENV_FILE', env)
+    monkeypatch.setattr(scansci_retrieval, 'library_ready',
+                        lambda: scansci_retrieval.LibraryStatus(False, 'missing', scansci_retrieval.INSTALL_LINE))
+    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: True)
+    seen = []
+
+    def run(command, **kwargs):
+        seen.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(connection.subprocess, 'run', run)
+    connection.ensure_default_tools()
+    assert seen[0][0] == [sys.executable, '-m', 'pip', 'install',
+                          f'scansci-pdf=={scansci_retrieval.PIN}', 'markitdown[pdf]']
+    assert seen[0][1]['capture_output'] is True
+    assert env.read_bytes() == b'KEEP=1\n'
+
+
+def test_ensure_default_tools_failure_includes_the_install_line(monkeypatch):
+    import mineru_parse
+    import scansci_retrieval
+    monkeypatch.setattr(scansci_retrieval, 'library_ready',
+                        lambda: scansci_retrieval.LibraryStatus(False, 'missing', scansci_retrieval.INSTALL_LINE))
+    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: False)
+    monkeypatch.setattr(connection.subprocess, 'run',
+                        lambda *a, **k: subprocess.CompletedProcess(a[0], 1))
+    with pytest.raises(ValueError) as caught:
+        connection.ensure_default_tools()
+    assert scansci_retrieval.INSTALL_LINE in str(caught.value)
+    monkeypatch.setattr(connection.subprocess, 'run', lambda *a, **k: (_ for _ in ()).throw(OSError('missing')))
+    with pytest.raises(ValueError) as caught:
+        connection.ensure_default_tools()
+    assert scansci_retrieval.INSTALL_LINE in str(caught.value)
+
+
+def test_prepare_installs_default_tools_only_after_pdftotext_works(monkeypatch, tmp_path):
+    tool = tmp_path / 'pdftotext'
+    tool.write_text('#!/bin/sh\n', encoding='utf-8')
+    monkeypatch.delenv('PAPER2ZOTERO_PDF_BIN', raising=False)
+    monkeypatch.setattr(connection.Path, 'home', classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(connection.shutil, 'which', lambda name: str(tool) if name == 'pdftotext' else None)
+    seen = []
+
+    def run(command, **kwargs):
+        seen.append(list(command))
+        return subprocess.CompletedProcess(command, 0)
+
+    def tools():
+        seen.append('ensure_default_tools')
+
+    def import_module(name):
+        seen.append(name)
+        return type('Install', (), {'install': staticmethod(lambda agent: seen.append(('skill', agent)))})()
+
+    monkeypatch.setattr(connection.subprocess, 'run', run)
+    monkeypatch.setattr(connection, 'ensure_default_tools', tools)
+    monkeypatch.setattr(connection.importlib, 'import_module', import_module)
+    connection.prepare('codex')
+    assert seen[0][-1] == '-v'
+    assert seen[1] == 'ensure_default_tools'
+    assert seen[2:] == ['install', ('skill', 'codex')]
+    seen.clear()
+    monkeypatch.setattr(connection.subprocess, 'run',
+                        lambda command, **kwargs: seen.append('pdftotext') or subprocess.CompletedProcess(command, 1))
+    with pytest.raises(ValueError, match='PDF 工具无法运行'):
+        connection.prepare('codex')
+    assert seen == ['pdftotext']

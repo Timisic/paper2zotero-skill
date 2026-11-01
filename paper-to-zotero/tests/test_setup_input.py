@@ -25,7 +25,7 @@ def bash_executable():
 def prompt(tmp_path, replies, existing=''):
     bash = bash_executable()
     # Execute the real template and setup helper without starting account setup.
-    library = (SCRIPTS / 'setup-wizard.sh').read_text(encoding='utf-8').split('TOTAL_STAGES=6\n')[0]
+    library = (SCRIPTS / 'setup-wizard.sh').read_text(encoding='utf-8').split('BASIC_COUNT=1\n')[0]
     script = tmp_path / 'input.sh'
     script.write_text(library + '\n' + (SCRIPTS / 'setup-input.sh').read_text(encoding='utf-8') + '''
 WINDOWS=1
@@ -126,20 +126,17 @@ def test_control_key_never_reaches_network(monkeypatch, capsys):
     assert not result.out and '重新复制' in result.err
 
 
-@pytest.mark.parametrize('service', ['zotero', 'openalex', 'mineru'])
 @pytest.mark.parametrize('retry', [True, False])
-def test_real_stage_retries_or_defers_without_manual_personal_id(tmp_path, service, retry):
+def test_real_stage_retries_or_defers_without_manual_personal_id(tmp_path, retry):
     wizard = (SCRIPTS / 'setup-wizard.sh').read_text(encoding='utf-8')
-    library = wizard.split('TOTAL_STAGES=6\n')[0]
-    first = wizard.index('stage "连接 Zotero：')
-    openalex = wizard.index('stage "连接 OpenAlex（必配）：')
-    second = wizard.index('stage "启用全文阅读：')
-    third = wizard.index('stage "检查结果，开始使用"')
-    stage = {'zotero': wizard[first:openalex], 'openalex': wizard[openalex:second], 'mineru': wizard[second:third]}[service]
+    library = wizard.split('BASIC_COUNT=1\n')[0]
+    start = wizard.index('if [[ "$GROUP_LIBRARY" == 1 ]]; then\nstage "连接 Zotero Web API"')
+    stop = wizard.index("pause 'Web API 这一步结束，按回车继续'\nfi", start)
+    stage = wizard[start:stop] + "pause 'Web API 这一步结束，按回车继续'\nfi\n"
     stub = '''
 WINDOWS=1
 DEMO=0
-GROUP_LIBRARY=0
+GROUP_LIBRARY=1
 SKILL_DIR=.
 PYTHON_BIN=identity_fixture
 open_setup_url() { :; }
@@ -159,7 +156,7 @@ connect_account() {
     script = tmp_path / 'stage.sh'
     script.write_text(library + '\n' + (SCRIPTS / 'setup-input.sh').read_text(encoding='utf-8')
                       + stub + stage, encoding='utf-8', newline='\n')
-    replies = b'fixture-private-key\n' + (b'1\nfixture-private-key\n' if retry else b'2\n')
+    replies = b'fixture-private-key\n99\n' + (b'1\nfixture-private-key\n99\n' if retry else b'2\n')
     env = dict(os.environ)
     for key in ('ENV_FILE', 'ZOTERO_API_KEY', 'ZOTERO_LIBRARY_ID', 'ZOTERO_LIBRARY_TYPE', 'MINERU_TOKEN', 'OPENALEX_API_KEY'):
         env.pop(key, None)
@@ -168,8 +165,8 @@ connect_account() {
     output = (result.stdout + result.stderr).decode('utf-8')
     assert result.returncode == 0, output
     assert 'fixture-private-key' not in output
-    assert '填写要保存到的群组文库 ID' not in output
+    assert '填写要保存到的群组文库 ID' in output
+    assert '无需手动查找个人文库 ID' in output
     assert ('verified' in output) == retry
-    if service == 'zotero':
-        assert '连接失败，请检查网络后重试' in output
-        assert not (tmp_path / 'persisted').exists()
+    assert '连接失败，请检查网络后重试' in output
+    assert not (tmp_path / 'persisted').exists()

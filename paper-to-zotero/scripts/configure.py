@@ -41,9 +41,12 @@ def save_many(values: dict[str, str]) -> None:
 # Human labels/actions stay here; service semantics remain in capability.py.
 CHECKS = {
     'skill-links': ('连接 AI 助手', '重新运行安装，并指定你使用的助手。'),
-    'zotero-key': ('保存到 Zotero', '重新运行向导的“连接 Zotero”，检查授权码及文库权限。'),
-    'mineru': ('全文阅读材料', '重新运行向导的“启用全文阅读”，检查 MinerU 授权码。'),
-    'openalex': ('论文检索（OpenAlex 必配）', '返回“连接 OpenAlex（必配）”填写并验证授权码；若已配置，请检查网络和服务额度。'),
+    'zotero-key': ('保存到 Zotero', '群组文库才需要 Zotero Web API。重新运行向导的“连接 Zotero Web API”，检查授权码及文库权限。'),
+    'mineru': ('全文转换', capability.GUIDE['mineru']['do']),
+    'openalex': (
+        '论文检索（OpenAlex）',
+        '当前检索后端需要 OpenAlex 授权码。在更多配置里连接 OpenAlex，或删除 SEARCH_BACKEND 恢复 scansci。',
+    ),
     'zotero-local': ('连接电脑上的 Zotero', '打开 Zotero，在设置的高级选项中开启本地接口。'),
     'zotero-sync': ('下载 Zotero 附件', '在 Zotero 的同步设置中开启附件同步和自动下载。'),
     'kimi': ('浏览器获取全文', '打开已安装扩展的浏览器，确认连接服务已启动。'),
@@ -85,48 +88,75 @@ def render(record: dict[str, object]) -> None:
         print(f"  下一步：{record['action']}")
 
 
-def check(*, as_json: bool = False) -> int:
-    records: list[dict[str, object]] = [
-        {'name': '运行工具', 'ok': sys.version_info >= (3, 11), 'action': '重新运行安装入口。'},
-    ]
+def search_row(backend: str) -> dict[str, object]:
+    if backend == 'scansci':
+        status = scansci_retrieval.library_ready()
+        install = getattr(status, 'install', scansci_retrieval.INSTALL_LINE)
+        return {'name': '论文检索（ScanSci）', 'ok': status.ok, 'detail': status.detail,
+                'action': '' if status.ok else install}
+    if backend == 'kimi':
+        return {'name': '论文检索（Kimi WebBridge）', 'ok': True,
+                'detail': '当前检索后端是 Kimi WebBridge', 'action': ''}
+    if backend == 'semantic_scholar':
+        return {'name': '论文检索（Semantic Scholar）', 'ok': True,
+                'detail': '当前检索后端是 Semantic Scholar。授权码在更多配置，缺了这一项仍通过。',
+                'action': ''}
+    if backend in ('http', 'openalex'):
+        discovery = capability.probe_discovery_search()
+        name, action = CHECKS['openalex']
+        return {'name': name, **discovery, 'action': '' if discovery['ok'] else action}
+    raise ValueError('unknown SEARCH_BACKEND: ' + backend)
+
+
+def conversion_row() -> dict[str, object]:
+    import mineru_parse
+    plan = mineru_parse.converter_plan(live=True)
+    record = capability.converter_ready(plan)
+    return {'name': '全文转换', 'ok': record['ok'] is True, 'detail': str(record['detail']),
+            'action': '' if record['ok'] else str(record['remediation'])}
+
+
+def desktop_row() -> dict[str, object]:
+    import setup_connection
+    name = setup_connection.SERVICES['desktop'][0]
+    if capability.probe_zotero_local_write():
+        return {'name': name, 'ok': True, 'detail': '127.0.0.1:23119', 'action': ''}
+    if capability.probe_zotero_local():
+        detail = '本地 API 没有返回 Zotero-Server-ID，不能作为写入目标。'
+    else:
+        detail = capability.zotero_local(False)['detail']
+    return {'name': name, 'ok': False, 'detail': detail, 'action': capability.GUIDE['zotero_local']['do']}
+
+
+def check(*, as_json: bool = False, group: bool = False) -> int:
+    import setup_connection
+    rows: list[dict[str, object]] = []
+    python_ok = sys.version_info >= (3, 11)
+    rows.append({'name': '运行工具', 'ok': python_ok, 'action': '' if python_ok else '重新运行安装入口。'})
     try:
         pdf = subprocess.run(['pdftotext', '-v'], capture_output=True, timeout=10)
         pdf_ok = pdf.returncode == 0
     except (OSError, subprocess.SubprocessError):
         pdf_ok = False
-    records.append({'name': 'PDF 文本工具', 'ok': pdf_ok, 'action': '重新运行安装入口，修复 PDF 工具。'})
-    commands = ['skill-links', 'zotero-key', 'mineru']
-    settings = credentials._skill_env()
-    if settings.get('SETUP_DESKTOP') == '1':
-        commands += ['zotero-local', 'zotero-sync']
-    if settings.get('SETUP_BROWSER') == '1':
-        commands += ['kimi']
-    for command in commands:
-        record = probe(command)
-        records.append(record)
-        if not as_json:
-            render(record)
-    backend = credentials.search_backend()
-    if backend == 'scansci':
-        ready = scansci_retrieval.library_ready()
-        search_record = {'name': '论文检索（ScanSci）', 'ok': ready.ok, 'detail': ready.detail,
-                         'action': '' if ready.ok else scansci_retrieval.INSTALL_LINE}
-    elif backend == 'kimi':
-        search_record = {'name': '论文检索（Kimi WebBridge）', 'ok': True,
-                         'detail': '当前检索后端是 Kimi WebBridge', 'action': ''}
-    else:
-        discovery = capability.probe_discovery_search()
-        search_record = {'name': CHECKS['openalex'][0], **discovery,
-                         'action': '' if discovery['ok'] else CHECKS['openalex'][1]}
-    records.append(search_record)
-    if not as_json:
-        render(search_record)
-    ready = all(record['ok'] for record in records)
+    rows.append({'name': 'PDF 文本工具', 'ok': pdf_ok,
+                 'action': '' if pdf_ok else '重新运行安装入口，修复 PDF 工具。'})
+    rows.append(probe('skill-links'))
+    rows.append(search_row(credentials.search_backend()))
+    rows.append(conversion_row())
+    for name in setup_connection.BASIC_SERVICES:
+        if name != 'desktop':
+            raise ValueError('basic service has no check: ' + name)
+        rows.append(desktop_row())
+    if group or credentials.zotero_credentials()['library_type'] == 'group':
+        rows.append(probe('zotero-key'))
+    if credentials._skill_env().get('SETUP_BROWSER') == '1':
+        rows.append(probe('kimi'))
+    ready = all(row['ok'] for row in rows)
     if as_json:
-        print(json.dumps({'ready': ready, 'items': records}, ensure_ascii=False))
+        print(json.dumps({'ready': ready, 'items': rows}, ensure_ascii=False))
     else:
-        for record in records[:2]:
-            render(record)
+        for row in rows:
+            render(row)
         print('已通过检查，可以开始找论文、保存和生成阅读材料。' if ready else
               '安装已保存；仍有未完成项，可在向导中继续修复。当前可用功能以上方检查为准。')
         print('额外检索来源按需使用；电脑上的附件是否已下载，在处理论文时单独检查。')
@@ -140,9 +170,9 @@ def main() -> int:
     modes.add_argument('--verify', choices=CHECKS)
     modes.add_argument('--set', dest='setting', choices=sorted(SETTINGS), help='Read value from stdin, never from arguments.')
     import setup_connection
-    modes.add_argument('--connect', choices=setup_connection.BASIC_SERVICES, help='Validate and save an account; key arrives on stdin.')
+    modes.add_argument('--connect', choices=setup_connection.CONNECT_SERVICES, help='Validate and save an account; key arrives on stdin.')
     modes.add_argument('--guide', choices=setup_connection.SERVICES, help='Show shared setup instructions; no credentials.')
-    modes.add_argument('--extra', choices=setup_connection.EXTRAS, help='Save an optional setting from stdin or check a local connection.')
+    modes.add_argument('--extra', choices=setup_connection.SERVICES, help='Save an optional setting from stdin or check a local connection.')
     parser.add_argument('--group-id', default='')
     parser.add_argument('--group', action='store_true', default=None)
     parser.add_argument('--json', action='store_true')
@@ -152,20 +182,18 @@ def main() -> int:
         print(f'{title}\n{instructions}\n{url}')
         return 0
     if args.extra:
-        values = (setup_connection.enable_kimi() if args.extra == 'kimi' else
-                  setup_connection.enable_desktop() if args.extra == 'desktop' else
-                  setup_connection.extra_settings(args.extra, sys.stdin.read()))
+        raw = '' if args.extra in ('desktop', 'kimi') else sys.stdin.read()
+        values = setup_connection.accept(args.extra, raw, group=args.group, group_id=args.group_id)
         setup_connection.save_account(values)
-        print('设置已保存。' if setup_connection.EXTRAS[args.extra][2] else '连接检查通过，已启用。')
+        print('设置已保存。' if setup_connection.SERVICES[args.extra][2] else '连接检查通过，已启用。')
         return 0
     if args.connect:
-        import setup_connection
         values = setup_connection.connect(args.connect, sys.stdin.read(), group=args.group, group_id=args.group_id)
         setup_connection.save_account(values)
         print('连接成功，已安全保存。')
         return 0
     if args.check:
-        return check(as_json=args.json)
+        return check(as_json=args.json, group=bool(args.group))
     if args.verify:
         record = probe(args.verify)
         if args.json:

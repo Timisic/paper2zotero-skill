@@ -107,9 +107,15 @@ def test_public_pdf_cookie_redirect_needs_no_browser(tmp_path):
 
 def test_setup_does_not_claim_search_ready_when_all_sources_fail(tmp_path, monkeypatch, capsys):
     from types import SimpleNamespace
+    import mineru_parse
     monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', tmp_path / 'missing')
-    monkeypatch.setattr(configure, 'probe', lambda _: {'ok': True, 'name': 'fixture'})
+    monkeypatch.setenv('OPENALEX_API_KEY', 'fixture-openalex-key')
+    monkeypatch.setattr(configure.agent_installation, 'installation_ok', lambda _: True)
+    monkeypatch.setattr(configure.agent_installation, 'installed_paths', lambda **_: ['/fixture'])
     monkeypatch.setattr(configure.subprocess, 'run', lambda *a, **kw: subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(configure.capability, 'probe_zotero_local_write', lambda *a, **k: True)
+    monkeypatch.setattr(mineru_parse, 'converter_plan', lambda live=True: {
+        'selected': 'markitdown', 'api_base': None, 'markitdown_install': "pip install 'markitdown[pdf]'"})
     class ClosedSources:
         def __init__(self, **kw): pass
         def search(self, source, query, **kw):
@@ -118,7 +124,7 @@ def test_setup_does_not_claim_search_ready_when_all_sources_fail(tmp_path, monke
     assert configure.check(as_json=True) == 1
     result = json.loads(capsys.readouterr().out)
     missing = [row for row in result['items'] if not row['ok']]
-    assert len(missing) == 1 and missing[0]['name'] == '论文检索（OpenAlex 必配）'
+    assert len(missing) == 1 and missing[0]['name'] == '论文检索（OpenAlex）'
     assert 'OpenAlex' in missing[0]['action']
 
 

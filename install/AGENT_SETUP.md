@@ -8,9 +8,9 @@
 
 安装与验证共用 `paper-to-zotero/scripts/agent_installation.py`。Codex 使用 `~/.codex/skills`（尊重 `CODEX_HOME`）；Claude Code 使用 `~/.claude/skills`（尊重 `CLAUDE_CONFIG_DIR`）；Pi 使用 `~/.pi/agent/skills`。所选助手同时获得两个 skills。已有本安装器管理的其他助手副本也会更新；旧 `literature-to-zotero` 名称在两项技能安装成功后移至可恢复备份。独立安装保留，不自动覆盖。
 
-普通配置依次为：准备工具、连接 Zotero、连接 OpenAlex（必配）、启用全文阅读、检查结果、更多配置（可选）。OpenAlex 必须填写授权码并通过小型检索验证，才能通过基础配置检查。首次使用默认走这条路径。用户要求更多设置时加 `--advanced` / `-Advanced`；群组文库加 `--group` / `-Group`（使用本地 setup 入口）。
+普通配置依次为：准备工具、Zotero Desktop 本机写入、检查结果、更多配置。检查行按这个顺序：运行工具、PDF 文本工具、连接 AI 助手、当前检索后端、全文转换、Zotero Desktop。未设置 `SEARCH_BACKEND` 时检索行是 scansci-pdf 1.19.0。未设置 `MINERU_API_BASE` 时全文转换先试实验室 MinerU（`credentials.LAB_MINERU_API_BASE`），再试云端 Token，再试 markitdown。云端 Token 和 OpenAlex 不是完成条件。群组文库再加 Web API 这一步。`scripts/setup.py` 的 ready 不是这个结果。首次使用默认走这条路径。用户要求更多设置时加 `--advanced` / `-Advanced`；群组文库加 `--group` / `-Group`（使用本地 setup 入口）。
 
-Windows 完成页提供“更多配置（可选）”，`-Advanced` 也可直接打开原生进阶页，不会重复要求填写基础账号。所有可选项目直接展开，包括 Kimi WebBridge、Semantic Scholar、Crossref、Unpaywall 和 Zotero Desktop；Semantic Scholar“已保存”不代表在线验证成功。macOS/Linux 和 Windows 备用终端在最后依次展示相同项目，`--advanced` 直接跳过基础账号步骤。两种界面共享服务说明、验证和保存逻辑。需要 Windows 备用终端进阶入口时使用 `-Terminal -Advanced`。
+Windows 完成页提供“更多配置（可选）”，`-Advanced` 也可直接打开原生进阶页，不会重复要求填写基础账号。未设置 `SEARCH_BACKEND` 时，可选卡片是 Zotero Web API、MinerU 云端 Token、Kimi WebBridge、Semantic Scholar、Crossref、Unpaywall。`SEARCH_BACKEND` 为 http 或 openalex 时才出现 OpenAlex。Semantic Scholar“已保存”不代表在线验证成功。macOS/Linux 和 Windows 备用终端在最后依次展示相同项目，`--advanced` 直接跳过基础检查。两种界面共享服务说明、验证和保存逻辑。需要 Windows 备用终端进阶入口时使用 `-Terminal -Advanced`。
 
 ## 2. 准备依赖并打开向导
 
@@ -72,7 +72,7 @@ bash "$HOME/.local/share/paper2zotero-source/install/setup.sh" --agent claude-co
 
 需要结构化诊断时，通过安装好的 `scripts/run-python.sh`（Bash）或 `scripts/run-python.ps1`（PowerShell）运行 `scripts/configure.py --check --json`。将 `PAPER2ZOTERO_AGENT` 设为已选目标，才能检查该目标，而不是其他已安装助手。`scripts/setup.py` 是开发诊断入口，会展示更多可选集成；它的整机结果不代替上述面向用户的完成检查。
 
-完成条件：运行工具、PDF 工具、选定助手的 `SKILL.md`、Zotero 身份与读写权限、OpenAlex 授权检索、全文阅读授权，以及此前启用的可选功能，均按实际探测通过。报告缺失项及一个继续配置入口。终端就绪、文件安装成功或演示检查通过，均不等于账号配置完成；总检也不证明论文已处理或桌面附件已下载。
+完成条件按检查顺序：运行工具、PDF 文本工具、连接 AI 助手、当前检索后端、全文转换、Zotero Desktop 本机写入。未设置 `SEARCH_BACKEND` 时检索行是 scansci-pdf 1.19.0。未设置 `MINERU_API_BASE` 时全文转换先试 `credentials.LAB_MINERU_API_BASE`，再试云端 Token，再试 markitdown。云端 Token 和 OpenAlex 不是完成条件。群组文库或已保存的群组类型再加 Zotero Web API 行。此前启用的可选功能，例如 `SETUP_BROWSER=1` 的 Kimi，仍按实际探测。`scripts/setup.py` 的 ready 不是这个结果。报告缺失项及一个继续配置入口。终端就绪、文件安装成功或演示检查通过，均不等于账号配置完成；总检也不证明论文已处理或桌面附件已下载。
 
 最后请当前助手确认可以发现 `paper-to-zotero` 和 `discussion-drafter`。Claude Code 可用 `/paper-to-zotero`、`/discussion-drafter`，Codex 可用 `$paper-to-zotero`、`$discussion-drafter`；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。`discussion-drafter` 另需当前助手连接 Zotero MCP：发现实际工具并只读验证目标集合访问。Web API 配置检查通过不等于 MCP 已连接；缺少连接时明确列为讨论写作的未完成项，不重复申请已有账号。
 
