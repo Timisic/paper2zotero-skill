@@ -28,6 +28,22 @@ find_python() {
   done
   return 1
 }
+working_pdftotext() {
+  local dir tool
+  local dirs=()
+  IFS=':' read -ra dirs <<< "$PATH"
+  for dir in "${dirs[@]}"; do
+    [[ -n "$dir" ]] || continue
+    for tool in "$dir/pdftotext" "$dir/pdftotext.exe"; do
+      [[ -f "$tool" && -x "$tool" ]] || continue
+      if "$tool" -v >/dev/null 2>&1; then
+        printf '%s\n' "$tool"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
 echo '[1/3] 检查本地依赖'
 python_ready=0
 pdf_ready=0
@@ -37,9 +53,9 @@ if find_python; then
 else
   echo '待安装：Python 3.11+'
 fi
-if command -v pdftotext >/dev/null 2>&1 && pdftotext -v >/dev/null 2>&1; then
+if pdf_bin="$(working_pdftotext)"; then
   pdf_ready=1
-  echo "✓ Poppler 可运行：$(command -v pdftotext)（跳过安装）"
+  echo "✓ Poppler 可运行：${pdf_bin}（跳过安装）"
 else
   echo '待安装或修复：Poppler'
 fi
@@ -82,14 +98,14 @@ if [[ "$python_ready" != 1 || "$pdf_ready" != 1 ]]; then
   esac
 fi
 find_python || { echo '系统仓库没有 Python 3.11+；请升级到 Debian 12+/Ubuntu 24.04+ 后重试。' >&2; exit 1; }
-pdftotext -v >/dev/null 2>&1 || { echo 'PDF 工具安装未成功，请重跑 setup。' >&2; exit 1; }
+pdf_bin="$(working_pdftotext)" || { echo 'PDF 工具安装未成功，请重跑 setup。' >&2; exit 1; }
 echo '[2/3] 保存运行工具的位置'
 # Persist the interpreter choice without requiring shell profile changes.
 mkdir -p "$HOME/.config/literature-to-zotero"
 interpreter_path="$PYTHON_BIN"
 if [[ "$SYSTEM" == MINGW* || "$SYSTEM" == MSYS* || "$SYSTEM" == CYGWIN* ]]; then interpreter_path="$(cygpath -w "$PYTHON_BIN")"; fi
 printf '%s\n' "$interpreter_path" > "$HOME/.config/literature-to-zotero/python-path"
-pdf_directory="$(dirname "$(command -v pdftotext)")"
+pdf_directory="$(dirname "$pdf_bin")"
 if [[ "$SYSTEM" == MINGW* || "$SYSTEM" == MSYS* || "$SYSTEM" == CYGWIN* ]]; then pdf_directory="$(cygpath -w "$pdf_directory")"; fi
 printf '%s\n' "$pdf_directory" > "$HOME/.config/literature-to-zotero/pdf-bin"
 "$PYTHON_BIN" -c 'import sys; sys.path.insert(0, sys.argv[1]); from setup_connection import ensure_default_tools; ensure_default_tools()' "$SKILL_DIR/scripts"

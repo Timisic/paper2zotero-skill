@@ -234,7 +234,9 @@ printf '%s\\n' "$@" >> "$OUT"
                             env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)
     assert result.returncode == 0, result.stdout + result.stderr
     assert 'tools' in recorded.read_text(encoding='utf-8')
+    assert 'good-pdf' in result.stdout
     assert (home / '.config/literature-to-zotero/python-path').is_file()
+    assert (home / '.config/literature-to-zotero/pdf-bin').read_text(encoding='utf-8').rstrip().endswith('good-pdf')
     recorded.unlink()
     result = subprocess.run([bash, str(SCRIPTS / 'bootstrap.sh'), '--probe'],
                             env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)

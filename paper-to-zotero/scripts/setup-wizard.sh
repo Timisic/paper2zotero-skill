@@ -477,6 +477,7 @@ say '可选项目已依次展开。留空或跳过会保留已有配置。'
 services=()
 if names="$(extra_names)"; then
   while IFS= read -r name; do
+    name=${name%$'\r'}
     [[ -n "$name" ]] && services+=("$name")
   done <<<"$names"
 else
