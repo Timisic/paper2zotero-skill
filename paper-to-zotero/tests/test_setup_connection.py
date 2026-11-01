@@ -459,3 +459,92 @@ def test_kimi_status_uses_platform_executable_and_parses_connection(tmp_path, mo
     monkeypatch.setattr(connection.capability.subprocess, 'run', run)
     state = connection.capability.probe_kimi(binary)
     assert state['running'] and state['extension_connected']
+
+
+def test_ensure_default_tools_skips_pip_when_both_are_present(monkeypatch, tmp_path):
+    import mineru_parse
+    import scansci_retrieval
+    env = tmp_path / 'env'
+    env.write_bytes(b'KEEP=1\n')
+    monkeypatch.setattr(connection.credentials, 'SKILL_ENV_FILE', env)
+    monkeypatch.setattr(scansci_retrieval, 'library_ready',
+                        lambda: scansci_retrieval.LibraryStatus(True, 'scansci-pdf', scansci_retrieval.INSTALL_LINE))
+    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: True)
+    monkeypatch.setattr(connection.subprocess, 'run', lambda *a, **k: pytest.fail('pip'))
+    connection.ensure_default_tools()
+    connection.ensure_default_tools()
+    assert env.read_bytes() == b'KEEP=1\n'
+
+
+def test_ensure_default_tools_installs_the_pinned_packages(monkeypatch, tmp_path):
+    import mineru_parse
+    import scansci_retrieval
+    env = tmp_path / 'env'
+    env.write_bytes(b'KEEP=1\n')
+    monkeypatch.setattr(connection.credentials, 'SKILL_ENV_FILE', env)
+    monkeypatch.setattr(scansci_retrieval, 'library_ready',
+                        lambda: scansci_retrieval.LibraryStatus(False, 'missing', scansci_retrieval.INSTALL_LINE))
+    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: True)
+    seen = []
+
+    def run(command, **kwargs):
+        seen.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(connection.subprocess, 'run', run)
+    connection.ensure_default_tools()
+    assert seen[0][0] == [sys.executable, '-m', 'pip', 'install',
+                          f'scansci-pdf=={scansci_retrieval.PIN}', 'markitdown[pdf]']
+    assert seen[0][1]['capture_output'] is True
+    assert env.read_bytes() == b'KEEP=1\n'
+
+
+def test_ensure_default_tools_failure_includes_the_install_line(monkeypatch):
+    import mineru_parse
+    import scansci_retrieval
+    monkeypatch.setattr(scansci_retrieval, 'library_ready',
+                        lambda: scansci_retrieval.LibraryStatus(False, 'missing', scansci_retrieval.INSTALL_LINE))
+    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: False)
+    monkeypatch.setattr(connection.subprocess, 'run',
+                        lambda *a, **k: subprocess.CompletedProcess(a[0], 1))
+    with pytest.raises(ValueError) as caught:
+        connection.ensure_default_tools()
+    assert scansci_retrieval.INSTALL_LINE in str(caught.value)
+    monkeypatch.setattr(connection.subprocess, 'run', lambda *a, **k: (_ for _ in ()).throw(OSError('missing')))
+    with pytest.raises(ValueError) as caught:
+        connection.ensure_default_tools()
+    assert scansci_retrieval.INSTALL_LINE in str(caught.value)
+
+
+def test_prepare_installs_default_tools_only_after_pdftotext_works(monkeypatch, tmp_path):
+    tool = tmp_path / 'pdftotext'
+    tool.write_text('#!/bin/sh\n', encoding='utf-8')
+    monkeypatch.delenv('PAPER2ZOTERO_PDF_BIN', raising=False)
+    monkeypatch.setattr(connection.Path, 'home', classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(connection.shutil, 'which', lambda name: str(tool) if name == 'pdftotext' else None)
+    seen = []
+
+    def run(command, **kwargs):
+        seen.append(list(command))
+        return subprocess.CompletedProcess(command, 0)
+
+    def tools():
+        seen.append('ensure_default_tools')
+
+    def import_module(name):
+        seen.append(name)
+        return type('Install', (), {'install': staticmethod(lambda agent: seen.append(('skill', agent)))})()
+
+    monkeypatch.setattr(connection.subprocess, 'run', run)
+    monkeypatch.setattr(connection, 'ensure_default_tools', tools)
+    monkeypatch.setattr(connection.importlib, 'import_module', import_module)
+    connection.prepare('codex')
+    assert seen[0][-1] == '-v'
+    assert seen[1] == 'ensure_default_tools'
+    assert seen[2:] == ['install', ('skill', 'codex')]
+    seen.clear()
+    monkeypatch.setattr(connection.subprocess, 'run',
+                        lambda command, **kwargs: seen.append('pdftotext') or subprocess.CompletedProcess(command, 1))
+    with pytest.raises(ValueError, match='PDF 工具无法运行'):
+        connection.prepare('codex')
+    assert seen == ['pdftotext']

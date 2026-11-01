@@ -58,7 +58,7 @@ function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
         if ($Demo) { $guiArgs += '--demo' }
         if ($Group) { $guiArgs += '--group' }
         if ($Advanced) { $guiArgs += '--advanced' }
-        Write-Host '正在打开 Windows 图形向导 v2。请在输入框中按 Ctrl+V，或点击“粘贴”。' -ForegroundColor Cyan
+        Write-Host '正在打开 Windows 图形向导。先打开 Zotero Desktop。可选授权码在后面的页面粘贴，Ctrl+V。' -ForegroundColor Cyan
         if ($LaunchWizard) {
             $startup = Join-Path ([IO.Path]::GetTempPath()) ('paper2zotero-gui-' + [guid]::NewGuid().ToString('N'))
             $guiArgs += @('--ready-file', ('"' + $startup + '"'))

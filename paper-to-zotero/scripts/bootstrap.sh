@@ -92,6 +92,7 @@ printf '%s\n' "$interpreter_path" > "$HOME/.config/literature-to-zotero/python-p
 pdf_directory="$(dirname "$(command -v pdftotext)")"
 if [[ "$SYSTEM" == MINGW* || "$SYSTEM" == MSYS* || "$SYSTEM" == CYGWIN* ]]; then pdf_directory="$(cygpath -w "$pdf_directory")"; fi
 printf '%s\n' "$pdf_directory" > "$HOME/.config/literature-to-zotero/pdf-bin"
+"$PYTHON_BIN" -c 'import sys; sys.path.insert(0, sys.argv[1]); from setup_connection import ensure_default_tools; ensure_default_tools()' "$SKILL_DIR/scripts"
 if [[ "${1:-}" == --runtime-only ]]; then exit 0; fi
 export PYTHON_BIN
 bash "$SKILL_DIR/scripts/install-skill.sh"

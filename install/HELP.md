@@ -1,6 +1,6 @@
 # 安装与使用帮助
 
-文献任务默认是 ScanSci 检索和 PDF 下载（灰色来源开启，`--legal-only` 或 `SCANSCI_LEGAL_ONLY=1` 改为只要合法来源）、局域网 MinerU（`http://192.168.8.167:8000`）、本机 Zotero。Kimi 仍用 `SEARCH_BACKEND=kimi`。OpenAlex 不是默认检索通道。夹具验收见仓库的 `.agents/skills/verify-paper2zotero`。向导的基础检查仍可能要求 OpenAlex Key；缺少 Key 时基础配置检查不会通过。已知 DOI 或本地 PDF 仍按其自身依赖处理。
+文献任务默认是 ScanSci 检索和 PDF 下载（灰色来源开启，`--legal-only` 或 `SCANSCI_LEGAL_ONLY=1` 改为只要合法来源）、局域网 MinerU、本机 Zotero。不设置 `MINERU_API_BASE`。代码默认是 `credentials.LAB_MINERU_API_BASE`，即 `http://192.168.8.167:8000`。Kimi 仍用 `SEARCH_BACKEND=kimi`。未设置 `SEARCH_BACKEND` 时基础检查看 scansci-pdf 1.19.0，不要求 OpenAlex Key。`SEARCH_BACKEND` 为 http 或 openalex 时才要求 OpenAlex Key。夹具验收见仓库的 `.agents/skills/verify-paper2zotero`。已知 DOI 或本地 PDF 仍按其自身依赖处理。
 
 ## Windows
 
@@ -30,13 +30,13 @@ Windows 基础配置的完成页会提供 **更多配置（可选）** 按钮，
 - **Kimi WebBridge**：从学校或机构的已登录浏览器获取全文。按官网“搭配本地 Agent”安装连接服务和扩展，然后点击“启动并检查”；扩展连接通过后才启用。
 - **Semantic Scholar**：补充学术检索的账号授权。向导提供申请页面；申请尚未完成可以以后再来。原生设置页保存授权码，但不把“已保存”视为“已验证”，来源可用性会在实际检索时报告。
 - **Crossref / Unpaywall**：分别用于题录查询和开放全文定位，只需联系邮箱。邮箱会随请求发送给对应服务，不需要邮箱密码。
-- **Zotero Desktop**：引导启用本地 API 和附件同步，并检查本机状态。
+- **Zotero Desktop**：基础配置检查本机能否写入。这一步不开启附件同步。更多配置不再重复这一项。
 
 图形界面仅由 Windows 入口加载。macOS/Linux 仍使用 Bash 向导，无需 Tk 或 PowerShell；基础步骤、服务说明、授权验证和可选项保持一致；`--advanced` 直接进入更多配置，不重复基础账号填写。
 
 ## 没有账号或授权码
 
-直接回车暂时跳过。向导会说明哪些功能还不能使用。已有功能是否可用还取决于网络和对应服务的访问额度。需要保存到 Zotero 或生成全文阅读材料时，再补齐对应账号。
+直接回车暂时跳过。向导会说明哪些功能还不能使用。已有功能是否可用还取决于网络和对应服务的访问额度。群组文库或云端转换需要时，再补齐对应授权。基础检查不靠这些授权。
 
 ## 更换总结提示词
 

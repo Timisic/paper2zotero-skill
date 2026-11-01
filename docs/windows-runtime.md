@@ -14,7 +14,7 @@ Workflow fixtures belong to [verify-paper2zotero](../.agents/skills/verify-paper
 
 - Lost MinerU upload URLs are reconciled by the normal resume command. Only the complete previously consented batch, with every local record pending and every remote result `waiting-file`, may replace its empty batch. Previous batch identity and the reason are journaled. An upload is marked in progress before sending bytes; uncertainty never silently becomes permission to start new work.
 - Public PDF acquisition has a per-client, memory-only cookie jar for ordinary publisher redirects. It never reads a browser profile. Credential stripping, HTTPS downgrade rejection, transfer budgets and PDF identity checks remain in force.
-- Setup performs a bounded search and requires one usable discovery source to report search readiness. Account setup happens in the normal UI; operational retries use the same run instead of independent curl loops.
+- Unset `SEARCH_BACKEND` checks scansci-pdf. The basic check does not require an OpenAlex key. OpenAlex is required only when the backend is http or openalex. Account setup happens in the normal UI. Operational retries use the same run instead of independent curl loops.
 - On Windows, updating one assistant also updates existing managed copies belonging to the other supported assistants. Independent installations and unselected new assistants remain outside that update.
 - Technical recovery and summary handoff reuse recorded authorization. Human decisions remain selection, consent, account entry, login and material scope changes. Diagnostic artifacts belong under `debug/`; they do not create another housekeeping question at delivery.
 

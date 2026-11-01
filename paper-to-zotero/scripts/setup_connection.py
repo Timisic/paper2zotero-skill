@@ -202,6 +202,22 @@ def save_account(values: dict[str, str]) -> None:
         os.environ.pop(key, None)
 
 
+def ensure_default_tools() -> None:
+    """Install scansci-pdf at PIN and markitdown[pdf] when either is missing."""
+    import mineru_parse
+    import scansci_retrieval
+    if scansci_retrieval.library_ready().ok and mineru_parse.markitdown_available():
+        return
+    command = [sys.executable, '-m', 'pip', 'install',
+               f'scansci-pdf=={scansci_retrieval.PIN}', 'markitdown[pdf]']
+    try:
+        result = subprocess.run(command, capture_output=True, timeout=180)
+    except (OSError, subprocess.SubprocessError):
+        result = None
+    if result is None or result.returncode != 0:
+        raise ValueError(scansci_retrieval.INSTALL_LINE)
+
+
 def prepare(agent: str) -> None:
     directory = Path.home() / '.config/literature-to-zotero'
     pdf = os.environ.get('PAPER2ZOTERO_PDF_BIN', '')
@@ -212,6 +228,7 @@ def prepare(agent: str) -> None:
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     if result.returncode:
         raise ValueError('PDF 工具无法运行，请从 install/setup.cmd 重新打开。')
+    ensure_default_tools()
     with contextlib.redirect_stdout(io.StringIO()):
         importlib.import_module('install').install(agent)
     directory.mkdir(parents=True, exist_ok=True)

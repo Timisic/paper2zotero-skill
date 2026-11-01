@@ -166,6 +166,45 @@ def test_bootstrap_check_forwards_group(tmp_path):
         assert ('--group' in lines) is forwarded
 
 
+def test_bootstrap_installs_default_tools_after_the_python_path(tmp_path):
+    text = (SCRIPTS / 'bootstrap.sh').read_text(encoding='utf-8')
+    probe = text.index('if [[ "${1:-}" == --probe ]]; then exit 0; fi')
+    check = text.index('if [[ "${1:-}" == --check ]]; then')
+    saved = text.index('literature-to-zotero/python-path')
+    call = text.index('ensure_default_tools')
+    runtime = text.index('if [[ "${1:-}" == --runtime-only ]]; then exit 0; fi')
+    assert probe < check < saved < call < runtime
+    if not shutil.which('pdftotext'):
+        pytest.skip('pdftotext required')
+    fake = tmp_path / 'python'
+    fake.write_text('''#!/bin/sh
+if [ "$1" = -c ]; then
+  case "$2" in
+    *ensure_default_tools*) printf 'tools\\n' >> "$OUT" ;;
+  esac
+  exit 0
+fi
+printf '%s\\n' "$@" >> "$OUT"
+''', encoding='utf-8')
+    fake.chmod(0o755)
+    recorded = tmp_path / 'log'
+    home = tmp_path / 'home'
+    env = environment(home)
+    env['PYTHON_BIN'] = str(fake)
+    env['OUT'] = str(recorded)
+    bash = shutil.which('bash') or 'bash'
+    result = subprocess.run([bash, str(SCRIPTS / 'bootstrap.sh'), '--runtime-only'],
+                            env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'tools' in recorded.read_text(encoding='utf-8')
+    assert (home / '.config/literature-to-zotero/python-path').is_file()
+    recorded.unlink()
+    result = subprocess.run([bash, str(SCRIPTS / 'bootstrap.sh'), '--probe'],
+                            env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not recorded.exists()
+
+
 def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):
     env = environment(tmp_path)
     tools = tmp_path / '工具 with spaces'
