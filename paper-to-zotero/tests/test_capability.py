@@ -91,7 +91,8 @@ def test_kimi_requires_installed_daemon_running_and_connected_extension() -> Non
 def test_zotero_key_requires_credentials_then_live_identity_and_write_permission() -> None:
     missing = MODULE.zotero_key(False, None)
     assert missing["ok"] is False
-    assert "ZOTERO_API_KEY" in str(missing["remediation"])
+    assert "ZOTERO_API_KEY" in str(missing["detail"])
+    assert missing["remediation"] == MODULE.GUIDE["zotero_key"]["do"]
 
     unassessed = MODULE.zotero_key(True, None)
     assert unassessed["ok"] is False

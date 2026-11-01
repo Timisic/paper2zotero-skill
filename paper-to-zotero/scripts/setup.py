@@ -51,7 +51,7 @@ CHECKLIST = [
     ("Zotero 写入（本地 API 优先，Web API 可选）", "zotero_write"),
     ("Kimi WebBridge（浏览器自动化）", "kimi"),
     ("全文转换（自建 MinerU、云端或 markitdown）", "mineru"),
-    ("文献检索来源（默认 Kimi，HTTP 来源可选）", "discovery_sources"),
+    ("文献检索来源（默认 scansci，HTTP 来源可选）", "discovery_sources"),
 ]
 
 

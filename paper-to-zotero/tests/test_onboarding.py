@@ -167,21 +167,22 @@ def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):
 
 
 def test_service_timeout_is_actionable_and_other_checks_continue(tmp_path, monkeypatch, capsys):
+    import mineru_parse
     monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', tmp_path / 'absent')
-    monkeypatch.setattr(agent_installation, 'installation_ok', lambda _: True)
-    monkeypatch.setattr(agent_installation, 'installed_paths', lambda **_: ['/fixture'])
-    calls = []
-    def run(command, **kwargs):
-        calls.append(command[-1])
-        if command[-1] == 'zotero-key':
-            raise subprocess.TimeoutExpired(command, 60)
-        return subprocess.CompletedProcess(command, 0, '{"ok": true}', '')
-    monkeypatch.setattr(configure.subprocess, 'run', run)
-    monkeypatch.setattr(configure.capability, 'probe_discovery_search', lambda: {'ok': True, 'detail': 'fixture'})
+    monkeypatch.setattr(agent_installation, 'installation_ok', lambda _: False)
+    monkeypatch.setattr(agent_installation, 'installed_paths', lambda **_: [])
+    monkeypatch.setattr(configure.subprocess, 'run', lambda *a, **k: subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(configure.capability, 'probe_discovery_search',
+                        lambda: {'ok': True, 'detail': 'fixture', 'sources': {}})
+    monkeypatch.setattr(configure.capability, 'probe_zotero_local_write', lambda *a, **k: True)
+    monkeypatch.setattr(mineru_parse, 'converter_plan', lambda live=True: {
+        'selected': 'markitdown', 'api_base': None, 'markitdown_install': "pip install 'markitdown[pdf]'"})
     assert configure.check(as_json=True) == 1
     report = json.loads(capsys.readouterr().out)
     assert not report['ready']
-    assert 'mineru' in calls
     missing = [row for row in report['items'] if not row['ok']]
     assert len(missing) == 1
+    assert missing[0]['name'] == '连接 AI 助手'
     assert missing[0]['action']
+    names = [row['name'] for row in report['items']]
+    assert names.index('连接 AI 助手') < names.index('Zotero Desktop · 本机附件')

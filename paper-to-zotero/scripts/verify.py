@@ -15,7 +15,7 @@ Commands:
   zotero-key      - credentials resolve and match the current library (needs
                     ZOTERO_API_KEY / ZOTERO_LIBRARY_ID in the environment)
   self-id         - print the numeric Zotero user id for the provided API key
-  mineru          - MinerU token present and accepted (live probe)
+  mineru          - one conversion hop is ready (lab, cloud token, or markitdown)
   doctor          - full preflight readiness (live)
 """
 
@@ -87,10 +87,9 @@ def cmd_self_id() -> int:
 
 
 def cmd_mineru() -> int:
-    token = credentials.mineru_token()
-    if not token:
-        return print_record(capability.mineru(False))
-    return print_record(capability.mineru(True, capability.probe_mineru(token)))
+    import mineru_parse
+    plan = mineru_parse.converter_plan(live=True)
+    return print_record(capability.converter_ready(plan))
 
 
 def cmd_doctor() -> int:
