@@ -269,7 +269,6 @@ def test_unix_private_save_never_calls_powershell(tmp_path, monkeypatch):
 
 
 def _stub_check_surroundings(monkeypatch, *, write=True, read=False, search='http', conversion=True):
-    """Keep Python, PDF, skill links, and Desktop off the network."""
     monkeypatch.setattr(configure.agent_installation, 'installation_ok', lambda _: True)
     monkeypatch.setattr(configure.agent_installation, 'installed_paths', lambda **_: ['/fixture'])
     real_run = subprocess.run

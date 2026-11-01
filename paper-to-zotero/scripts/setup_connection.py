@@ -67,11 +67,6 @@ EXTRAS = {name: record for name, record in SERVICES.items() if name not in BASIC
 
 
 def wizard_extras() -> tuple[str, ...]:
-    """Optional cards in SERVICES order.
-
-    Skips BASIC_SERVICES. Includes openalex only when search_backend()
-    is 'http' or 'openalex'.
-    """
     backend = credentials.search_backend()
     names = []
     for name in SERVICES:
@@ -84,7 +79,6 @@ def wizard_extras() -> tuple[str, ...]:
 
 
 def accept(service: str, value: str = '', *, group_id: str = '', group: bool | None = None) -> dict[str, str]:
-    """Return env lines for one wizard card. The caller saves them."""
     if service == 'desktop':
         return enable_desktop()
     if service == 'kimi':
@@ -203,7 +197,6 @@ def save_account(values: dict[str, str]) -> None:
 
 
 def ensure_default_tools() -> None:
-    """Install scansci-pdf at PIN and markitdown[pdf] when either is missing."""
     import mineru_parse
     import scansci_retrieval
     if scansci_retrieval.library_ready().ok and mineru_parse.markitdown_available():

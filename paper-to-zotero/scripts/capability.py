@@ -189,18 +189,21 @@ def probe_zotero_local_write(timeout: int = 3, url: str | None = None) -> bool:
         return False
 
 
-def probe_discovery_search(key: str | None = None) -> dict[str, Any]:
-    """The http and openalex backends need a key for this probe.
+def refuse_anonymous_openalex_setup(key: str | None) -> dict[str, Any] | None:
+    import credentials
+    if credentials.usable_secret(key):
+        return None
+    return {'ok': False, 'detail': '请先配置 OpenAlex 授权码，基础论文检索尚未完成。',
+            'sources': {'OpenAlex': 'not_configured'}}
 
-    A missing key returns before Sources.search. That search stays anonymous.
-    A candidate key is scoped to this probe, never saved or put in the process env.
-    """
+
+def probe_discovery_search(key: str | None = None) -> dict[str, Any]:
     import credentials
     from sources import Sources, Query
     key = credentials.source_setting('openalex') if key is None else key
-    if not credentials.usable_secret(key):
-        return {'ok': False, 'detail': '请先配置 OpenAlex 授权码，基础论文检索尚未完成。',
-                'sources': {'OpenAlex': 'not_configured'}}
+    refused = refuse_anonymous_openalex_setup(key)
+    if refused is not None:
+        return refused
     client = Sources(timeout=10, budget=15, attempts=1,
                      setting=lambda source: key if source == 'openalex' else '')
     try:

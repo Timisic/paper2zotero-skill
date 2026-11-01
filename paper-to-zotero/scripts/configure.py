@@ -172,9 +172,7 @@ def main() -> int:
     import setup_connection
     modes.add_argument('--connect', choices=setup_connection.CONNECT_SERVICES, help='Validate and save an account; key arrives on stdin.')
     modes.add_argument('--guide', choices=setup_connection.SERVICES, help='Show shared setup instructions; no credentials.')
-    # desktop left EXTRAS when it became the basic service. The wizard still saves it with --extra.
-    extra_choices = tuple(setup_connection.EXTRAS) + setup_connection.BASIC_SERVICES
-    modes.add_argument('--extra', choices=extra_choices, help='Save an optional setting from stdin or check a local connection.')
+    modes.add_argument('--extra', choices=setup_connection.SERVICES, help='Save an optional setting from stdin or check a local connection.')
     parser.add_argument('--group-id', default='')
     parser.add_argument('--group', action='store_true', default=None)
     parser.add_argument('--json', action='store_true')
