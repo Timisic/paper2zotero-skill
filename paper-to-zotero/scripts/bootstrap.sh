@@ -8,7 +8,9 @@ if [[ "${1:-}" == --help ]]; then
   exit 0
 fi
 case "${1:-}" in ''|--dependencies-only|--check|--probe|--runtime-only) ;; *) echo 'Unknown option; use --help' >&2; exit 2;; esac
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+caller_path="$PATH"
+prefix_path="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin"
+export PATH="$prefix_path:$PATH"
 SYSTEM="$(uname -s)"
 case "$SYSTEM" in
   Darwin) echo '系统：macOS（Homebrew）' ;;
@@ -31,7 +33,8 @@ find_python() {
 working_pdftotext() {
   local dir tool
   local dirs=()
-  IFS=':' read -ra dirs <<< "$PATH"
+  local search_path="${1:-$PATH}"
+  IFS=':' read -ra dirs <<< "$search_path"
   for dir in "${dirs[@]}"; do
     [[ -n "$dir" ]] || continue
     for tool in "$dir/pdftotext" "$dir/pdftotext.exe"; do
@@ -53,7 +56,7 @@ if find_python; then
 else
   echo '待安装：Python 3.11+'
 fi
-if pdf_bin="$(working_pdftotext)"; then
+if pdf_bin="$(working_pdftotext "$caller_path" || working_pdftotext "$prefix_path")"; then
   pdf_ready=1
   echo "✓ Poppler 可运行：${pdf_bin}（跳过安装）"
 else
@@ -98,7 +101,7 @@ if [[ "$python_ready" != 1 || "$pdf_ready" != 1 ]]; then
   esac
 fi
 find_python || { echo '系统仓库没有 Python 3.11+；请升级到 Debian 12+/Ubuntu 24.04+ 后重试。' >&2; exit 1; }
-pdf_bin="$(working_pdftotext)" || { echo 'PDF 工具安装未成功，请重跑 setup。' >&2; exit 1; }
+pdf_bin="$(working_pdftotext "$caller_path" || working_pdftotext "$prefix_path")" || { echo 'PDF 工具安装未成功，请重跑 setup。' >&2; exit 1; }
 echo '[2/3] 保存运行工具的位置'
 # Persist the interpreter choice without requiring shell profile changes.
 mkdir -p "$HOME/.config/literature-to-zotero"
