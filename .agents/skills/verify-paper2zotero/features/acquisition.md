@@ -26,4 +26,4 @@ Inspect `commands.jsonl` for the action and return value, `results.xml` for each
 
 ## Gotchas
 
-The suite sets `LITERATURE_SCANSCI_DISABLED=1` and replaces `fetch_candidate` with `NotAddressable`, so these nodes record channel `http` from an ephemeral local peer. Browser non-use is observed via the absent marker file. `run --feature scansci` drives the mocked scansci download, including the grey default and `--legal-only`. A green HTTP run is not live scansci-pdf acceptance. Institutional access, live redirects and real Kimi sessions remain unverified.
+The suite sets `LITERATURE_SCANSCI_DISABLED=1` and replaces `fetch_candidate` with `NotAddressable`, so these nodes record channel `http` from an ephemeral local peer. The success node observes browser non-use via the absent marker file. The HTML and wrong-paper nodes pass no browser command. `run --feature scansci` drives the mocked scansci download, including the grey default and `--legal-only`. A green HTTP run is not live scansci-pdf acceptance. Institutional access, live redirects and real Kimi sessions remain unverified.
