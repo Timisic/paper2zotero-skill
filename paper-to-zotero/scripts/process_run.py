@@ -285,33 +285,24 @@ def record_trail(run: Path, identity: str, target: Path, result: dict[str, Any])
     workflow.Run.record(run, identity, artifact="acquisition_trail=" + str(path))
 
 
-def conversion_plan(request: ProcessRequest) -> tuple[tuple[str, str] | None, dict[str, Any]]:
-    """Which converter runs, and the health evidence behind that choice.
+def conversion_plan(request: ProcessRequest) -> tuple[list[tuple[str, str]], str]:
+    """The converters to try in order, and why self-hosted MinerU is missing.
 
     The public cloud URL means "use the chain": a healthy self-hosted Tasks
-    host, else a cloud token, else markitdown. Any other base that answers
-    `GET /v1/health` is that Tasks host. A base that does not is a cloud v4
-    mirror, which is how the offline fixtures speak.
+    host, then a cloud token, then markitdown. Any other base replaces the
+    self-hosted host when it answers `GET /v1/health`. A base that does not
+    is a cloud v4 mirror, which is how the offline fixtures speak.
     """
     override = request.mineru_api_base.rstrip("/")
-    if override != mineru_parse.CLOUD_API:
-        health = mineru_parse.tasks_health(override)
-        if health.get("ok"):
-            return ("mineru-self-hosted", override), {
-                "selected": "mineru-self-hosted", "api_base": override, "health": health,
-            }
-        return ("mineru-cloud", override), {
-            "selected": "mineru-cloud", "api_base": override, "health": health,
-        }
-    info = mineru_parse.converter_plan(live=True)
-    selected = info.get("selected")
-    if selected == "mineru-self-hosted":
-        return ("mineru-self-hosted", str(info.get("api_base") or "")), info
-    if selected == "mineru-cloud":
-        return ("mineru-cloud", mineru_parse.CLOUD_API), info
-    if selected == "markitdown":
-        return ("markitdown", ""), info
-    return None, info
+    if override == mineru_parse.CLOUD_API:
+        info = mineru_parse.converter_plan(live=True)
+        bases = {"mineru-self-hosted": str(info.get("api_base") or ""), "mineru-cloud": override}
+        return [(kind, bases.get(kind, "")) for kind in info["available"]], _self_hosted_miss(info)
+    rest = [kind for kind in mineru_parse.converter_plan(live=False)["available"] if kind != "mineru-self-hosted"]
+    if mineru_parse.tasks_health(override).get("ok"):
+        bases = {"mineru-cloud": mineru_parse.CLOUD_API}
+        return [("mineru-self-hosted", override), *[(kind, bases.get(kind, "")) for kind in rest]], ""
+    return [(kind, override if kind == "mineru-cloud" else "") for kind in rest], ""
 
 
 def _self_hosted_miss(info: Mapping[str, Any]) -> str:
@@ -323,78 +314,70 @@ def _self_hosted_miss(info: Mapping[str, Any]) -> str:
 
 
 def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, Any]:
-    """Convert PDFs. Self-hosted MinerU, then cloud MinerU, then markitdown.
+    """Convert PDFs hop by hop: self-hosted MinerU, cloud MinerU, markitdown.
 
-    An upload still needs recorded consent. markitdown never leaves the machine,
-    so it does not. A conversion failure keeps the PDF path open.
+    Each hop takes the papers still unconverted. The MinerU hops upload, so
+    they take only papers with recorded consent. markitdown never leaves the
+    machine and takes any. A paper a hop fails moves on to the next hop. A
+    conversion failure keeps the PDF path open.
     """
     run = request.run_dir
     package = workflow.Run.open(run)
-    plan, info = conversion_plan(request)
-    miss = _self_hosted_miss(info)
-    local_only = bool(plan) and plan[0] == "markitdown"
-    pending, skipped = {}, {}
-    for paper in package.papers(identities):
-        if paper.markdown or not paper.pdf:
-            continue
-        if not local_only and not package.consented("mineru", [paper.id]):
-            skipped[paper.id] = "markdown_unavailable: no upload consent"
-            continue
-        pending[paper.id] = paper.pdf
-    if skipped:
-        for identity, reason in skipped.items():
-            workflow.Run.record(run, identity, warning=reason)
+    pending = {paper.id: paper.pdf for paper in package.papers(identities) if paper.pdf and not paper.markdown}
     if not pending:
-        return {"converted": [], "failed": {}, "skipped": skipped}
-    if plan is None or (plan[0] == "mineru-cloud" and not credentials.mineru_token()):
-        reason = "markdown_unavailable: no MinerU token"
-        if miss:
-            reason = f"{reason}; {miss}"
-        for identity in pending:
-            workflow.Run.record(run, identity, warning=reason)
-        report = {"converted": [], "failed": {}, "skipped": {**skipped, **{key: reason for key in pending}}}
-        if miss:
-            report["detail"] = miss
-        return report
-    try:
-        if plan[0] == "mineru-cloud":
-            result = mineru_parse.parse(replace(request.parse_request(list(pending.values())), api_base=plan[1]))
-        else:
-            result = mineru_parse.convert_selected(plan[0], plan[1], list(pending.values()), request.poll_timeout)
-    except (RequestError, ValueError, OSError) as error:
-        reason = f"markdown_unavailable: {error}"
-        if miss and plan[0] == "markitdown":
-            reason = f"{reason}; {miss}"
-        for identity in pending:
-            workflow.Run.record(run, identity, warning=reason)
-        report = {"converted": [], "failed": {key: reason for key in pending}, "skipped": skipped}
-        if miss and plan[0] == "markitdown":
-            report["detail"] = miss
-        return report
-    # Match on content hash, not path: MinerU parses identical bytes once and
-    # returns the same record for every path that shares them, so two papers
-    # pointing at the same file both need to see that one result.
-    by_digest = {record.get("sha256"): record for record in result.get("files", []) if record.get("sha256")}
-    by_path = {str(Path(record["path"]).resolve()): record for record in result.get("files", [])}
-    converted, failed = [], {}
-    for identity, pdf in pending.items():
-        digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
-        record = by_digest.get(digest) or by_path.get(str(pdf.resolve())) or {}
+        return {"converted": [], "failed": {}, "skipped": {}}
+    hops, miss = conversion_plan(request)
+    converted: list[str] = []
+    attempts: dict[str, list[dict[str, str]]] = {}
+    for kind, base in hops:
+        batch = {identity: pdf for identity, pdf in pending.items()
+                 if kind == "markitdown" or package.consented("mineru", [identity])}
+        if not batch:
+            continue
         try:
+            if kind == "mineru-cloud":
+                result = mineru_parse.parse(replace(request.parse_request(list(batch.values())), api_base=base))
+            else:
+                result = mineru_parse.convert_selected(kind, base, list(batch.values()), request.poll_timeout)
+        except (RequestError, ValueError, OSError) as error:
+            result = {"files": [], "error": str(error)}
+        # Match on content hash, not path: MinerU parses identical bytes once and
+        # returns the same record for every path that shares them, so two papers
+        # pointing at the same file both need to see that one result.
+        by_digest = {record.get("sha256"): record for record in result["files"] if record.get("sha256")}
+        by_path = {str(Path(record["path"]).resolve()): record for record in result["files"]}
+        for identity, pdf in batch.items():
+            digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
+            record = by_digest.get(digest) or by_path.get(str(pdf.resolve())) or {}
+            reason = result.get("error") or str(record.get("reason") or record.get("state") or "not returned")
             if record.get("state") == "done" and record.get("markdown"):
-                workflow.Run.record(run, identity, "markdown_derived", artifact="markdown=" + str(record["markdown"]))
-                if miss and plan[0] == "markitdown":
-                    workflow.Run.record(run, identity, warning=miss)
-                converted.append(identity)
-                continue
-            failed[identity] = "markdown_unavailable: " + str(record.get("reason") or record.get("state") or "not returned")
-            if miss and plan[0] == "markitdown":
-                failed[identity] = f"{failed[identity]}; {miss}"
-            workflow.Run.record(run, identity, warning=failed[identity])
-        except (ValueError, OSError) as error:
-            failed[identity] = f"{type(error).__name__}: {error}"
-    report = {"converted": converted, "failed": failed, "skipped": skipped}
-    if miss and plan[0] == "markitdown":
+                try:
+                    workflow.Run.record(run, identity, "markdown_derived", artifact="markdown=" + str(record["markdown"]))
+                    if miss and kind == "markitdown":
+                        workflow.Run.record(run, identity, warning=miss)
+                    converted.append(identity)
+                    del pending[identity]
+                    continue
+                except (ValueError, OSError) as error:
+                    reason = f"{type(error).__name__}: {error}"
+            attempts.setdefault(identity, []).append({"converter": kind, "reason": reason})
+    failed, skipped = {}, {}
+    for identity in pending:
+        tried = attempts.get(identity)
+        if tried:
+            reason = "markdown_unavailable: " + "; ".join(f"{entry['converter']}: {entry['reason']}" for entry in tried)
+        elif not package.consented("mineru", [identity]):
+            reason = "markdown_unavailable: no upload consent"
+        else:
+            reason = "markdown_unavailable: no MinerU token"
+        if miss:
+            reason = f"{reason}; {miss}"
+        (failed if tried else skipped)[identity] = reason
+        workflow.Run.record(run, identity, warning=reason)
+    report: dict[str, Any] = {"converted": converted, "failed": failed, "skipped": skipped}
+    if attempts:
+        report["attempts"] = attempts
+    if miss:
         report["detail"] = miss
     return report
 

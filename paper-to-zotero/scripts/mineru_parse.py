@@ -8,6 +8,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 from runtime_io import absolute_path
 import shutil
@@ -374,6 +375,8 @@ def tasks_health(base: str, timeout: float = 3) -> dict[str, Any]:
 
 
 def markitdown_available() -> bool:
+    if os.environ.get("LITERATURE_MARKITDOWN_DISABLED") == "1":
+        return False
     return bool(shutil.which("markitdown") or importlib.util.find_spec("markitdown"))
 
 
@@ -407,18 +410,6 @@ def converter_plan(*, live: bool = False) -> dict[str, Any]:
         "markitdown": local,
         "markitdown_install": "pip install 'markitdown[pdf]'",
     }
-
-
-def choose_converter(*, live: bool = True) -> tuple[str, str] | None:
-    plan = converter_plan(live=live)
-    selected = plan["selected"]
-    if selected == "mineru-self-hosted":
-        return selected, str(plan["api_base"])
-    if selected == "mineru-cloud":
-        return selected, CLOUD_API
-    if selected == "markitdown":
-        return selected, ""
-    return None
 
 
 def _same_origin(base: str, url: str) -> None:
