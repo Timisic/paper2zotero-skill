@@ -115,13 +115,7 @@ def test_bootstrap_check_forwards_group(tmp_path):
         assert ('--group' in lines) is forwarded
 
 
-def test_bootstrap_installs_default_tools_after_the_python_path(tmp_path):
-    text = (SCRIPTS / 'bootstrap.sh').read_text(encoding='utf-8')
-    check = text.index('if [[ "${1:-}" == --check ]]; then')
-    saved = text.index('literature-to-zotero/python-path')
-    call = text.index('ensure_default_tools')
-    runtime = text.index('if [[ "${1:-}" == --runtime-only ]]; then exit 0; fi')
-    assert check < saved < call < runtime
+def test_bootstrap_prepares_the_runtime_and_records_the_verified_pdf_tool(tmp_path):
     bad = tmp_path / 'bad-pdf'
     good = tmp_path / 'good-pdf'
     blocker = tmp_path / 'no-install'
@@ -156,8 +150,32 @@ printf '%s\\n' "$@" >> "$OUT"
     assert result.returncode == 0, result.stdout + result.stderr
     assert 'tools' in recorded.read_text(encoding='utf-8')
     assert 'good-pdf' in result.stdout
-    assert (home / '.config/literature-to-zotero/python-path').is_file()
     assert (home / '.config/literature-to-zotero/pdf-bin').read_text(encoding='utf-8').rstrip().endswith('good-pdf')
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='Windows bundles run through setup.ps1')
+def test_offline_bundle_uses_its_python_and_never_calls_package_managers(tmp_path):
+    scripts = tmp_path / 'bundle/paper-to-zotero/scripts'
+    scripts.mkdir(parents=True)
+    shutil.copy2(SCRIPTS / 'bootstrap.sh', scripts / 'bootstrap.sh')
+    bundled = tmp_path / 'bundle/runtime/python/bin/python3'
+    bundled.parent.mkdir(parents=True)
+    bundled.write_text('#!/bin/sh\ncase "$2" in *ensure_default_tools*) echo bundled >> "$OUT" ;; esac\nexit 0\n')
+    blocker = tmp_path / 'blocker'
+    blocker.mkdir()
+    for name in ('apt-get', 'brew', 'sudo', 'pdftotext'):
+        (blocker / name).write_text('#!/bin/sh\necho "$0" >> "$OUT"\nexit 1\n')
+        (blocker / name).chmod(0o755)
+    env = environment(tmp_path / 'home')
+    env.pop('PYTHON_BIN')
+    env['OUT'] = str(tmp_path / 'log')
+    env['PATH'] = os.pathsep.join((str(blocker), env['PATH']))
+    result = subprocess.run([shutil.which('bash') or 'bash', str(scripts / 'bootstrap.sh'), '--runtime-only'],
+                            env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)
+    assert result.returncode == 0, result.stdout + result.stderr
+    log = (tmp_path / 'log').read_text(encoding='utf-8').split()
+    assert 'bundled' in log
+    assert not [line for line in log if line.endswith(('apt-get', 'brew', 'sudo'))]
 
 
 def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):
