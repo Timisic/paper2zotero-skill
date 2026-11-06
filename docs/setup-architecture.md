@@ -9,6 +9,8 @@ Paths below are relative to the repository root.
 | Owner | Responsibility |
 | --- | --- |
 | `install/setup.ps1`, `paper-to-zotero/scripts/bootstrap.sh` | Prepare native tools and save their verified paths |
+| `setup_connection.ensure_default_tools` | Own the private Python runtime and record its interpreter in `python-path` |
+| `scripts/build-distribution.py` | Build the release zip and, with `--platform`, offline zips |
 | `paper-to-zotero/scripts/agent_installation.py`, `install.py` in the same directory | Select agent destinations, install runtime files and preserve conflicts |
 | `paper-to-zotero/scripts/setup-wizard.sh` | Human steps using the existing terminal template |
 | `paper-to-zotero/scripts/setup-input.sh` | Masked authorization input, control-character rejection and retry |
@@ -26,9 +28,18 @@ The wizard sends configuration values to the Python writer through stdin. Empty 
 
 Repairing an account inherits its existing personal/group target unless the caller explicitly chooses another target. A failed probe never turns a group library into a personal library. A damaged prepared runtime is rebuilt from the available complete source for the original publication targets; the recovery journal is replaced only once the replacement snapshots are ready.
 
+## Private runtime and offline bundles
+
+scansci-pdf and markitdown never go into a system Python; Homebrew and Debian/Ubuntu Pythons refuse that. `ensure_default_tools` keeps them in `~/.local/share/paper-to-zotero/runtime` and writes that interpreter to `python-path`, so every launcher runs the workflow there. A runtime that already imports the pinned packages is left alone. Otherwise it is rebuilt from the first available source:
+
+1. An offline bundle, recognized by `runtime/python` and `runtime/wheels` at the bundle root. The bundled Python is copied into the runtime directory and installs from the wheels with `--no-index`.
+2. A venv from the base Python, installing from the configured index, then once from the Tsinghua mirror unless `PIP_INDEX_URL` is set.
+
+In a bundle, `bootstrap.sh` and `setup.ps1` use `runtime/python` as the base interpreter and run no package manager. Poppler is optional in every mode. `--platform` builds bundle the zip's lite content plus `runtime/`, `VERSION` and `开始.md`. `.github/workflows/release.yml` publishes them per tag, and the runtime workflow installs each OS's bundle with the index unreachable.
+
 ## Windows constraints
 
-PowerShell prepares native Python, Poppler and Git Bash. Basic interactive setup launches a Tk window through pythonw.exe; its completion page links to optional settings. `-Advanced` opens those settings directly in the same GUI. Check and dependency-only modes stay with the caller; `-Terminal` retains mintty, including `-Terminal -Advanced`. A temporary marker confirms that the selected UI is ready, not that account setup is complete. Both paths are tested with Chinese and spaced download paths.
+PowerShell prepares native Python and, when it can, Poppler; Git Bash only for `-Terminal`. Basic interactive setup launches a Tk window through pythonw.exe; its completion page links to optional settings. `-Advanced` opens those settings directly in the same GUI. Check and dependency-only modes run Python directly, without Git Bash, and stay with the caller; `-Terminal` retains mintty, including `-Terminal -Advanced`. A temporary marker confirms that the selected UI is ready, not that account setup is complete. Both paths are tested with Chinese and spaced download paths.
 
 `setup_connection.SERVICES` supplies service instructions to both frontends. `BASIC_SERVICES` is `('desktop',)`. Optional cards come from `wizard_extras()`. Optional source credentials are privately saved with an explicit unverified status, then exercised by real discovery. Kimi is enabled only after its connection check. Skipping does not write flags or change existing credentials. The GUI shows all optional cards in a scrollable page. The terminal visits the same optional services in sequence and preserves its platform installation helpers. macOS/Linux keep the Bash entry and do not import Tk; Unix private writes do not call PowerShell.
 

@@ -1,0 +1,34 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and attach
+        required: true
+permissions:
+  contents: write
+jobs:
+  zips:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Build the lite zip and the four offline zips
+        run: |
+          python scripts/build-distribution.py --output dist
+          mv dist/paper-to-zotero.zip "dist/paper2zotero-$TAG-lite.zip"
+          python scripts/build-distribution.py --output dist --platform all --version "$TAG"
+      - name: Attach to the GitHub Release
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes '网络受限时下载对应系统的离线安装包，解压后按 开始.md 操作。'
+          gh release upload "$TAG" dist/*.zip --clobber
