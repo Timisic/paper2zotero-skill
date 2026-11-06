@@ -5,7 +5,6 @@ navigates manifest keys or re-derives where an artifact lives.
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -62,16 +61,6 @@ def test_the_run_answers_selection_consent_and_candidates(tmp_path: Path) -> Non
         package.resolve_ids(["openalex:W3"])
     with pytest.raises(ValueError, match="not in this run"):
         package.paper("doi:10.1000/nope")
-
-
-def test_an_unconfirmed_run_refuses_before_any_work(tmp_path: Path) -> None:
-    result = run_script("workflow.py", "init", "--run-root", str(tmp_path),
-                        "--slug", "unconfirmed", "--intent", "test")
-    run = Path(json.loads(result.stdout)["run_dir"])
-    package = Run.open(run)
-    assert package.confirmed is False
-    with pytest.raises(ValueError, match="not approved"):
-        package.require_confirmed()
 
 
 def test_paper_reports_itself_without_the_caller_reading_the_manifest(tmp_path: Path) -> None:

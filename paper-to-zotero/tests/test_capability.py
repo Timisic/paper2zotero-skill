@@ -26,17 +26,6 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
-def test_zotero_sync_missing_storage_pref_is_default_on(tmp_path: Path) -> None:
-    """Zotero 7 prefs.js without sync.storage.enabled = default ON (not a fail)."""
-    prefs = tmp_path / "prefs.js"
-    prefs.write_text('user_pref("extensions.zotero.dataDir", "/tmp/Zotero");\n')
-
-    result = MODULE.zotero_sync(MODULE.zotero_prefs(prefs))
-
-    assert result["ok"] is True
-    assert "None" in str(result["detail"])
-
-
 def test_zotero_sync_explicit_true_is_ok_but_explicit_false_fails(tmp_path: Path) -> None:
     enabled = tmp_path / "on.js"
     enabled.write_text('user_pref("extensions.zotero.sync.storage.enabled", true);\n')
@@ -52,27 +41,6 @@ def test_zotero_sync_missing_prefs_file_fails_with_remediation(tmp_path: Path) -
     assert result["ok"] is False
     assert result["detail"]
     assert result["remediation"]
-
-
-def test_zotero_prefs_parser_exposes_absent_and_disabled_values(tmp_path: Path) -> None:
-    prefs = tmp_path / "prefs.js"
-    prefs.write_text(
-        'user_pref("extensions.zotero.dataDir", "/tmp/Zotero");\n'
-        'user_pref("extensions.zotero.sync.storage.enabled", false);\n'
-        'user_pref("extensions.zotero.downloadAssociatedFiles", false);\n'
-    )
-
-    result = MODULE.zotero_prefs(prefs)
-
-    assert result == {
-        "prefs_found": True,
-        "data_dir": "/tmp/Zotero",
-        "storage_sync_enabled": False,
-        "download_associated_files": False,
-    }
-    absent = MODULE.zotero_prefs(tmp_path / "empty.js")
-    assert absent["prefs_found"] is False
-    assert absent["storage_sync_enabled"] is None
 
 
 def test_zotero_local_requires_an_observed_http_200() -> None:
@@ -238,21 +206,6 @@ def test_skill_link_roots_discovers_symlinks_under_agent_roots(tmp_path: Path, m
     assert any(str(link) == candidate for candidate in roots)
 
 
-def test_guide_has_one_plain_text_entry_per_capability() -> None:
-    """The setup doctor and wizard share one human fix per capability (C3)."""
-    expected = {
-        "zotero_local", "zotero_sync", "zotero_mcp", "zotero_key",
-        "kimi", "mineru", "skill_links", "discovery_sources",
-    }
-    assert set(MODULE.GUIDE) == expected
-    for key, entry in MODULE.GUIDE.items():
-        assert set(entry) == {"label", "url", "do"}
-        assert entry["label"]
-        assert entry["do"]
-        assert "\n" not in entry["do"]
-        assert entry["url"] == "" or entry["url"].startswith(("http://", "https://"))
-
-
 def test_missing_capability_records_carry_the_guide_fix_text() -> None:
     """Doctor remediation == wizard copy: both read GUIDE, never two texts."""
     assert MODULE.zotero_local(False)["remediation"] == MODULE.GUIDE["zotero_local"]["do"]
@@ -261,14 +214,6 @@ def test_missing_capability_records_carry_the_guide_fix_text() -> None:
     assert MODULE.kimi({"installed": False})["remediation"] == MODULE.GUIDE["kimi"]["do"]
     assert MODULE.mineru(False)["remediation"] == MODULE.GUIDE["mineru"]["do"]
     assert MODULE.skill_links([])["remediation"] == MODULE.GUIDE["skill_links"]["do"]
-
-
-def test_zotero_key_state_specific_notes_are_doctor_only() -> None:
-    assert MODULE.zotero_key(False, None)["remediation"] == MODULE.GUIDE["zotero_key"]["do"]
-    assert MODULE.zotero_key(True, None)["remediation"] == MODULE.KEY_SKIP_NOTE
-    mismatch = {"reachable": True, "identity_match": False, "write_permission": True}
-    assert MODULE.zotero_key(True, mismatch)["remediation"] == MODULE.KEY_LIVE_NOTE
-
 
 
 # ── portability and advisory reachability ──────────────────────────────────

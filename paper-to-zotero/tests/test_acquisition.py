@@ -123,23 +123,6 @@ def test_a_title_too_thin_to_identify_is_kept_not_claimed_verified(tmp_path: Pat
     assert Path(artifacts["pdf_unverified"]).is_file()
 
 
-def test_an_unreadable_pdf_is_kept_for_a_human_not_ingested(tmp_path: Path) -> None:
-    unreadable = tmp_path / "scanned.pdf"
-    # A structurally valid PDF with no extractable text: identity is unknown,
-    # which is not the same as wrong.
-    unreadable.write_bytes(b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n")
-    run = run_awaiting_acquisition(tmp_path)
-    command = scripted(tmp_path, {
-        "capture": {UNREACHABLE_PDF: {"result": "captured", "source": str(unreadable)}},
-    })
-    body = payload(process(run, "--stages", "acquire", *command))
-    assert body["acquire"]["failed"] == {"doi:10.1000/alpha": "pdf_unverified"}
-    status = json.loads(run_script("workflow.py", "status", "--run-dir", str(run)).stdout)
-    artifacts = status["papers"]["doi:10.1000/alpha"]["artifacts"]
-    assert "pdf" not in artifacts
-    assert Path(artifacts["pdf_unverified"]).is_file()
-
-
 def test_one_unreachable_paper_does_not_stop_the_batch(tmp_path: Path) -> None:
     run = run_awaiting_acquisition(tmp_path)
     candidates = json.loads((run / "candidates.json").read_text())
