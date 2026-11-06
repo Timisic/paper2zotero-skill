@@ -26,6 +26,9 @@ def test_release_survives_download_removal_and_repeat_install(tmp_path):
     home = tmp_path / 'new home'
     home.mkdir()
     env = {**os.environ, 'HOME': str(home), 'USERPROFILE': str(home), 'PYTHON_BIN': sys.executable, 'PAPER2ZOTERO_AGENT': 'codex', 'CODEX_HOME': str(home / '.codex')}
+    # Reuse this interpreter's packages so the private runtime installs nothing it already has.
+    subprocess.run([sys.executable, '-m', 'venv', '--system-site-packages',
+                    str(home / '.local/share/paper-to-zotero/runtime')], check=True)
     command = [shutil.which('bash') or 'bash', str(release / 'install/setup.sh'), '--dependencies-only']
     for _ in range(2):
         result = subprocess.run(command, env=env, text=True, capture_output=True)

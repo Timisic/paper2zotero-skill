@@ -195,19 +195,65 @@ def save_account(values: dict[str, str]) -> None:
         os.environ.pop(key, None)
 
 
-def ensure_default_tools() -> None:
-    import mineru_parse
-    import scansci_retrieval
-    if scansci_retrieval.library_ready().ok and mineru_parse.markitdown_available():
-        return
-    command = [sys.executable, '-m', 'pip', 'install',
-               f'scansci-pdf=={scansci_retrieval.PIN}', 'markitdown[pdf]']
+RUNTIME = agent_installation.shared_path('runtime')
+# An offline bundle carries runtime/python and runtime/wheels at its root.
+BUNDLE = Path(__file__).resolve().parents[2] / 'runtime'
+MIRROR = 'https://pypi.tuna.tsinghua.edu.cn/simple'
+
+
+def runtime_python(root: Path) -> Path:
+    if os.name != 'nt':
+        return root / 'bin/python3'
+    # python-build-standalone keeps python.exe at its root; a venv keeps it in Scripts.
+    return root / 'python.exe' if (root / 'python.exe').is_file() else root / 'Scripts/python.exe'
+
+
+def _succeeds(command: list[str], timeout: int = 900) -> bool:
     try:
-        result = subprocess.run(command, capture_output=True, timeout=180)
+        return subprocess.run(command, capture_output=True, timeout=timeout,
+                              creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).returncode == 0
     except (OSError, subprocess.SubprocessError):
-        result = None
-    if result is None or result.returncode != 0:
-        raise ValueError(scansci_retrieval.INSTALL_LINE)
+        return False
+
+
+def ensure_default_tools() -> Path:
+    """Install scansci-pdf and markitdown into the private runtime and record its interpreter."""
+    import scansci_retrieval
+    packages = [f'scansci-pdf=={scansci_retrieval.PIN}', 'markitdown[pdf]']
+    probe = ['-c', f'import importlib.metadata as m, markitdown; '
+                   f'assert m.version("scansci-pdf") == "{scansci_retrieval.PIN}"']
+    python = runtime_python(RUNTIME)
+    if not (python.is_file() and _succeeds([str(python), *probe], 120)):
+        if (BUNDLE / 'python').is_dir() and (BUNDLE / 'wheels').is_dir():
+            shutil.rmtree(RUNTIME, ignore_errors=True)
+            try:
+                shutil.copytree(BUNDLE / 'python', RUNTIME, symlinks=True, dirs_exist_ok=True)
+            except OSError:
+                raise ValueError(f'无法把离线安装包中的 Python 复制到 {RUNTIME}。请检查磁盘空间和目录权限后重试。') from None
+            python = runtime_python(RUNTIME)
+            if not _succeeds([str(python), '-m', 'pip', 'install', '--no-index',
+                              '--find-links', str(BUNDLE / 'wheels'), *packages]):
+                raise ValueError('离线安装包中的依赖安装失败。请重新解压完整的离线安装包后重试。')
+        else:
+            if not python.is_file():
+                shutil.rmtree(RUNTIME, ignore_errors=True)
+                if not _succeeds([sys.executable, '-m', 'venv', str(RUNTIME)], 300):
+                    shutil.rmtree(RUNTIME, ignore_errors=True)
+                    minor = f'python3.{sys.version_info.minor}-venv'
+                    raise ValueError(f'无法创建独立 Python 环境。Debian/Ubuntu 请先运行 sudo apt-get install {minor}，然后重试。'
+                                     if sys.platform.startswith('linux') else
+                                     '无法创建独立 Python 环境。请重新安装 Python 3.11+ 后重试。')
+                python = runtime_python(RUNTIME)
+            install = [str(python), '-m', 'pip', 'install', *packages]
+            if not _succeeds(install) and (os.environ.get('PIP_INDEX_URL') or not _succeeds([*install, '-i', MIRROR])):
+                raise ValueError('依赖下载失败，PyPI 和清华镜像都无法访问。请检查网络，或改用离线安装包。'
+                                 f'（{scansci_retrieval.INSTALL_LINE}）')
+        if not _succeeds([str(python), *probe], 120):
+            raise ValueError('依赖安装后仍无法导入 scansci-pdf 或 markitdown。请重跑 setup。')
+    directory = Path.home() / '.config/literature-to-zotero'
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / 'python-path').write_text(str(python) + '\n', encoding='utf-8')
+    return python
 
 
 def prepare(agent: str) -> None:
@@ -218,14 +264,14 @@ def prepare(agent: str) -> None:
     with contextlib.redirect_stdout(io.StringIO()):
         importlib.import_module('install').install(agent)
     directory.mkdir(parents=True, exist_ok=True)
-    python = Path(sys.executable).with_name('python.exe') if os.name == 'nt' else Path(sys.executable)
-    (directory / 'python-path').write_text(str(python) + '\n', encoding='utf-8')
     if tool.is_file():
         (directory / 'pdf-bin').write_text(str(tool.parent) + '\n', encoding='utf-8')
 
 
 def check(agent: str, *, group: bool = False) -> dict:
-    executable = Path(sys.executable).with_name('python.exe') if os.name == 'nt' else Path(sys.executable)
+    executable = runtime_python(RUNTIME)
+    if not executable.is_file():
+        executable = Path(sys.executable).with_name('python.exe') if os.name == 'nt' else Path(sys.executable)
     command = [str(executable), str(Path(__file__).with_name('configure.py')), '--check', '--json']
     if group:
         command.append('--group')
@@ -249,3 +295,12 @@ def open_page(url: str) -> None:
         import webbrowser
         if not webbrowser.open(url):
             raise OSError('Browser unavailable')
+
+
+if __name__ == '__main__':
+    # Windows -DependenciesOnly entry: prepare the runtime and skills without Git Bash.
+    try:
+        prepare(sys.argv[1] if len(sys.argv) > 1 else 'auto')
+    except ValueError as error:
+        raise SystemExit(str(error)) from None
+    print(f'✓ 运行环境和 skill 已安装：{runtime_python(RUNTIME)}')

@@ -34,13 +34,16 @@ def run_setup(package, env, *modes):
     return subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
                            '-File', str(package / 'install/setup.ps1'), '-Agent', 'all', '-Terminal', *modes],
                           env=env, capture_output=True, text=True, encoding='utf-8',
-                          errors='replace', timeout=45)
+                          errors='replace', timeout=600)
 
 
 def check_native_repeat_install_and_removed_download(tmp_path):
     package = release(tmp_path)
     env = environment(tmp_path / '用户 home')
     home = Path(env['USERPROFILE'])
+    # Reuse this interpreter's packages so the private runtime installs nothing it already has.
+    subprocess.run([sys.executable, '-m', 'venv', '--system-site-packages',
+                    str(home / '.local/share/paper-to-zotero/runtime')], check=True)
     for _ in range(2):
         result = run_setup(package, env, '-DependenciesOnly')
         assert result.returncode == 0, result.stdout + result.stderr
