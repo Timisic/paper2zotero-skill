@@ -110,6 +110,18 @@ def test_metadata_only_and_partial_papers_are_counted_apart_from_delivered(tmp_p
     assert rows["openalex:W3"]["notes"] == ["acquisition: no verified source PDF"]
 
 
+def test_a_run_written_before_the_rename_still_reports_its_read_back(tmp_path: Path) -> None:
+    run, _ = run_with_pdf(tmp_path)
+    manifest = json.loads((run / "manifest.json").read_text())
+    manifest["papers"]["doi:10.1000/alpha"]["zotero"] = {"cloud_verified_at": "2026-01-01T00:00:00+00:00"}
+    (run / "manifest.json").write_text(json.dumps(manifest))
+    report = json.loads(run_script("workflow.py", "report", "--run-dir", str(run)).stdout)
+    row = report["papers"][0]
+    assert row["readback_verified_at"] == "2026-01-01T00:00:00+00:00"
+    assert "Zotero write pending" not in row["pending"]
+    assert "Zotero read-back" in report["table"]
+
+
 def test_a_selected_paper_missing_from_the_candidate_file_is_reported(tmp_path: Path) -> None:
     run, _ = run_with_pdf(tmp_path)
     (run / "candidates.json").write_text(json.dumps(

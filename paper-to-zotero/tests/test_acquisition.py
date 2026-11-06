@@ -163,7 +163,7 @@ def test_one_unreachable_paper_does_not_stop_the_batch(tmp_path: Path) -> None:
     assert body["acquire"]["acquired"] == ["openalex:W3"]
     assert list(body["acquire"]["failed"]) == ["doi:10.1000/alpha"]
     rows = {row["id"]: row for row in body["papers"]}
-    assert rows["openalex:W3"]["pdf"] is True and rows["openalex:W3"]["cloud_verified_at"]
+    assert rows["openalex:W3"]["pdf"] is True and rows["openalex:W3"]["readback_verified_at"]
     assert rows["doi:10.1000/alpha"]["pdf"] is False
     assert rows["doi:10.1000/alpha"]["pending"] == ["PDF pending"]
 

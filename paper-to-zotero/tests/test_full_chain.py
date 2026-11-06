@@ -96,7 +96,7 @@ def test_one_invocation_carries_a_confirmed_selection_to_read_back(
         assert set(body["convert"]["converted"]) == {"doi:10.1000/alpha", "openalex:W3"}
         for row in body["papers"]:
             assert (row["pdf"], row["markdown"], row["summary"]) == (True, True, False)
-            assert row["cloud_verified_at"], "the PDF and Markdown are written before any summary exists"
+            assert row["readback_verified_at"], "the PDF and Markdown are written before any summary exists"
 
         write_summaries(run, body["pending_summaries"])
         second = process(run, "--stages", "acquire,convert,ingest", *common, env=env)
@@ -140,7 +140,7 @@ def test_a_conversion_failure_still_delivers_the_pdf(tmp_path: Path) -> None:
     assert body["status"] == "awaiting_summaries"
     for row in body["papers"]:
         assert (row["pdf"], row["markdown"]) == (True, False)
-        assert row["cloud_verified_at"], "a failed conversion must not hold back the PDF"
+        assert row["readback_verified_at"], "a failed conversion must not hold back the PDF"
     # The full text is still readable, so the summary is offered from the PDF.
     assert {entry["source_basis"] for entry in body["pending_summaries"]} == {"pdf"}
 

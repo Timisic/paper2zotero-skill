@@ -137,9 +137,9 @@ Keep abstracts, complete author lists, and query syntax in the run package unles
 `process_run.py` returns it, and `workflow.py report --run-dir <run_dir> --format markdown` regenerates it:
 
 ```text
-Paper | PDF | Markdown | Summary | Zotero cloud | Local sync | Pending
+Paper | PDF | Markdown | Summary | Zotero read-back | Local sync | Pending
 ```
 
-Present it in the user's language, with the collection name and the local run path. A row is complete only when every artifact is present and synced — a readable PDF alone is not a completed paper, and cloud-verified with local sync pending is delivered, not blocked.
+Present it in the user's language, with the collection name and the local run path. A row is complete only when every artifact is present and synced — a readable PDF alone is not a completed paper, and read back with local sync pending is delivered, not blocked.
 
 Each row separates three things. `pending` is what the paper is missing right now, computed from its artifacts, so a warning from an attempt that later succeeded never keeps a finished paper looking unfinished. `notes` is the observed history behind those gaps. `actionable` says whether re-running could still change the row — a paper with no obtainable full text is finished, not waiting. Without `--storage-root` the local copy is never inspected, and the row says `local sync not checked` rather than claiming a sync failure.

@@ -169,6 +169,11 @@ def resolve_artifact(run_dir: Path, value: str) -> Path:
     return absolute_path(path if path.is_absolute() else run_dir / path)
 
 
+def readback_at(evidence: dict[str, Any]) -> str | None:
+    """When Zotero read the write back. Runs before the rename stored `cloud_verified_at`."""
+    return evidence.get("readback_verified_at") or evidence.get("cloud_verified_at")
+
+
 class Paper:
     """One selected paper: its state, its artifacts and its write evidence.
 
@@ -226,7 +231,7 @@ class Paper:
         return bool(self.pdf) or self.is_metadata_only
 
     def validate_read_back(self, evidence: dict[str, Any]) -> None:
-        if not evidence.get("collection_verified") or not evidence.get("note_key") or not evidence.get("cloud_verified_at"):
+        if not evidence.get("collection_verified") or not evidence.get("note_key") or not readback_at(evidence):
             raise ValueError("collection and note verification evidence required")
         if not self.path("pdf") or not self.path("summary"):
             raise ValueError("PDF and summary required")
@@ -724,8 +729,8 @@ DELIVERED_STATES = {PaperState.READ_BACK_VERIFIED.value, PaperState.SYNC_PENDING
 def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
     """One row of the delivery table: per-artifact truth, not one success rate.
 
-    Cloud completion and local sync are separate columns because a verified
-    cloud attachment is deliverable while Zotero Desktop is still downloading
+    Read-back and local sync are separate columns because an attachment
+    Zotero read back is deliverable while Zotero Desktop is still downloading
     it, and a missing summary must never be hidden behind a written PDF.
 
     `pending` is computed from what the paper has right now, never from its
@@ -744,7 +749,7 @@ def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
         pending.append(evidence.get("markdown_status") or "markdown_unavailable")
     if has["pdf"] and not has["summary"]:
         pending.append("summary pending")
-    if has["pdf"] and not evidence.get("cloud_verified_at"):
+    if has["pdf"] and not readback_at(evidence):
         pending.append("Zotero write pending")
     local = None
     if attachments:
@@ -760,7 +765,7 @@ def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
         "pdf": has["pdf"],
         "markdown": has["markdown"],
         "summary": has["summary"],
-        "cloud_verified_at": evidence.get("cloud_verified_at"),
+        "readback_verified_at": readback_at(evidence),
         "local_synced": local,
         "pending": list(dict.fromkeys(pending)),
         "notes": [] if complete else list(dict.fromkeys(paper.warnings))[-3:],
@@ -776,7 +781,7 @@ def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
 def render_report(rows: list[dict[str, Any]]) -> str:
     def mark(value: bool | None) -> str:
         return {True: "yes", False: "no", None: "-"}[value]
-    lines = ["Paper | PDF | Markdown | Summary | Zotero cloud | Local sync | Pending",
+    lines = ["Paper | PDF | Markdown | Summary | Zotero read-back | Local sync | Pending",
              "--- | --- | --- | --- | --- | --- | ---"]
     for row in rows:
         # The latest note explains an incomplete row; a finished row needs no
@@ -785,7 +790,7 @@ def render_report(rows: list[dict[str, Any]]) -> str:
         lines.append(" | ".join([
             str(row["title"]).replace("|", "\\|"),
             mark(row["pdf"]), mark(row["markdown"]), mark(row["summary"]),
-            "verified" if row["cloud_verified_at"] else "-",
+            "verified" if row["readback_verified_at"] else "-",
             mark(row["local_synced"]),
             "; ".join(reasons) or "-",
         ]))

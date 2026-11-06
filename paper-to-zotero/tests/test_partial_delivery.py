@@ -56,13 +56,13 @@ def test_verified_pdf_is_saved_before_any_summary_exists(tmp_path: Path) -> None
     assert paper["state"] == "partial"
     assert "summary pending" in paper["pending"]
     assert paper["markdown_status"] == "markdown_unavailable"
-    assert paper["cloud_verified_at"]
+    assert paper["readback_verified_at"]
     assert peer.files, "the PDF attachment binary must be uploaded"
     assert not any(item["data"].get("itemType") == "note" for item in peer.items.values())
 
     row = json.loads(run_script("workflow.py", "report", "--run-dir", str(run)).stdout)["papers"][0]
     assert (row["pdf"], row["markdown"], row["summary"]) == (True, False, False)
-    assert row["cloud_verified_at"]
+    assert row["readback_verified_at"]
     assert "summary pending" in row["pending"]
 
 
@@ -93,7 +93,7 @@ def test_a_later_summary_reuses_the_parent_and_uploaded_pdf(tmp_path: Path) -> N
     assert status["paper_states"] == {"read_back_verified": 1}
 
 
-def test_cloud_verified_paper_is_delivered_while_desktop_lags(tmp_path: Path) -> None:
+def test_read_back_paper_is_delivered_while_desktop_lags(tmp_path: Path) -> None:
     run, source = run_with_pdf(tmp_path)
     summary = run / "summary.md"
     summary.write_text(SUMMARY)
@@ -110,10 +110,10 @@ def test_cloud_verified_paper_is_delivered_while_desktop_lags(tmp_path: Path) ->
     paper = payload["papers"]["doi:10.1000/alpha"]
     assert paper["state"] == "sync_pending"
     assert paper["pending"] == ["markdown_unavailable", "local sync pending"]
-    assert paper["cloud_verified_at"]
+    assert paper["readback_verified_at"]
     row = json.loads(run_script("workflow.py", "report", "--run-dir", str(run)).stdout)["papers"][0]
     assert row["local_synced"] is False
-    assert row["cloud_verified_at"]
+    assert row["readback_verified_at"]
 
 
 def test_markdown_arriving_late_attaches_without_touching_the_pdf(tmp_path: Path) -> None:
