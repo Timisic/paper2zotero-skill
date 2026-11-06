@@ -61,7 +61,7 @@ def build(output: Path) -> Path:
 def download_python(triple: str, runtime: Path) -> None:
     name = PYTHON_ARCHIVE.format(triple)
     with urllib.request.urlopen(PYTHON_RELEASE + 'SHA256SUMS', timeout=60) as response:
-        sums = dict(reversed(line.split()) for line in response.read().decode().splitlines() if line.strip())
+        sums = {line.split()[1]: line.split()[0] for line in response.read().decode().splitlines() if line.strip()}
     archive = runtime / name
     urllib.request.urlretrieve(PYTHON_RELEASE + name, archive)
     if hashlib.sha256(archive.read_bytes()).hexdigest() != sums[name]:
@@ -134,5 +134,5 @@ if __name__ == '__main__':
         print(build(args.output.resolve()))
     else:
         version = args.version or git_version()
-        for platform in PLATFORMS if 'all' in args.platform else dict.fromkeys(args.platform):
+        for platform in list(PLATFORMS) if 'all' in args.platform else dict.fromkeys(args.platform):
             print(build_offline(args.output.resolve(), platform, version))
