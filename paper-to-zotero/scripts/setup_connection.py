@@ -215,19 +215,14 @@ def prepare(agent: str) -> None:
     directory = Path.home() / '.config/literature-to-zotero'
     pdf = os.environ.get('PAPER2ZOTERO_PDF_BIN', '')
     tool = Path(pdf) / 'pdftotext.exe' if pdf else Path(shutil.which('pdftotext') or '')
-    if not tool.is_file():
-        raise ValueError('PDF 工具尚未就绪，请从 install/setup.cmd 重新打开。')
-    result = subprocess.run([str(tool), '-v'], capture_output=True, timeout=10,
-                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-    if result.returncode:
-        raise ValueError('PDF 工具无法运行，请从 install/setup.cmd 重新打开。')
     ensure_default_tools()
     with contextlib.redirect_stdout(io.StringIO()):
         importlib.import_module('install').install(agent)
     directory.mkdir(parents=True, exist_ok=True)
     python = Path(sys.executable).with_name('python.exe') if os.name == 'nt' else Path(sys.executable)
     (directory / 'python-path').write_text(str(python) + '\n', encoding='utf-8')
-    (directory / 'pdf-bin').write_text(str(tool.parent) + '\n', encoding='utf-8')
+    if tool.is_file():
+        (directory / 'pdf-bin').write_text(str(tool.parent) + '\n', encoding='utf-8')
 
 
 def check(agent: str, *, group: bool = False) -> dict:

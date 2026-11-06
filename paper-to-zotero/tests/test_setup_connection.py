@@ -271,14 +271,6 @@ def test_unix_private_save_never_calls_powershell(tmp_path, monkeypatch):
 def _stub_check_surroundings(monkeypatch, *, write=True, read=False, search='http', conversion=True):
     monkeypatch.setattr(configure.agent_installation, 'installation_ok', lambda _: True)
     monkeypatch.setattr(configure.agent_installation, 'installed_paths', lambda **_: ['/fixture'])
-    real_run = subprocess.run
-
-    def run(command, **kwargs):
-        if command and command[0] == 'pdftotext':
-            return subprocess.CompletedProcess(command, 0, '', '')
-        return real_run(command, **kwargs)
-
-    monkeypatch.setattr(configure.subprocess, 'run', run)
     monkeypatch.setattr(configure.capability, 'probe_zotero_local_write', lambda *a, **k: write)
     monkeypatch.setattr(configure.capability, 'probe_zotero_local', lambda *a, **k: read)
     if conversion:
@@ -319,13 +311,13 @@ def test_product_default_check_passes_without_openalex_or_a_cloud_token(tmp_path
     report = json.loads(capsys.readouterr().out)
     assert report['ready'] is True
     assert [item['name'] for item in report['items']] == [
-        '运行工具', 'PDF 文本工具', '连接 AI 助手', '论文检索（ScanSci）', '全文转换',
+        '运行工具', '连接 AI 助手', '论文检索（ScanSci）', '全文转换',
         'Zotero Desktop · 本机附件']
-    assert report['items'][3]['detail'] == 'scansci-pdf 1.19.0'
+    assert report['items'][2]['detail'] == 'scansci-pdf 1.19.0'
+    assert report['items'][2]['action'] == ''
+    assert 'selected=markitdown' in report['items'][3]['detail']
     assert report['items'][3]['action'] == ''
-    assert 'selected=markitdown' in report['items'][4]['detail']
-    assert report['items'][4]['action'] == ''
-    assert report['items'][5] == {
+    assert report['items'][4] == {
         'name': 'Zotero Desktop · 本机附件', 'ok': True, 'detail': '127.0.0.1:23119', 'action': ''}
     assert all('OpenAlex' not in item['name'] for item in report['items'])
     assert seen == [configure.credentials.LAB_MINERU_API_BASE]
@@ -515,35 +507,28 @@ def test_ensure_default_tools_failure_includes_the_install_line(monkeypatch):
     assert scansci_retrieval.INSTALL_LINE in str(caught.value)
 
 
-def test_prepare_installs_default_tools_only_after_pdftotext_works(monkeypatch, tmp_path):
-    tool = tmp_path / 'pdftotext'
-    tool.write_text('#!/bin/sh\n', encoding='utf-8')
+@pytest.mark.parametrize('has_pdftotext', [True, False])
+def test_prepare_installs_without_requiring_pdftotext(monkeypatch, tmp_path, has_pdftotext):
+    tools_dir = tmp_path / 'tools'
+    tools_dir.mkdir()
+    tool = tools_dir / 'pdftotext'
+    if has_pdftotext:
+        tool.write_text('#!/bin/sh\n', encoding='utf-8')
     monkeypatch.delenv('PAPER2ZOTERO_PDF_BIN', raising=False)
     monkeypatch.setattr(connection.Path, 'home', classmethod(lambda cls: tmp_path))
-    monkeypatch.setattr(connection.shutil, 'which', lambda name: str(tool) if name == 'pdftotext' else None)
+    monkeypatch.setattr(connection.shutil, 'which',
+                        lambda name: str(tool) if name == 'pdftotext' and has_pdftotext else None)
     seen = []
-
-    def run(command, **kwargs):
-        seen.append(list(command))
-        return subprocess.CompletedProcess(command, 0)
-
-    def tools():
-        seen.append('ensure_default_tools')
 
     def import_module(name):
         seen.append(name)
         return type('Install', (), {'install': staticmethod(lambda agent: seen.append(('skill', agent)))})()
 
-    monkeypatch.setattr(connection.subprocess, 'run', run)
-    monkeypatch.setattr(connection, 'ensure_default_tools', tools)
+    monkeypatch.setattr(connection, 'ensure_default_tools', lambda: seen.append('ensure_default_tools'))
     monkeypatch.setattr(connection.importlib, 'import_module', import_module)
     connection.prepare('codex')
-    assert seen[0][-1] == '-v'
-    assert seen[1] == 'ensure_default_tools'
-    assert seen[2:] == ['install', ('skill', 'codex')]
-    seen.clear()
-    monkeypatch.setattr(connection.subprocess, 'run',
-                        lambda command, **kwargs: seen.append('pdftotext') or subprocess.CompletedProcess(command, 1))
-    with pytest.raises(ValueError, match='PDF 工具无法运行'):
-        connection.prepare('codex')
-    assert seen == ['pdftotext']
+    assert seen == ['ensure_default_tools', 'install', ('skill', 'codex')]
+    config = tmp_path / '.config/literature-to-zotero'
+    assert (config / 'python-path').is_file()
+    pdf_bin = config / 'pdf-bin'
+    assert (pdf_bin.read_text(encoding='utf-8').strip() == str(tools_dir)) if has_pdftotext else not pdf_bin.exists()
