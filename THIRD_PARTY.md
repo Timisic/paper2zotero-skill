@@ -55,3 +55,10 @@ Known limits. It reads shared guidance from the sibling folder `../nature-shared
 - License: Apache-2.0. See `nature-shared/LICENSE`.
 - Copied unmodified.
 - A reference package for `nature-writing`. It is not a workflow to call on its own.
+
+## Offline bundle runtime
+
+The offline zips (`paper2zotero-<version>-<platform>.zip`) also carry a `runtime/` folder that the repository does not contain. `scripts/build-distribution.py` downloads it at build time.
+
+- `runtime/python/`: CPython 3.12 from [python-build-standalone](https://github.com/astral-sh/python-build-standalone), release `20261021`, `install_only_stripped` build, SHA-256 checked against that release's `SHA256SUMS`. CPython is under the PSF License. The build also links libraries under their own licenses, among them OpenSSL, SQLite, XZ, zlib, libffi and Tcl/Tk. See `LICENSE.txt` inside `runtime/python/` and the project's license notes.
+- `runtime/wheels/`: scansci-pdf, markitdown and their dependencies, unmodified. `runtime/LICENSES.md` lists each wheel's name, version and declared license. PyMuPDF, pymupdf4llm and pymupdf-layout are AGPL-3.0 or an Artifex commercial license.
