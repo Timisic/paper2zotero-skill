@@ -67,7 +67,9 @@ def download_python(triple: str, runtime: Path) -> None:
     if hashlib.sha256(archive.read_bytes()).hexdigest() != sums[name]:
         raise SystemExit(f'SHA-256 不匹配：{name}')
     with tarfile.open(archive) as tar:
-        tar.extractall(runtime, filter='data')
+        # share/ holds man pages and terminfo, whose case-only name clashes break macOS builds.
+        tar.extractall(runtime, filter=lambda member, path: None if member.name.startswith('python/share/')
+                       else tarfile.data_filter(member, path))
     archive.unlink()
 
 
