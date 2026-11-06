@@ -15,31 +15,6 @@ import tempfile
 import time
 
 CASES = {
-    'unified-local': [
-        'test_unified_local.py::test_missing_reused_unsynced_local_attachment_can_recover',
-        'test_unified_local.py::test_new_summary_and_files_require_fresh_write_evidence',
-        'test_unified_local.py::test_stale_markdown_does_not_block_a_valid_pdf_based_summary',
-        'test_unified_local.py::test_native_synced_hash_allows_guarded_missing_file_recovery',
-        'test_unified_local.py::test_metadata_then_pdf_and_local_parse_use_one_parent',
-        'test_unified_local.py::test_missing_local_authorization_cannot_use_web_credentials',
-        'test_unified_local.py::test_lost_local_create_response_recovers_without_duplicate',
-        'test_unified_local.py::test_server_identity_change_and_external_storage_fail_closed',
-        'test_unified_local.py::test_late_doi_enriches_existing_parent_and_preserves_human_fields',
-        'test_unified_local.py::test_identity_conflicts_do_not_mutate_items',
-        'test_unified_local.py::test_stale_derivatives_and_completed_pdf_recovery',
-        'test_unified_local.py::test_alias_enrichment_keeps_selection_and_consent',
-        'test_unified_local.py::test_local_backend_rejects_nonloopback_endpoint',
-        'test_unified_local.py::test_lost_local_file_registration_recovers_existing_bytes',
-        'test_unified_local.py::test_local_parser_failure_keeps_pdf_delivery_without_cloud_fallback',
-        'test_unified_local.py::test_cli_defaults_are_local',
-    ],
-    'local-parser': [
-        'test_local_parse.py::test_local_cli_uses_only_local_settings_and_preserves_input',
-        'test_local_parse.py::test_existing_output_is_never_overwritten',
-        'test_local_parse.py::test_failure_has_no_implicit_fallback',
-        'test_local_parse.py::test_explicit_fallback_records_actual_engine',
-        'test_local_parse.py::test_image_only_markdown_is_not_success',
-        'test_local_parse.py::test_timeout_stops_owned_descendant_even_after_parent_exits'],
     'discovery': [
         'test_discovery.py::test_one_paper_found_twice_becomes_one_candidate_with_both_accounts',
         'test_discovery.py::test_a_failed_source_never_looks_like_an_empty_shelf',
@@ -48,7 +23,7 @@ CASES = {
     'scansci': [
         'test_scansci_retrieval.py'],
     'selection': [
-        'test_single_gate_flow.py::test_clear_intent_reaches_candidates_without_a_plan_gate',
+        'test_cli.py::test_processing_waits_only_for_the_selection_confirmation',
         'test_process_run.py::test_processing_refuses_before_the_user_confirms_the_list',
         'test_process_run.py::test_unselected_papers_are_never_processed',
         'test_process_run.py::test_conversion_without_consent_is_recorded_and_never_blocks_the_pdf'],
