@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([switch]$Demo, [switch]$DependenciesOnly, [switch]$Check, [switch]$Group, [switch]$LaunchWizard, [switch]$Advanced, [switch]$Terminal,
+param([switch]$DependenciesOnly, [switch]$Check, [switch]$Group, [switch]$LaunchWizard, [switch]$Advanced, [switch]$Terminal,
       [ValidateSet('auto','codex','claude-code','pi','all')][string]$Agent = 'auto')
 $ErrorActionPreference = 'Stop'
 # Prepare Windows tools, then open the native GUI (Bash remains a fallback).
@@ -7,7 +7,7 @@ if ($env:OS -ne 'Windows_NT') { throw 'Use bash setup.sh on macOS or Linux.' }
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
 $env:PYTHONUTF8 = '1'
 $env:PAPER2ZOTERO_AGENT = $Agent
-if (([int][bool]$Demo + [int][bool]$DependenciesOnly + [int][bool]$Check) -gt 1) { throw 'Choose only one of -Demo, -DependenciesOnly or -Check.' }
+if ($DependenciesOnly -and $Check) { throw 'Choose only one of -DependenciesOnly or -Check.' }
 Write-Host 'System: Windows - checking installed tools first.' -ForegroundColor Cyan
 function Refresh-ToolPath {
     $env:PATH = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
@@ -55,7 +55,6 @@ function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
         $pythonw = Join-Path (Split-Path $pythonPath) 'pythonw.exe'
         if (-not (Test-Path -LiteralPath $pythonw)) { $pythonw = $pythonPath }
         $guiArgs = @(('"' + $gui + '"'), '--agent', $Agent)
-        if ($Demo) { $guiArgs += '--demo' }
         if ($Group) { $guiArgs += '--group' }
         if ($Advanced) { $guiArgs += '--advanced' }
         Write-Host '正在打开 Windows 图形向导。先打开 Zotero Desktop。可选授权码在后面的页面粘贴，Ctrl+V。' -ForegroundColor Cyan
@@ -137,10 +136,9 @@ try {
     if ($pythonPath) { Write-Host 'Python 3.11+: OK, skipping installation.' -ForegroundColor Green }
     if ($popplerReady) { Write-Host 'Poppler: OK, skipping installation.' -ForegroundColor Green }
     if ($bashPath) { Write-Host 'Wizard shell: OK, skipping installation.' -ForegroundColor Green }
-    if ($Demo -or $Check) {
-        if (-not $bashPath) { throw 'Git Bash is needed to display the Wizard. Run setup.cmd once first; this preview/check installed nothing.' }
-        if ($Check -and -not $pythonPath) { throw 'Python 3.11+ is missing; run setup.cmd to install it.' }
-        if ($Demo -and -not $Terminal -and -not $pythonPath) { throw '图形演示需要 Python；请先运行 setup.cmd。' }
+    if ($Check) {
+        if (-not $bashPath) { throw 'Git Bash is needed to display the Wizard. Run setup.cmd once first; this check installed nothing.' }
+        if (-not $pythonPath) { throw 'Python 3.11+ is missing; run setup.cmd to install it.' }
     } else {
         if (-not $pythonPath) { Install-Tool 'Python.Python.3.13'; $pythonPath = Find-Python }
         if (-not $popplerReady) { Install-Tool 'oschwartz10612.Poppler'; $popplerReady = Test-Poppler }
@@ -154,8 +152,7 @@ try {
         $env:PAPER2ZOTERO_PDF_BIN = Split-Path (Get-Command pdftotext.exe).Source
     }
     $wizardArgs = @()
-    if ($Demo) { $wizardArgs += '--demo' }
-    elseif ($Check) { $wizardArgs += '--check' }
+    if ($Check) { $wizardArgs += '--check' }
     elseif ($DependenciesOnly) { $wizardArgs += '--dependencies-only' }
     if ($Group) { $wizardArgs += '--group' }
     if ($Advanced) { $wizardArgs += '--advanced' }

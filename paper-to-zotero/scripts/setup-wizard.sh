@@ -197,14 +197,14 @@ export PAPER2ZOTERO_AGENT="${PAPER2ZOTERO_AGENT:-auto}"
 while (( $# )); do
   case "$1" in
     --help)
-      echo 'Usage: bash install/setup.sh [--demo | --demo-missing | --dependencies-only | --check] [--advanced] [--group] [--agent auto|codex|claude-code|pi|all]'
+      echo 'Usage: bash install/setup.sh [--dependencies-only | --check] [--advanced] [--group] [--agent auto|codex|claude-code|pi|all]'
       exit 0 ;;
     --group) GROUP_LIBRARY=1 ;;
     --advanced) ADVANCED=1 ;;
     --agent)
       [[ $# -ge 2 ]] || { echo '--agent needs a value' >&2; exit 2; }
       PAPER2ZOTERO_AGENT="$2"; shift ;;
-    --dependencies-only|--check|--demo|--demo-missing)
+    --dependencies-only|--check)
       [[ -z "$MODE" ]] || { echo 'Choose one setup mode' >&2; exit 2; }
       MODE="$1" ;;
     *) echo 'Unknown option; use --help' >&2; exit 2 ;;
@@ -231,79 +231,18 @@ fi
 # The library remains verbatim. Setup-specific behavior lives below STAGES.
 umask 077
 ENV_FILE="$HOME/.config/literature-to-zotero/env"
-DEMO=0
-if [[ "$MODE" == --demo* ]]; then
-  DEMO=1
-  DEMO_DIR="$(mktemp -d)"
-  trap 'rm -rf "$DEMO_DIR"' EXIT
-  ENV_FILE="$DEMO_DIR/env"
-  cat > "$ENV_FILE" <<'DEMOENV'
-ZOTERO_API_KEY=demo-zotero-key
-ZOTERO_LIBRARY_TYPE=user
-ZOTERO_LIBRARY_ID=12345678
-MINERU_TOKEN=demo-mineru-token
-OPENALEX_API_KEY=demo-openalex-key
-DEMOENV
-  open_url() { note "[模拟打开网页] $1"; }
-else
-  [[ -t 0 ]] || { echo '请在交互终端运行 setup；Agent 可先用 --dependencies-only。'; exit 2; }
-fi
-persist() {
-  local key="$1" value="$2"
-  [[ -n "$value" ]] || return 0
-  if [[ "$DEMO" == 1 ]]; then
-    write_env "$key" "$value" >/dev/null
-  else
-    printf '%s' "$value" | "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --set "$key"
-  fi
-  export "$key=$value"
-}
+[[ -t 0 ]] || { echo '请在交互终端运行 setup；Agent 可先用 --dependencies-only。'; exit 2; }
 connect_account() {
   local service="$1" value="$2"
-  if [[ "$DEMO" == 1 ]]; then
-    if [[ "$service" == zotero ]]; then
-      persist ZOTERO_API_KEY "$value"
-      persist ZOTERO_LIBRARY_ID "${ZOTERO_LIBRARY_ID:-12345678}"
-      persist ZOTERO_LIBRARY_TYPE "${ZOTERO_LIBRARY_TYPE:-user}"
-    elif [[ "$service" == openalex ]]; then
-      persist OPENALEX_API_KEY "$value"
-    else
-      persist MINERU_TOKEN "$value"
-    fi
-    note '[模拟检查通过，未连接服务]'
-    return 0
-  fi
   local args=(--connect "$service")
   if [[ "$service" == zotero && "$GROUP_LIBRARY" == 1 ]]; then
     args+=(--group --group-id "${ZOTERO_LIBRARY_ID:-}")
   fi
   printf '%s' "$value" | "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" "${args[@]}"
 }
-existing_ok() {
-  [[ "$DEMO" == 0 ]] || return 1
-  if [[ "$1" == openalex ]]; then
-    "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --verify openalex >/dev/null 2>&1
-    return $?
-  fi
-  "$PYTHON_BIN" "$SKILL_DIR/scripts/verify.py" "$1" >/dev/null 2>&1
-}
 
 shared_guide() {
-  if [[ "$DEMO" == 1 ]]; then
-    case "$1" in
-      zotero) say '连接 Zotero Web API：群组文库或 ZOTERO_WRITE_BACKEND=web 才需要。' ;;
-      openalex) say '连接 OpenAlex：只有 SEARCH_BACKEND=http 或 openalex 时才需要。' ;;
-      mineru) say 'MinerU 云端 Token：实验室地址留空，云端 Token 不是完成条件。' ;;
-      kimi) say 'Kimi WebBridge：连接本地服务和浏览器扩展，获取机构全文。' ;;
-      semantic_scholar) say 'Semantic Scholar：申请 API Key，申请未完成可稍后回来。' ;;
-      crossref) say 'Crossref：填写题录查询的联系邮箱。' ;;
-      unpaywall) say 'Unpaywall：填写开放全文查询的联系邮箱。' ;;
-      desktop) say 'Zotero Desktop：打开本机应用，本地接口要返回 Zotero-Server-ID。' ;;
-    esac
-    note '[模拟说明；正式向导提供官网及详细步骤]'
-  else
-    "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --guide "$1"
-  fi
+  "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --guide "$1"
 }
 
 # Preserve the existing platform installers; acceptance and saving are shared
@@ -338,7 +277,7 @@ prepare_extra() {
 }
 
 open_setup_url() {
-  if [[ "$DEMO" == 0 && "$WINDOWS" == 1 && -n "${PYTHON_BIN:-}" ]]; then
+  if [[ "$WINDOWS" == 1 && -n "${PYTHON_BIN:-}" ]]; then
     note "打开网页：$1"
     "$PYTHON_BIN" -c 'import os, sys; os.startfile(sys.argv[1])' "$1" 2>/dev/null || warn "浏览器未能打开，请复制这个网址到浏览器：$1"
   else
@@ -355,57 +294,34 @@ note 'Ctrl-C 可退出，已保存内容会保留。'
 if [[ "$ADVANCED" == 1 ]]; then note '已打开更多设置：检索来源、电脑同步、浏览器全文。'; fi
 pause '按回车开始'
 
-if [[ "$DEMO" == 1 ]]; then
-  warn '演示模式：不安装软件、不打开网页、不连接服务。配置仅写入临时目录，退出即删除。'
-  note '密钥直接回车使用示例；请勿输入真实密钥。'
-  pause '回车开始体验'
-fi
-
 stage "准备工具和 AI 助手"
-if [[ "$DEMO" == 1 ]]; then
-  bash "$SKILL_DIR/scripts/bootstrap.sh" --probe
-  if [[ "$MODE" == --demo-missing ]]; then
-    note '[模拟新电脑] 缺少 Python / Poppler → 安装缺少项 → 再次验证。'
-  else
-    note '以上为本机只读检查。缺失项在正式安装时自动补齐。'
-  fi
-else
-  bash "$SKILL_DIR/scripts/bootstrap.sh" --runtime-only
-  IFS= read -r PYTHON_BIN < "$HOME/.config/literature-to-zotero/python-path"
-  if [[ "$WINDOWS" == 1 ]]; then PYTHON_BIN="$(cygpath -u "$PYTHON_BIN")"; fi
-  export PYTHON_BIN
+bash "$SKILL_DIR/scripts/bootstrap.sh" --runtime-only
+IFS= read -r PYTHON_BIN < "$HOME/.config/literature-to-zotero/python-path"
+if [[ "$WINDOWS" == 1 ]]; then PYTHON_BIN="$(cygpath -u "$PYTHON_BIN")"; fi
+export PYTHON_BIN
+if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/install.py" --detect; then
+  say '你要在哪个 AI 助手中使用？1 = Codex，2 = Claude Code，3 = Pi'
+  while true; do
+    printf '  输入 1、2 或 3：'
+    IFS= read -r AGENT_CHOICE || { note '配置已暂停，重跑向导可继续。'; exit 130; }
+    case "$AGENT_CHOICE" in
+      1) PAPER2ZOTERO_AGENT=codex; break ;;
+      2) PAPER2ZOTERO_AGENT=claude-code; break ;;
+      3) PAPER2ZOTERO_AGENT=pi; break ;;
+      *) warn '请选择一个助手。' ;;
+    esac
+  done
 fi
-if [[ "$DEMO" == 1 ]]; then
-  note '[模拟安装] 连接所选 AI 助手，工具保存到固定位置。'
-else
-  if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/install.py" --detect; then
-    say '你要在哪个 AI 助手中使用？1 = Codex，2 = Claude Code，3 = Pi'
-    while true; do
-      printf '  输入 1、2 或 3：'
-      IFS= read -r AGENT_CHOICE || { note '配置已暂停，重跑向导可继续。'; exit 130; }
-      case "$AGENT_CHOICE" in
-        1) PAPER2ZOTERO_AGENT=codex; break ;;
-        2) PAPER2ZOTERO_AGENT=claude-code; break ;;
-        3) PAPER2ZOTERO_AGENT=pi; break ;;
-        *) warn '请选择一个助手。' ;;
-      esac
-    done
-  fi
-  bash "$SKILL_DIR/scripts/install-skill.sh"
-fi
+bash "$SKILL_DIR/scripts/install-skill.sh"
 if [[ "$ADVANCED" == 0 ]]; then
 pause '准备完成，回车检查本机 Zotero'
 
 stage "Zotero Desktop · 本机附件"
 say '基础配置要本机 Zotero 能写入。打开应用后，这一步检查本地接口。'
 say '授权框选「始终允许」。附件同步不在这一步。'
-if [[ "$DEMO" == 1 ]]; then
-  note '[模拟检查通过，不连接服务或保存]'
-else
-  prepare_extra desktop
-  if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra desktop; then
-    warn '尚未启用，已保存的配置保留；可在准备完成后回来检查。'
-  fi
+prepare_extra desktop
+if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra desktop; then
+  warn '尚未启用，已保存的配置保留；可在准备完成后回来检查。'
 fi
 pause '按回车继续'
 fi
@@ -439,26 +355,18 @@ fi
 
 if [[ "$ADVANCED" == 0 ]]; then
 stage "检查结果，开始使用"
-if [[ "$DEMO" == 1 ]]; then
-  note '[模拟检查通过] 正式版会验证本机 Zotero、检索和全文转换。'
-  pause '回车查看演示结果'
+check_args=(--check)
+[[ "$GROUP_LIBRARY" == 1 ]] && check_args+=(--group)
+if "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" "${check_args[@]}"; then
+  pause '检查通过，回车查看结果'
   _clear
-  say '✓ 配置演示结束。'
-  warn '以上结果均为模拟，不代表真实环境就绪；临时配置即将删除。'
+  say '✓ 配置完成。回到你的 AI 助手，试着说：'
+  say '“帮我找近三年 AI 心理健康干预的研究，先给我一份候选清单。”'
+  note '如果暂时找不到技能，新开一个助手会话再试。'
+  note '接下来直接展示更多配置；不需要的项目可跳过。'
 else
-  check_args=(--check)
-  [[ "$GROUP_LIBRARY" == 1 ]] && check_args+=(--group)
-  if "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" "${check_args[@]}"; then
-    pause '检查通过，回车查看结果'
-    _clear
-    say '✓ 配置完成。回到你的 AI 助手，试着说：'
-    say '“帮我找近三年 AI 心理健康干预的研究，先给我一份候选清单。”'
-    note '如果暂时找不到技能，新开一个助手会话再试。'
-    note '接下来直接展示更多配置；不需要的项目可跳过。'
-  else
-    warn '部分配置尚未完成；已填写内容保留，重跑 setup 即可继续。'
-    SETUP_RESULT=1
-  fi
+  warn '部分配置尚未完成；已填写内容保留，重跑 setup 即可继续。'
+  SETUP_RESULT=1
 fi
 fi
 
@@ -496,13 +404,9 @@ for service in "${services[@]}"; do
   shared_guide "$service"
   if [[ "$service" == kimi || "$service" == desktop ]]; then
     if confirm '现在准备并连接这项功能'; then
-      if [[ "$DEMO" == 1 ]]; then
-        note '[模拟检查通过，不连接服务或保存]'
-      else
-        prepare_extra "$service"
-        if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra "$service"; then
-          warn '尚未启用，已保存的配置保留；可在准备完成后回来检查。'
-        fi
+      prepare_extra "$service"
+      if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra "$service"; then
+        warn '尚未启用，已保存的配置保留；可在准备完成后回来检查。'
       fi
     fi
   else
@@ -515,12 +419,8 @@ for service in "${services[@]}"; do
       unpaywall) setting=UNPAYWALL_EMAIL; ask "$setting" 'Unpaywall 联系邮箱（可留空）：' ;;
     esac
     value="${!setting}"
-    if [[ -n "$value" ]]; then
-      if [[ "$DEMO" == 1 ]]; then
-        persist "$setting" "$value"
-      elif ! printf '%s' "$value" | "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra "$service"; then
-        warn '本项未保存，原有设置保留；请按提示修正后重试。'
-      fi
+    if [[ -n "$value" ]] && ! printf '%s' "$value" | "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra "$service"; then
+      warn '本项未保存，原有设置保留；请按提示修正后重试。'
     fi
     unset "$setting" value
   fi
@@ -531,10 +431,7 @@ note '更多配置可随时重新打开：bash install/setup.sh --advanced。无
 say '总结提示词可以换成你更熟悉的版本，保留默认也可以直接使用。'
 if confirm '想换用自己的总结提示词？查看需要修改的文件位置'; then
   say '需要修改的文件：'
-  if [[ "$DEMO" == 1 ]]; then
-    note '[演示路径] <当前助手的 paper-to-zotero 目录>/references/paper-summary.md'
-  else
-    "$PYTHON_BIN" - "$SKILL_DIR/scripts" "$PAPER2ZOTERO_AGENT" <<'PY'
+  "$PYTHON_BIN" - "$SKILL_DIR/scripts" "$PAPER2ZOTERO_AGENT" <<'PY'
 import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
@@ -546,7 +443,6 @@ for path in paths:
 if not paths:
     print('  在当前助手实际加载的 paper-to-zotero 目录中，找到 references/paper-summary.md。')
 PY
-  fi
   step '用文本编辑器打开该 Markdown 文件，将开头的阅读分析要求换成自己的提示词。'
   step '保留“## Save and continue”及之后的保存、续跑说明；无需修改账号配置。'
   note '保存后在新文献任务中使用；已有笔记不会自动重写。托管更新会保留自定义提示词，也建议自行保存副本。'

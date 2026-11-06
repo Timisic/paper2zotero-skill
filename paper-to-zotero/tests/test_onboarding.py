@@ -78,63 +78,6 @@ def test_target_verification_rejects_empty_directory_and_other_agent(tmp_path, m
     assert agent_installation.installed_paths(tmp_path) == [str(codex)]
 
 
-@pytest.mark.parametrize('advanced,last_stage', [(False, '4/4'), (True, '2/2')])
-@pytest.mark.parametrize('customize', [False, True])
-def test_demo_executes_correct_branch_without_touching_real_configuration(tmp_path, advanced, last_stage, customize):
-    env = environment(tmp_path)
-    config = tmp_path / '.config/literature-to-zotero/env'
-    config.parent.mkdir(parents=True)
-    config.write_text('MINERU_TOKEN=private-fixture\nSETUP_BROWSER=1\n')
-    before = config.read_bytes()
-    command = [shutil.which('bash') or 'bash', str(ROOT / 'install/setup.sh'), '--demo', '--agent', 'claude-code']
-    if advanced:
-        command.append('--advanced')
-    prompt_before = (SCRIPTS.parent / 'references/paper-summary.md').read_bytes()
-    replies = ('y\n' if customize else '\n') * 50
-    result = subprocess.run(command, input=replies, env=env, text=True, encoding='utf-8', capture_output=True, timeout=20)
-    assert result.returncode == 0, result.stderr
-    assert f'Stage {last_stage}' in result.stdout
-    assert '更多配置（可选）' in result.stdout
-    assert 'Kimi WebBridge' in result.stdout and 'Semantic Scholar' in result.stdout
-    assert '必配' not in result.stdout
-    assert ('Zotero Desktop · 本机附件' in result.stdout) != advanced
-    assert 'private-fixture' not in result.stdout + result.stderr
-    assert config.read_bytes() == before
-    assert ('[演示路径]' in result.stdout) == customize
-    if customize:
-        assert 'references/paper-summary.md' in result.stdout
-        assert 'Save and continue' in result.stdout
-    assert (SCRIPTS.parent / 'references/paper-summary.md').read_bytes() == prompt_before
-    assert not (tmp_path / '.claude').exists()
-
-
-def test_demo_accepts_windows_newlines_from_extra_names(tmp_path):
-    env = environment(tmp_path)
-    config = tmp_path / '.config/literature-to-zotero/env'
-    config.parent.mkdir(parents=True)
-    config.write_text('MINERU_TOKEN=private-fixture\n')
-    before = config.read_bytes()
-    wrapper = tmp_path / 'python'
-    wrapper.write_text(
-        '#!/bin/sh\n'
-        'if [ "$1" = -c ] && printf %s "$2" | grep -q wizard_extras; then\n'
-        "  printf 'zotero\\r\\nmineru\\r\\nkimi\\r\\nsemantic_scholar\\r\\ncrossref\\r\\nunpaywall\\r\\n'\n"
-        '  exit 0\n'
-        'fi\n'
-        'exec "$REAL" "$@"\n',
-        encoding='utf-8')
-    wrapper.chmod(0o755)
-    env['PYTHON_BIN'] = str(wrapper)
-    env['REAL'] = sys.executable
-    result = subprocess.run(
-        [shutil.which('bash') or 'bash', str(ROOT / 'install/setup.sh'), '--demo', '--agent', 'claude-code'],
-        input='\n' * 50, env=env, text=True, encoding='utf-8', capture_output=True, timeout=20)
-    assert result.returncode == 0, result.stderr
-    assert 'Semantic Scholar' in result.stdout
-    assert '必配' not in result.stdout
-    assert config.read_bytes() == before
-
-
 def test_private_writer_preserves_unicode_and_literal_shell_text(tmp_path):
     env = environment(tmp_path)
     config = tmp_path / '.config/literature-to-zotero/env'
@@ -152,27 +95,6 @@ def test_private_writer_preserves_unicode_and_literal_shell_text(tmp_path):
                             input='bad\nINJECTED=value', text=True, encoding='utf-8', capture_output=True, env=env)
     assert result.returncode != 0
     assert config.read_bytes() == before
-
-
-@pytest.mark.parametrize('advanced', [False, True])
-def test_terminal_demo_reaches_more_configuration_without_python(tmp_path, advanced):
-    env = environment(tmp_path)
-    env['PYTHON_BIN'] = str(tmp_path / 'absent-python')
-    # The bootstrap probe may look for these alternatives. All are unavailable.
-    script = '''python3.13() { return 127; }
-python3.12() { return 127; }
-python3.11() { return 127; }
-export -f python3.13 python3.12 python3.11
-exec bash "$@"
-'''
-    args = [shutil.which('bash') or 'bash', '-c', script, '--', str(ROOT / 'install/setup.sh'), '--demo-missing']
-    if advanced:
-        args.append('--advanced')
-    result = subprocess.run(args, env=env, input='\n' * 50, capture_output=True, text=True, encoding='utf-8', timeout=20)
-    assert result.returncode == 0, result.stderr
-    assert '待安装：Python' in result.stdout
-    assert '更多配置（可选）' in result.stdout and 'Semantic Scholar' in result.stdout
-    assert not (tmp_path / '.config/literature-to-zotero/env').exists()
 
 
 def test_bootstrap_check_forwards_group(tmp_path):
@@ -195,12 +117,11 @@ def test_bootstrap_check_forwards_group(tmp_path):
 
 def test_bootstrap_installs_default_tools_after_the_python_path(tmp_path):
     text = (SCRIPTS / 'bootstrap.sh').read_text(encoding='utf-8')
-    probe = text.index('if [[ "${1:-}" == --probe ]]; then exit 0; fi')
     check = text.index('if [[ "${1:-}" == --check ]]; then')
     saved = text.index('literature-to-zotero/python-path')
     call = text.index('ensure_default_tools')
     runtime = text.index('if [[ "${1:-}" == --runtime-only ]]; then exit 0; fi')
-    assert probe < check < saved < call < runtime
+    assert check < saved < call < runtime
     bad = tmp_path / 'bad-pdf'
     good = tmp_path / 'good-pdf'
     blocker = tmp_path / 'no-install'
@@ -237,11 +158,6 @@ printf '%s\\n' "$@" >> "$OUT"
     assert 'good-pdf' in result.stdout
     assert (home / '.config/literature-to-zotero/python-path').is_file()
     assert (home / '.config/literature-to-zotero/pdf-bin').read_text(encoding='utf-8').rstrip().endswith('good-pdf')
-    recorded.unlink()
-    result = subprocess.run([bash, str(SCRIPTS / 'bootstrap.sh'), '--probe'],
-                            env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert not recorded.exists()
 
 
 def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):

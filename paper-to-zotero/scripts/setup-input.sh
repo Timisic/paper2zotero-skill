@@ -20,7 +20,7 @@ retry_connection() {
 
 read_authorization_line() (
   # Keep echo off between character reads as well as during each read.
-  # A subshell owns these traps; the parent wizard's demo cleanup is untouched.
+  # A subshell owns these traps; the parent wizard's traps are untouched.
   local value='' char saved_tty=''
   trap 'if [[ -n "$saved_tty" ]]; then stty "$saved_tty" 2>/dev/null || true; fi' EXIT
   trap 'exit 130' INT TERM
