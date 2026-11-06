@@ -718,10 +718,7 @@ def command_record_paper(args: argparse.Namespace) -> None:
     print(json.dumps({"id": args.id, "state": args.state}))
 
 
-DELIVERED_STATES = {
-    PaperState.READ_BACK_VERIFIED.value, PaperState.SYNC_PENDING.value,
-    PaperState.METADATA_ONLY.value, PaperState.PARTIAL.value,
-}
+DELIVERED_STATES = {PaperState.READ_BACK_VERIFIED.value, PaperState.SYNC_PENDING.value}
 
 
 def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
@@ -733,8 +730,9 @@ def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
 
     `pending` is computed from what the paper has right now, never from its
     warning history — a warning recorded before a retry succeeded must not
-    keep a finished paper looking unfinished forever. The history stays in
-    `notes`, which is why the two fields are separate.
+    keep a finished paper looking unfinished forever. `notes` carries the
+    latest warnings for an unfinished row only. The full history stays in
+    the manifest.
     """
     evidence = paper.zotero
     attachments = evidence.get("attachments", {})
@@ -754,6 +752,7 @@ def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
         if not local:
             pending.append("local sync not checked" if evidence.get("local_checked") is False
                            else "local sync pending")
+    complete = not pending and has["pdf"]
     return {
         "id": paper.id,
         "title": title or paper.id,
@@ -764,12 +763,10 @@ def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
         "cloud_verified_at": evidence.get("cloud_verified_at"),
         "local_synced": local,
         "pending": list(dict.fromkeys(pending)),
-        # Observed history: why something went the way it did. Read alongside
-        # `pending`, which says what is actually still missing now.
-        "notes": list(dict.fromkeys(paper.warnings))[-3:],
+        "notes": [] if complete else list(dict.fromkeys(paper.warnings))[-3:],
         # Every artifact present, written and synced. A readable PDF alone is
         # not a complete paper, however far the Zotero write got.
-        "complete": not pending and has["pdf"],
+        "complete": complete,
         # Whether re-running could still change this row. A paper with no
         # obtainable full text is finished, not waiting for another attempt.
         "actionable": bool(pending) and not paper.is_metadata_only,
@@ -805,6 +802,8 @@ def command_report(args: argparse.Namespace) -> None:
         "run_dir": str(run.directory),
         "collection": run.collection,
         "delivered": sum(1 for row in rows if row["state"] in DELIVERED_STATES),
+        "metadata_only": sum(1 for row in rows if row["state"] == PaperState.METADATA_ONLY.value),
+        "partial": sum(1 for row in rows if row["state"] == PaperState.PARTIAL.value),
         "papers": rows,
         "table": render_report(rows),
     }, ensure_ascii=False))
