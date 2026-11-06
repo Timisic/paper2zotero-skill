@@ -11,7 +11,7 @@ Search and download through scansci-pdf 1.19.0 when `SEARCH_BACKEND` is unset. G
 
 ## How to get to it (user POV)
 
-Leave `SEARCH_BACKEND` unset and ask for papers. `discovery.discover` calls `scansci_retrieval.search`. After confirmation, `acquire.acquire` calls `scansci_retrieval.fetch_candidate` before known HTTP links. When the process environment omits `SEARCH_BACKEND`, a non-empty line in `~/.config/literature-to-zotero/env` is the backend, so a saved `kimi` line stays until that line is removed. Saving an empty value leaves the line in place. An empty or whitespace environment variable selects scansci.
+Leave `SEARCH_BACKEND` unset and ask for papers. `discovery.discover` calls `scansci_retrieval.search`. After confirmation, `acquire.acquire` calls `scansci_retrieval.fetch_candidate` before known HTTP links.
 
 ## Driving it with verify_runner
 
@@ -27,4 +27,4 @@ Inspect `results.xml` for each assertion. These tests call the adapter in proces
 
 ## Gotchas
 
-A pass does not download a paper and does not prove live scansci-pdf, Kimi WebBridge, lab MinerU, or Zotero Desktop. The product checks `scansci_pdf.__version__`. It does not inspect a browser extra. `scihub_browser_first_enabled` skips `download` and returns `unavailable`. After a scansci miss, acquire continues to known HTTP links. That HTTP route is `run --feature acquisition`.
+A pass does not download a paper and does not prove live scansci-pdf, Kimi WebBridge, self-hosted MinerU, or Zotero Desktop. The product checks `scansci_pdf.__version__`. It does not inspect a browser extra. `scihub_browser_first_enabled` skips `download` and returns `unavailable`. After a scansci miss, acquire continues to known HTTP links. That HTTP route is `run --feature acquisition`.
