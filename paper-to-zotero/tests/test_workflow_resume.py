@@ -88,6 +88,34 @@ def test_an_import_with_nothing_new_leaves_the_selection_approved(tmp_path: Path
     assert status['gates']['candidate_selection'] == 'approved'
 
 
+def test_approval_adds_to_the_selection_and_revoke_removes_only_named_ids(tmp_path: Path) -> None:
+    run = selected_run(tmp_path)
+    run_script('workflow.py', 'record-paper', '--run-dir', str(run), '--id', 'doi:10.1000/alpha', '--state', 'metadata_verified')
+    result = run_script('workflow.py', 'approve-candidates', '--run-dir', str(run), '--ids', 'openalex:W3')
+    assert json.loads(result.stdout)['selected'] == ['doi:10.1000/alpha', 'openalex:W3']
+    status = json.loads(run_script('workflow.py', 'status', '--run-dir', str(run)).stdout)
+    assert status['paper_states'] == {'metadata_verified': 1, 'selected': 1}
+
+    result = run_script('workflow.py', 'revoke-candidates', '--run-dir', str(run), '--ids', 'openalex:W3')
+    assert json.loads(result.stdout)['selected'] == ['doi:10.1000/alpha']
+    manifest = json.loads((run / 'manifest.json').read_text())
+    assert manifest['selected_ids'] == ['doi:10.1000/alpha']
+    assert manifest['papers']['openalex:W3']['state'] == 'discovered'
+    assert manifest['events'][-1]['event'] == 'candidate_selection_revoked'
+
+    run_script('workflow.py', 'revoke-candidates', '--run-dir', str(run), '--ids', 'doi:10.1000/alpha')
+    manifest = json.loads((run / 'manifest.json').read_text())
+    assert manifest['selected_ids'] == []
+    assert manifest['papers']['doi:10.1000/alpha']['state'] == 'metadata_verified'
+
+
+def test_revoking_an_unselected_id_is_refused(tmp_path: Path) -> None:
+    run = selected_run(tmp_path)
+    result = run_script('workflow.py', 'revoke-candidates', '--run-dir', str(run), '--ids', 'openalex:W3', check=False)
+    assert result.returncode == 2
+    assert 'not selected' in result.stderr
+
+
 def test_a_file_repeating_an_id_is_refused(tmp_path: Path) -> None:
     run = selected_run(tmp_path)
     twice = tmp_path / 'twice.json'

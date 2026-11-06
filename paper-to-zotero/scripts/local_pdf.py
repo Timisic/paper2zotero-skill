@@ -466,9 +466,7 @@ def _run_local_pdfs(run_dir: Path, pdfs: Sequence[Path], *, backend: str,
     add_candidates(run_dir, existing, added)
     identities = list(dict.fromkeys(str(plan["id"]) for plan in plans if plan.get("id")))
     if identities:
-        selected = workflow.load_manifest(run_dir)["selected_ids"]
-        workflow.approve_selection(run_dir, list(dict.fromkeys([*selected, *identities])),
-                                   SELECTION_SOURCE, SELECTION_RULE)
+        workflow.approve_selection(run_dir, identities, SELECTION_SOURCE, SELECTION_RULE)
     imported: dict[str, Any] = {}
     seen: set[str] = set()
     mapping: list[dict[str, str]] = []

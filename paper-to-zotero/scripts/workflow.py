@@ -506,7 +506,7 @@ def command_import_candidates(args: argparse.Namespace) -> None:
 
 def approve_selection(run_dir: Path, ids: Sequence[str], source: str = "user-selection",
                       rule: str = "explicit IDs") -> dict[str, Any]:
-    """Approve exactly these candidate ids. The same selection is left untouched."""
+    """Add these candidate ids to the selection. Ids already selected stay selected."""
     run_dir = absolute_path(run_dir)
     manifest = load_manifest(run_dir)
     requested = list(dict.fromkeys(str(value).strip() for value in ids if str(value).strip()))
@@ -514,9 +514,10 @@ def approve_selection(run_dir: Path, ids: Sequence[str], source: str = "user-sel
     unknown = [value for value in requested if value not in current_ids]
     if unknown:
         raise ValueError("unknown candidate ids: " + ", ".join(unknown))
-    if requested == manifest["selected_ids"] and manifest["gates"]["candidate_selection"] == "approved":
-        return {"selected": requested, "unchanged": True}
-    manifest["selected_ids"] = requested
+    selected = list(dict.fromkeys([*manifest["selected_ids"], *requested]))
+    if selected == manifest["selected_ids"] and manifest["gates"]["candidate_selection"] == "approved":
+        return {"selected": selected, "unchanged": True}
+    manifest["selected_ids"] = selected
     for candidate_id in requested:
         if manifest["papers"][candidate_id]["state"] == PaperState.DISCOVERED.value:
             manifest["papers"][candidate_id]["state"] = PaperState.SELECTED.value
@@ -526,18 +527,40 @@ def approve_selection(run_dir: Path, ids: Sequence[str], source: str = "user-sel
     if not snapshot.exists():
         write_json(snapshot, read_json(run_dir / "candidates.json"))
     manifest["selection"] = {
-        "ids": requested, "at": utc_now(),
+        "ids": selected, "requested": requested, "at": utc_now(),
         "source": source, "rule": rule,
         "candidate_sha256": snapshot_hash, "candidate_snapshot": str(snapshot),
     }
     manifest["events"].append({"event": "candidate_selection_approved", **manifest["selection"]})
     save_manifest(run_dir, manifest)
-    return {"selected": requested}
+    return {"selected": selected}
+
+
+def revoke_selection(run_dir: Path, ids: Sequence[str], source: str = "user-selection") -> dict[str, Any]:
+    """Remove these ids from the selection. Recorded artifacts stay on disk and in the manifest."""
+    run_dir = absolute_path(run_dir)
+    manifest = load_manifest(run_dir)
+    revoked = list(dict.fromkeys(str(value).strip() for value in ids if str(value).strip()))
+    unknown = [value for value in revoked if value not in manifest["selected_ids"]]
+    if unknown:
+        raise ValueError("ids are not selected: " + ", ".join(unknown))
+    manifest["selected_ids"] = [value for value in manifest["selected_ids"] if value not in revoked]
+    for candidate_id in revoked:
+        if manifest["papers"][candidate_id]["state"] == PaperState.SELECTED.value:
+            manifest["papers"][candidate_id]["state"] = PaperState.DISCOVERED.value
+    manifest["events"].append({"at": utc_now(), "event": "candidate_selection_revoked",
+                               "ids": revoked, "source": source})
+    save_manifest(run_dir, manifest)
+    return {"selected": manifest["selected_ids"], "revoked": revoked}
 
 
 def command_approve_candidates(args: argparse.Namespace) -> None:
     requested = [value.strip() for value in args.ids.split(",") if value.strip()]
     print(json.dumps(approve_selection(args.run_dir, requested, args.source, args.rule), ensure_ascii=False))
+
+
+def command_revoke_candidates(args: argparse.Namespace) -> None:
+    print(json.dumps(revoke_selection(args.run_dir, args.ids.split(","), args.source), ensure_ascii=False))
 
 
 def command_consent(args: argparse.Namespace) -> None:
@@ -846,6 +869,12 @@ def build_parser() -> argparse.ArgumentParser:
     approve_candidates.add_argument("--source", default="user-selection")
     approve_candidates.add_argument("--rule", default="explicit IDs")
     approve_candidates.set_defaults(func=command_approve_candidates)
+
+    revoke_candidates = commands.add_parser("revoke-candidates", help="remove ids from the selection")
+    revoke_candidates.add_argument("--run-dir", required=True)
+    revoke_candidates.add_argument("--ids", required=True)
+    revoke_candidates.add_argument("--source", default="user-selection")
+    revoke_candidates.set_defaults(func=command_revoke_candidates)
 
     consent = commands.add_parser("consent")
     consent.add_argument("--run-dir", required=True)
