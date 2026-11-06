@@ -9,6 +9,8 @@ import unittest
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'paper-to-zotero/scripts'))
+from agent_installation import SKILL_NAMES  # noqa: E402
 
 
 def environment(home):
@@ -43,7 +45,7 @@ def check_native_repeat_install_and_removed_download(tmp_path):
         result = run_setup(package, env, '-DependenciesOnly')
         assert result.returncode == 0, result.stdout + result.stderr
     skill_root = home / '.codex/skills'
-    assert list(skill_root.rglob('SKILL.md')) == [skill_root / 'paper-to-zotero/SKILL.md']
+    assert sorted(skill_root.glob('*/SKILL.md')) == sorted(skill_root / name / 'SKILL.md' for name in SKILL_NAMES)
     assert not list(home.rglob('.literature-backup-*')), 'identical reinstall should not publish another copy'
     result = run_setup(package, env, '-Check')
     assert result.returncode == 1, result.stdout + result.stderr
