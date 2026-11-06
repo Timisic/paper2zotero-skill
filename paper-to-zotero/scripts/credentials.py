@@ -243,6 +243,9 @@ DISCOVERY_BY_BACKEND: dict[str, tuple[str, ...]] = {
     "semantic_scholar": ("semantic_scholar",),
     "http": ("openalex", "semantic_scholar"),
 }
+# When the default search names no sources, a channel failure here is retried
+# on the paired source in the same round.
+DISCOVERY_FALLBACK: dict[str, str] = {"scansci": "kimi"}
 SEARCH_BACKENDS = tuple(DISCOVERY_BY_BACKEND)
 WRITE_BACKENDS = ("auto", "local", "web")
 
