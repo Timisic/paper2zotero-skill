@@ -10,6 +10,8 @@ from test_cli import assert_private_file
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / 'paper-to-zotero/scripts'
+sys.path.insert(0, str(SCRIPTS))
+from agent_installation import SKILL_NAMES
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='POSIX entry; Windows equivalent in test_windows_setup.py')
@@ -29,10 +31,11 @@ def test_release_survives_download_removal_and_repeat_install(tmp_path):
         result = subprocess.run(command, env=env, text=True, capture_output=True)
         assert result.returncode == 0, result.stderr
     shutil.rmtree(output)
+    for name in SKILL_NAMES:
+        skill = home / '.codex/skills' / name
+        assert skill.is_symlink() and (skill / 'SKILL.md').is_file()
+    assert (home / '.codex/skills/academic-paper/LICENSE').is_file()
     installed = home / '.codex/skills/paper-to-zotero'
-    assert installed.is_symlink() and (installed / 'SKILL.md').is_file()
-    discussion = home / '.codex/skills/discussion-drafter'
-    assert discussion.is_symlink() and (discussion / 'SKILL.md').is_file()
     result = subprocess.run([shutil.which('bash') or 'bash', str(installed / 'scripts/run-python.sh'),
                              str(installed / 'scripts/workflow.py'), '--help'],
                             env=env, text=True, capture_output=True)
@@ -129,9 +132,9 @@ install('codex')
     assert (skill / 'SKILL.md').is_file()
     assert (skill / '.literature-to-zotero-managed').read_text() == 'v1'
     assert (skill / 'scripts/run-python.cmd').is_file()
-    discussion = skill.parent / 'discussion-drafter'
-    assert not discussion.is_symlink()
-    assert (discussion / 'SKILL.md').is_file()
+    for name in SKILL_NAMES[1:]:
+        assert not (skill.parent / name).is_symlink()
+        assert (skill.parent / name / 'SKILL.md').is_file()
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='POSIX installer; Windows equivalent in test_windows_setup.py')

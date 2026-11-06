@@ -17,7 +17,6 @@ WINDOWS = os.name == 'nt'
 MARKER = '.literature-to-zotero-managed'
 MANIFEST = '.literature-to-zotero-version.json'
 SOURCE = Path(__file__).resolve().parent.parent
-DISCUSSION_SOURCE = SOURCE.parent / 'discussion-drafter'
 LEGACY_NAME = 'literature-to-zotero'
 SUMMARY = 'references/paper-summary.md'
 
@@ -28,10 +27,10 @@ def _journal(destination: Path) -> Path:
 
 
 def _files(root: Path) -> dict[str, str]:
-    files = [root / 'SKILL.md']
-    for name in ('scripts', 'references', 'agents', 'assets'):
-        files.extend(p for p in (root / name).rglob('*') if p.is_file()
-                     and '__pycache__' not in p.parts and p.suffix != '.pyc')
+    # Top-level dotfiles hold this installer's own marker and manifest.
+    files = [p for p in root.rglob('*') if p.is_file() and p.suffix != '.pyc'
+             and not p.relative_to(root).parts[0].startswith('.')
+             and not {'tests', '__pycache__'} & set(p.relative_to(root).parts[:-1])]
     return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in sorted(files)}
 
@@ -75,7 +74,7 @@ def runtime_ready(path: Path, shared: Path | None = None) -> bool:
         return True
     if not _owned(path):
         return False
-    shared = shared or shared_path('discussion-drafter' if path.name == 'discussion-drafter' else SKILL_NAMES[0])
+    shared = shared or shared_path(path.name if path.name in SKILL_NAMES else SKILL_NAMES[0])
     if _journal(shared).exists():
         return False
     try:
@@ -232,7 +231,7 @@ def install(agent: str = 'auto') -> None:
     if not roots:
         raise SystemExit('未找到已使用的 AI 助手。请运行 setup 并选择 Codex、Claude Code 或 Pi；Agent 可传 --agent。')
     legacy_shared = Path.home() / '.local/share/literature-to-zotero/skill'
-    sources = dict(zip(SKILL_NAMES, (SOURCE, DISCUSSION_SOURCE)))
+    sources = {name: SOURCE if name == SKILL_NAMES[0] else SOURCE.parent / name for name in SKILL_NAMES}
     # Existing managed installations participate in renaming; independent
     # shared-root installations remain owned by the user.
     existing_roots = [*agent_roots().values(), Path.home() / '.agents/skills', Path.home() / '.hermes/skills']
@@ -240,7 +239,7 @@ def install(agent: str = 'auto') -> None:
         if root not in roots and (_managed_legacy(root / LEGACY_NAME, legacy_shared)
                                   or any(_owned(root / name) for name in SKILL_NAMES)):
             roots.append(root)
-    # Preflight the entire bundle before publishing either skill.
+    # Preflight the entire bundle before publishing any skill.
     for name, source in sources.items():
         if not (source / 'SKILL.md').is_file():
             raise SystemExit(f'安装包缺少 {name}/SKILL.md，请重新下载完整安装包。')
@@ -277,7 +276,7 @@ def install(agent: str = 'auto') -> None:
             _publish(targets, source, destination, journal, summary)
             for root in roots:
                 print(f'已安装：{root / name}')
-        # Only retire the old discoverable names after BOTH skills are ready.
+        # Only retire the old discoverable names after ALL skills are ready.
         for root in roots:
             legacy = root / LEGACY_NAME
             if legacy.exists() or legacy.is_symlink():

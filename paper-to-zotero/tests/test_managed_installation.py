@@ -16,12 +16,39 @@ def runtime(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path))
     monkeypatch.delenv('CODEX_HOME', raising=False)
     monkeypatch.delenv('CLAUDE_CONFIG_DIR', raising=False)
-    source = tmp_path / 'download'
+    source = tmp_path / 'download/paper-to-zotero'
     (source / 'scripts').mkdir(parents=True)
     (source / 'SKILL.md').write_text('fixture')
     (source / 'scripts/runtime.py').write_text('version = 1')
+    for name in agent_installation.SKILL_NAMES[1:]:
+        (source.parent / name).mkdir()
+        (source.parent / name / 'SKILL.md').write_text(name)
     monkeypatch.setattr(install, 'SOURCE', source)
     return source
+
+
+@pytest.mark.parametrize('name', ['paper-to-zotero', 'discussion-drafter'])
+def test_runtime_file_set_is_unchanged_by_the_whole_folder_rule(name):
+    root = install.SOURCE.parent / name
+    allowlisted = {'SKILL.md', *(path.relative_to(root).as_posix()
+                                 for folder in ('scripts', 'references', 'agents', 'assets')
+                                 for path in (root / folder).rglob('*') if path.is_file()
+                                 and '__pycache__' not in path.parts and path.suffix != '.pyc')}
+    assert set(install._files(root)) == allowlisted
+
+
+@pytest.mark.parametrize('windows', [False, True])
+def test_installed_nature_writing_reads_its_sibling_shared_references(tmp_path, monkeypatch, windows):
+    monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path))
+    monkeypatch.delenv('CODEX_HOME', raising=False)
+    monkeypatch.delenv('CLAUDE_CONFIG_DIR', raising=False)
+    monkeypatch.setattr(install, 'WINDOWS', windows)
+    install.install('claude-code')
+    writing = agent_installation.agent_roots()['claude-code'] / 'nature-writing'
+    assert (writing / '../nature-shared/core/nature-introduction.md').is_file()
+    for name in agent_installation.SKILL_NAMES:
+        assert (writing.parent / name / 'SKILL.md').is_file()
+    assert agent_installation.installation_ok('claude-code')
 
 
 def test_failed_staging_preserves_working_installation(runtime, monkeypatch):
@@ -143,7 +170,6 @@ def test_custom_prompt_survives_reinstall_from_runtime_then_upgrade(runtime, mon
     (shared / install.SUMMARY).write_text('my prompt')
     with monkeypatch.context() as installed_source:
         installed_source.setattr(install, 'SOURCE', shared)
-        installed_source.setattr(install, 'DISCUSSION_SOURCE', agent_installation.shared_path('discussion-drafter'))
         install.install('codex')
     (runtime / 'scripts/runtime.py').write_text('version = 2')
     install.install('codex')
