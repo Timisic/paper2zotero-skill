@@ -361,7 +361,8 @@ def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, A
                 except (ValueError, OSError) as error:
                     reason = f"{type(error).__name__}: {error}"
             attempts.setdefault(identity, []).append({"converter": kind, "reason": reason})
-    failed, skipped = {}, {}
+    failed: dict[str, str] = {}
+    skipped: dict[str, str] = {}
     for identity in pending:
         tried = attempts.get(identity)
         if tried:
