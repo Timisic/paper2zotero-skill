@@ -1,6 +1,8 @@
 ---
 name: verify-paper2zotero
 description: Verify paper2zotero's Python CLI workflows for discovery, scansci search and download, selection and consent, local PDF import, HTTP acquisition, conversion, Zotero read-back and recovery using isolated local fixtures. Use after workflow changes or to reproduce a regression. Fixture success is not live scansci-pdf, Kimi WebBridge, self-hosted MinerU, or Zotero Desktop acceptance.
+metadata:
+  internal: true
 ---
 
 # Verify Paper to Zotero
