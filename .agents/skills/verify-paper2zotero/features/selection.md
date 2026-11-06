@@ -10,7 +10,7 @@ Process only the papers explicitly selected and keep PDFs deliverable when cloud
 
 ## How to get to it (user POV)
 
-User confirms candidate IDs, collection and upload choice. Public CLI paths are `workflow.py approve-candidates` (adds ids), `workflow.py revoke-candidates` (removes ids), `workflow.py consent`, and `process_run.py --stages ...`.
+User confirms candidate IDs, collection and upload choice. Public CLI paths are `workflow.py approve-candidates` (adds ids), `workflow.py revoke-candidates` (removes ids), `workflow.py import-candidates`, `workflow.py consent`, and `process_run.py --stages ...`. `import-candidates` appends candidates the run does not already hold. New ids set `candidate_selection` back to `pending` and leave papers that were already selected in the selected state. An import that adds nothing leaves an approved selection approved. The four nodes below call `import-candidates` only to seed a list. They do not add ids to an approved selection, and they do not import a file that adds nothing.
 
 ## Driving it with verify_runner
 
