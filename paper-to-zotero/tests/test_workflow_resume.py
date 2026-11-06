@@ -60,3 +60,38 @@ def test_incremental_consent_and_revocation_leave_other_papers_authorized(tmp_pa
     status = json.loads(run_script('workflow.py', 'status', '--run-dir', str(run)).stdout)
     assert status['consents']['mineru']['ids'] == ['doi:10.1000/alpha']
     assert status['consents']['mineru']['papers']['doi:10.1000/alpha']['source'] == 'first'
+
+
+def test_a_second_import_appends_new_candidates_and_keeps_the_rest(tmp_path: Path) -> None:
+    run = selected_run(tmp_path)
+    second = tmp_path / 'second.json'
+    second.write_text(json.dumps([
+        {'id': 'crossref:alpha-again', 'doi': '10.1000/ALPHA', 'title': 'Alpha again'},
+        {'id': 'openalex:W3', 'title': 'Same id'},
+        {'id': 'openalex:W9', 'title': 'New paper'},
+    ]))
+    result = run_script('workflow.py', 'import-candidates', '--run-dir', str(run), '--file', str(second))
+    assert json.loads(result.stdout) == {'imported': 1, 'skipped': 2}
+    stored = json.loads((run / 'candidates.json').read_text())
+    assert [item['id'] for item in stored] == ['doi:10.1000/alpha', 'openalex:W3', 'openalex:W9']
+    status = json.loads(run_script('workflow.py', 'status', '--run-dir', str(run)).stdout)
+    assert status['gates']['candidate_selection'] == 'pending'
+    assert status['papers']['doi:10.1000/alpha']['state'] == 'selected'
+
+
+def test_an_import_with_nothing_new_leaves_the_selection_approved(tmp_path: Path) -> None:
+    run = selected_run(tmp_path)
+    result = run_script('workflow.py', 'import-candidates', '--run-dir', str(run),
+                        '--file', str(FIXTURES / 'normalized_candidates.json'))
+    assert json.loads(result.stdout) == {'imported': 0, 'skipped': 2}
+    status = json.loads(run_script('workflow.py', 'status', '--run-dir', str(run)).stdout)
+    assert status['gates']['candidate_selection'] == 'approved'
+
+
+def test_a_file_repeating_an_id_is_refused(tmp_path: Path) -> None:
+    run = selected_run(tmp_path)
+    twice = tmp_path / 'twice.json'
+    twice.write_text(json.dumps([{'id': 'openalex:W9'}, {'id': 'openalex:W9'}]))
+    result = run_script('workflow.py', 'import-candidates', '--run-dir', str(run), '--file', str(twice), check=False)
+    assert result.returncode == 2
+    assert 'unique id' in result.stderr

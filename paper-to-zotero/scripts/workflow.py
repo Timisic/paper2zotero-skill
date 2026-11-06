@@ -16,6 +16,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 from runtime_io import absolute_path, file_lock, text_hash
+from sources import canonical_doi
 
 
 SCHEMA_VERSION = 2
@@ -460,7 +461,21 @@ def command_record_search(args: argparse.Namespace) -> None:
     print(json.dumps(summary, ensure_ascii=False))
 
 
+def find_candidate(existing: Sequence[Any], *, doi: str | None = None, identity: str | None = None) -> dict[str, Any] | None:
+    doi_norm = canonical_doi(doi) if doi else None
+    for item in existing:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        if identity and item.get("id") == identity:
+            return item
+        item_doi = canonical_doi(item.get("doi")) if item.get("doi") else None
+        if doi_norm and (item_doi == doi_norm or item.get("id") == f"doi:{doi_norm}"):
+            return item
+    return None
+
+
 def command_import_candidates(args: argparse.Namespace) -> None:
+    """Append candidates the run does not hold yet. Earlier rounds stay."""
     run_dir = absolute_path(args.run_dir)
     manifest = load_manifest(run_dir)
     candidates = read_json(Path(args.file))
@@ -472,12 +487,21 @@ def command_import_candidates(args: argparse.Namespace) -> None:
         if not candidate_id or candidate_id in ids:
             fail("each candidate must have a unique id")
         ids.append(candidate_id)
-        manifest["papers"].setdefault(candidate_id, {"state": PaperState.DISCOVERED.value, "artifacts": {}, "warnings": []})
-    write_json(run_dir / "candidates.json", candidates)
-    manifest["gates"]["candidate_selection"] = "pending"
-    manifest["events"].append({"at": utc_now(), "event": "candidates_imported", "count": len(candidates)})
+    stored = read_json(run_dir / "candidates.json")
+    added = []
+    for candidate in candidates:
+        if not find_candidate(stored, doi=candidate.get("doi"), identity=candidate["id"]):
+            stored.append(candidate)
+            added.append(candidate["id"])
+    for item in stored:
+        manifest["papers"].setdefault(item["id"], {"state": PaperState.DISCOVERED.value, "artifacts": {}, "warnings": []})
+    if added:
+        write_json(run_dir / "candidates.json", stored)
+        manifest["gates"]["candidate_selection"] = "pending"
+    manifest["events"].append({"at": utc_now(), "event": "candidates_imported", "count": len(added),
+                               "skipped": len(candidates) - len(added)})
     save_manifest(run_dir, manifest)
-    print(json.dumps({"imported": len(candidates)}))
+    print(json.dumps({"imported": len(added), "skipped": len(candidates) - len(added)}))
 
 
 def approve_selection(run_dir: Path, ids: Sequence[str], source: str = "user-selection",

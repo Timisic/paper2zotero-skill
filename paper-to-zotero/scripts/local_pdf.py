@@ -28,6 +28,7 @@ import paper_artifacts  # noqa: E402
 import process_run  # noqa: E402
 import sources  # noqa: E402
 import workflow  # noqa: E402
+from workflow import find_candidate  # noqa: E402
 
 # A title match this strong is the same work. Anything weaker must not donate
 # its DOI: nearby papers share ordinary words, and a borrowed DOI would become
@@ -272,19 +273,6 @@ def load_candidates(run_dir: Path) -> list[Any]:
     if not isinstance(payload, list):
         raise ValueError("candidates.json must be a list")
     return payload
-
-
-def find_candidate(existing: Sequence[Any], *, doi: str | None = None, identity: str | None = None) -> dict[str, Any] | None:
-    doi_norm = sources.canonical_doi(doi) if doi else None
-    for item in existing:
-        if not isinstance(item, dict) or not item.get("id"):
-            continue
-        if identity and item.get("id") == identity:
-            return item
-        item_doi = sources.canonical_doi(item.get("doi")) if item.get("doi") else None
-        if doi_norm and (item_doi == doi_norm or item.get("id") == f"doi:{doi_norm}"):
-            return item
-    return None
 
 
 def display_title(title: str | None, pdf: Path) -> str:
