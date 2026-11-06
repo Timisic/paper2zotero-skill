@@ -59,11 +59,13 @@ Windows 双击 `install/setup-demo.cmd`，macOS/Linux 运行 `bash install/setup
 
 ## 助手里找不到技能
 
-新开一个助手会话再试。仍找不到时，让助手“检查 paper-to-zotero 和 discussion-drafter 是否安装到了当前助手”。安装器支持 Claude Code、Codex 和 Pi，所选助手会同时安装两项技能；需要全部助手时选择 `all`。
+新开一个助手会话再试。仍找不到时，让助手“检查 paper-to-zotero、academic-paper、nature-writing、nature-shared 和 discussion-drafter 是否安装到了当前助手”。安装器支持 Claude Code、Codex 和 Pi，所选助手会同时安装全部技能；需要全部助手时选择 `all`。
 
 从旧版升级时，安装器会迁移它管理的 `literature-to-zotero` 安装，旧入口保留在助手目录旁的备份文件夹。独立安装不会覆盖；不同助手中存在冲突的自定义总结提示词时，会保留并提示选择。账号配置继续读取 `~/.config/literature-to-zotero/`，无需重填密钥；该兼容目录不代表旧 skill 仍需使用。
 
 `discussion-drafter` 需要当前助手已连接 Zotero MCP。完成文件安装或 Zotero Web API 检查并不能证明 MCP 已连接。打开 Zotero 后，让助手只读验证指定集合，再提供自己的研究背景与核心发现开始写作。
+
+三项写作技能一起安装：写文献综述用 `academic-paper` 的 `lit-review` 模式，写引言用 `nature-writing` 的 `intro` 章节，写讨论用 `discussion-drafter`。`academic-paper` 和 `nature-writing` 原样来自第三方仓库，来源见仓库根目录的 `THIRD_PARTY.md`。`academic-paper` 采用 CC BY-NC 4.0 许可，只能用于非商业用途。
 
 ## 论文和数据会发送到哪里
 
