@@ -1,5 +1,7 @@
 # Third-party skills
 
+The installer puts six skills into the selected agent. Two belong to this repository: `paper-to-zotero` saves papers to Zotero, and `discussion-drafter` writes a discussion from a Zotero collection. The other four are vendored writing skills, described below: `academic-paper` (literature review), `academic-paper-reviewer` (the checklist `academic-paper` reads), `nature-writing` (introduction) and `nature-shared` (shared guidance for `nature-writing`).
+
 These folders are copied unmodified from their upstream repositories. Only a `LICENSE` file, the upstream repository's root license, was added to each. Report problems with their content upstream. To update one, copy the folder again from a newer commit and change the commit below.
 
 ## academic-paper

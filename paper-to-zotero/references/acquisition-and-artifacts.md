@@ -15,10 +15,10 @@ python "$SKILL_DIR/scripts/local_pdf.py" --run-dir <run_dir> --pdf <file.pdf> \
 Repeat `--pdf` for a batch. The command does five things:
 
 1. Read a DOI and a title from the PDF. A file that yields neither is `extraction_failed`. It is not given an invented DOI, and it is not imported.
-2. Complete the record from Crossref and OpenAlex. A printed DOI is looked up directly. With no DOI, a title hit is accepted only when the titles strongly match; a weak hit is not allowed to supply its DOI. The paper is then stored under a `title:` identity with `metadata_degraded`. Conversion runs after MinerU consent covers that id, or immediately with `--backend local`.
+2. Complete the record from Crossref and OpenAlex. A printed DOI is looked up directly. With no DOI, a title hit is accepted only when the titles strongly match; a weak hit is not allowed to supply its DOI. The paper is then stored under a `title:` identity with `metadata_degraded`.
 3. Append the candidate. An existing candidate with the same id or DOI is kept as stored, including its title and other fields.
 4. Select those files — supplying the PDF is the selection — and verify them with `import-pdfs`. Identity verification is unchanged: DOI match or a sufficient title match is `verified`; a different paper is `rejected`; unreadable text is `unverified` and kept for a person.
-5. Convert verified PDFs with MinerU through `process_run.stage_convert`, the same convert topic search uses. If consent for those ids is missing, the result is `partial`, the verified PDF stays, and `next_action` says to record consent and then convert. The command does not upload. Ask once unless the user already refused, record `workflow.py consent --service mineru`, then re-run `local_pdf.py` or `process_run.py --stages convert`. `--backend local` writes `local-text/paper.md` and does not record consent. Use that flag only when the user wants no upload.
+5. Convert verified PDFs through `process_run.stage_convert`, the [converter chain](#markdown) topic search uses. If consent for those ids is missing, the result is `partial`, the verified PDF stays, and `next_action` says to record consent and then convert. The command does not upload. Ask once unless the user already refused, record `workflow.py consent --service mineru`, then re-run `local_pdf.py` or `process_run.py --stages convert`. `--backend local` writes `local-text/paper.md` and does not record consent. Use that flag only when the user wants no upload.
 
 Pass `--collection-name` when the user has already named the Zotero collection. If they have not, ask once before ingestion, not before conversion. After `awaiting_summaries`, write each `content_file` from [paper-summary.md](paper-summary.md) yourself, then run `summary_batch_command` and `resume_command`. Do not pause the user for that prose. Ingestion and read-back are the existing `process_run.py --stages ingest` path. `ingest.papers` still carries cloud/local verification and attachment reuse.
 
@@ -37,7 +37,7 @@ There are three rungs: an existing PDF (step 1), scansci (steps 2 to 4; steps 3 
 5. **One Kimi WebBridge attempt** (`browser_pdf.py`), only when HTTP has failed, using the best publisher route. If it cannot acquire the paper, return a `browser_handoff` for the agent to inspect the current session and use MyLOFT. A browser channel error pauses further automatic browser attempts in this batch.
 6. A failed automatic attempt remains pending while the agent handles the handoff below. If no route remains, record `metadata_only` explicitly with `workflow.py record-paper --state metadata_only`. A timeout alone does not prove there is no full text.
 
-**scansci is the first download after an existing file.** Grey sources are on unless `--legal-only` or `SCANSCI_LEGAL_ONLY=1` is set. A scansci miss still reaches the known PDF URL, the lookup ladder, and one browser fallback. A disconnected browser removes the browser step only. Papers acquirable over HTTP still finish, and only the papers that needed the browser report the missing channel. Nothing about identity verification, hashing or recovery changes with the route.
+A disconnected browser removes step 5 only. Papers acquirable over HTTP still finish, and only the papers that needed the browser report the missing channel. Identity verification, hashing and recovery do not change with the route.
 
 **Every attempt is written to `papers/<id>/acquisition.json`** — channel, redacted URL, the source that suggested the link, the version it claims to be, bytes and SHA-256, the verification verdict, and which wall stopped it (`entitlement`, `challenge`, `reachability`, `rate_limited`, `not_a_pdf`, `too_large`, `identity_mismatch`, `browser_unavailable`). `browser_unavailable` means *our* channel broke, not that the host is unreachable — do not send the user to a mirror for it.
 
@@ -105,7 +105,13 @@ choco install poppler          # Windows
 
 ## Markdown
 
-Conversion follows the chain named in `SKILL.md`. `local_pdf.py` uses the same `stage_convert`. The command below is a direct MinerU cloud run. `--backend local` writes `local-text/paper.md` and does not upload.
+`process_run.stage_convert` is the one converter chain; topic search and `local_pdf.py` both call it. Each paper falls through the hops in order:
+
+1. Self-hosted MinerU, only when `MINERU_API_BASE` is set and its `GET /v1/health` answers. There is no default host; unset or empty turns this hop off.
+2. MinerU cloud, when a token is configured.
+3. Local markitdown (`pip install 'markitdown[pdf]'`, which setup installs). It does not upload.
+
+`local_pdf.py --backend local` writes `local-text/paper.md` and does not upload. The command below is a direct MinerU cloud run.
 
 Use only identity-verified selected PDFs and recorded MinerU consent (see [workflow.md](workflow.md)). Credentials are resolved by `credentials.py` across supported runtimes.
 
@@ -115,7 +121,7 @@ python "$SKILL_DIR/scripts/mineru_parse.py" --run-dir <run_dir> --pdf <source.pd
 
 Repeat `--pdf` for a batch. Default output is `<PDF parent>/mineru/<source-and-config-id>/paper.md` with extracted image assets. `--output <root>` instead groups outputs by data ID under that root. The checkpoint binds source hashes and converter settings; repeat the same command to resume a submitted batch. Read [recovery.md](recovery.md) after interrupted upload, polling or download. Standalone conversion needs `--consent-source '<explicit approval reference>'`.
 
-Self-hosted MinerU speaks the V1 Tasks API (`GET /v1/health`, `POST /v1/tasks`), not the cloud v4 batch URL. The cloud hop still uses `vlm` on mineru.net. Either MinerU hop uploads the PDF and needs recorded consent. markitdown does not. Each paper falls through the hops in order, so a self-hosted failure still reaches the cloud hop and then markitdown. A paper without upload consent goes straight to markitdown. `convert.attempts` lists each hop that failed a paper and why. Only a paper that no hop converted gets the `markdown_unavailable` warning, and its PDF stays. A readable PDF can still support a summary labeled `source_basis=pdf`. Conversion failure does not invalidate PDF acquisition or prevent PDF ingestion. To deliver PDFs before a slow conversion, use `process_run.py --stages ingest`; the Markdown attaches to the same parent whenever it arrives. OCR is a MinerU option for scanned input. An empty `MINERU_API_BASE` turns the self-hosted hop off.
+Self-hosted MinerU speaks the V1 Tasks API (`GET /v1/health`, `POST /v1/tasks`), not the cloud v4 batch URL. The cloud hop still uses `vlm` on mineru.net. Either MinerU hop uploads the PDF and needs recorded consent. A self-hosted failure still reaches the cloud hop and then markitdown. In topic search, a paper without upload consent goes straight to markitdown. `convert.attempts` lists each hop that failed a paper and why. Only a paper that no hop converted gets the `markdown_unavailable` warning, and its PDF stays. A readable PDF can still support a summary labeled `source_basis=pdf`. Conversion failure does not invalidate PDF acquisition or prevent PDF ingestion. To deliver PDFs before a slow conversion, use `process_run.py --stages ingest`; the Markdown attaches to the same parent whenever it arrives. OCR is a MinerU option for scanned input.
 
 ## Full-text reading note
 

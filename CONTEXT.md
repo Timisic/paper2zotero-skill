@@ -1,71 +1,52 @@
 # Architecture and working context
 
-`paper-to-zotero/` and `discussion-drafter/` are this repository's skills. `academic-paper/`, `academic-paper-reviewer/`, `nature-writing/` and `nature-shared/` are vendored unmodified writing skills distributed with them ([THIRD_PARTY.md](THIRD_PARTY.md)). [README.md](README.md) covers user configuration and use; [SKILL.md](paper-to-zotero/SKILL.md) and its references define literature ingestion. [Discussion Drafter](discussion-drafter/SKILL.md) defines collection-scoped discussion writing through Zotero MCP. Public validation scope and platform limitations are documented in [docs/README.md](docs/README.md).
+`paper-to-zotero/` and `discussion-drafter/` are this repository's skills. The vendored writing skills and their licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md). [SKILL.md](paper-to-zotero/SKILL.md) and its references define literature ingestion. Maintainer docs start at [docs/README.md](docs/README.md).
 
 ## Workflow
 
-Three stages. Ingest: scansci searches and downloads, with Kimi WebBridge as the fallback for both. Write: Zotero MCP or the local Desktop API saves and reads back. Use: writing skills such as discussion-drafter read the Zotero collection.
+Three stages. Ingest: scansci searches and downloads, with Kimi WebBridge as the fallback for both ([ADR-0005](docs/adr/0005-ingest-existing-pdf-scansci-kimi.md)). Write: Zotero MCP or the local Desktop API saves and reads back. Use: the writing skills read the Zotero collection.
 
-Research intent → one candidate list → confirmation of selected papers, collection and MinerU upload choice → PDF acquisition/verification → conversion → full-text summary → Zotero ingestion/read-back → per-artifact result.
-
-A supplied PDF starts at `local_pdf.py`: extract a DOI or title, complete the record, verify, and convert with MinerU after recorded upload consent. `--backend local` writes on-machine text and does not record consent. Topic search confirms MinerU upload with the candidate list. Both paths use the same convert. Existing authorization is reused within its scope. One failed paper does not block independent work on others. A run is continued rather than recreated after interruption.
+Research intent → one candidate list → confirmation of selected papers, collection and upload choice → PDF acquisition and verification → conversion → full-text summary → Zotero ingestion and read-back → per-artifact result. A supplied PDF starts at `local_pdf.py` and joins the same conversion, summary and ingestion steps. One failed paper does not block the others. An interrupted run is continued, not recreated.
 
 ## Modules and ownership
 
 | Module | Responsibility |
 |---|---|
-| `workflow.py` (`Run`, `Paper`) | Run schema, selected IDs, consent, artifact paths, state transitions and reporting; `import-pdfs` handles local PDF copying/verification/recording |
-| `local_pdf.py` | Local PDF fast path: extract DOI/title, complete the record, verify, then convert with MinerU after recorded consent. `--backend local` writes on-machine text and does not record consent |
-| `process_run.py` | Compose acquisition, conversion and ingestion; return summary handoff and executable ingestion continuation |
+| `workflow.py` (`Run`, `Paper`) | Run schema, selected IDs, consent, artifact paths, state transitions and reporting; `import-pdfs` copies, verifies and records local PDFs |
+| `local_pdf.py` | Local PDF fast path: extract DOI or title, complete the record, verify, then convert once consent is recorded |
+| `process_run.py` | Compose acquisition, conversion and ingestion; return the summary handoff and the ingestion continuation |
 | `discovery.py`, `sources.py` | Bounded discovery, source-specific responses, normalization and citation provenance |
-| `acquire.py`, `browser_pdf.py` | HTTP-first retrieval; browser fallback when required by actual access evidence |
+| `scansci_retrieval.py` | scansci-pdf search and download adapter, grey and legal-only policy |
+| `acquire.py`, `browser_pdf.py` | PDF route: existing file, scansci, open links and metadata lookups, then Kimi WebBridge |
 | `paper_artifacts.py` | PDF integrity and identity verification |
 | `mineru_parse.py` | Consented conversion, batch checkpoints, response-loss recovery and extracted artifacts |
 | `summary_artifact.py` | Store the Agent's summary with provider, template version and source basis |
 | `zotero_ingest.py` | DOI reuse, journaled writes, missing-field merges, artifact reuse and Zotero/local read-back |
-| `credentials.py`, `capability.py` | Credential resolution and capability semantics; preflight/setup/verify consume these |
+| `credentials.py`, `capability.py` | Credential resolution and capability semantics; preflight, setup and verify consume these |
 | `http_client.py` | Bounded requests, shared pacing, credential-safe redirects and uncertain-write outcomes |
 
-Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Deterministic scripts own service operations and recovery; the Agent owns research interpretation, screening and summarization. The automatic writer prefers the local Zotero Desktop API and does not need Web API credentials while that API is writable. Zotero MCP is the agent's write path when its tools are in the session. The Web API remains the fallback.
+Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Deterministic scripts own service operations and recovery; the Agent owns research interpretation, screening and summarization. Write paths are in [zotero-ingestion.md](paper-to-zotero/references/zotero-ingestion.md).
 
 ## Domain terms
 
-- **Candidate**: a bibliographic work with source metadata, stable identity and screening evidence. DOI is the primary identity; title/year/first author are the fallback.
+- **Candidate**: a bibliographic work with source metadata, stable identity and screening evidence. DOI is the primary identity; title, year and first author are the fallback.
 - **Selection**: the exact user-authorized candidate IDs, including any deterministic selection rule and its fixed snapshot. Approval adds ids, revocation removes only the ids it names, and a candidate import appends.
 - **Consent**: permission to upload specified PDFs to MinerU. Added papers are outside previous consent until explicitly covered.
-- **Source PDF**: the original downloaded/provided paper, distinct from browser printouts, derived text and generated notes.
+- **Source PDF**: the original downloaded or provided paper, distinct from browser printouts, derived text and generated notes.
 - **Verification**: `verified` when identity matches; `rejected` when bytes or identity are wrong; `unverified` when identity cannot be established. Unreadable is not the same as wrong.
-- **Derived Markdown**: MinerU's reading representation, with extraction limitations; it does not replace the source PDF.
-- **Summary**: a full-text analysis in the paper's language by default, covering task, challenges, insights/inspiration, novelty, potential flaws and motivation without a fixed length. One explicit draft read-back checks measurement and inference boundaries before packaging. Artifact completion does not certify interpretation quality.
-- **Run package**: resumable local evidence for one request—candidates, decisions, artifacts, checkpoints and per-paper state.
-- **Summary handoff**: full-text source/basis and output instructions returned by processing; an internal step in already-authorized work.
+- **Derived Markdown**: the converter's reading representation, with extraction limits; it does not replace the source PDF.
+- **Summary**: a full-text analysis in the paper's language by default, with one draft read-back before packaging. Artifact completion does not certify interpretation quality.
+- **Run package**: resumable local evidence for one request: candidates, decisions, artifacts, checkpoints and per-paper state.
 - **Access wall**: entitlement, anti-bot challenge or network reachability, each with a different remedy.
 
 ## Invariants
 
 - One clear confirmation is the normal path; unknown choices are not consent. Cancellation preserves finished artifacts and writes. Cleanup requires its own scope.
-- Source metadata, abstracts, generated screening reasons, derived Markdown and summaries remain distinguishable.
-- Missing evidence stays missing. Source failures (`not_configured`, `rate_limited`, `unavailable`) do not mean no relevant literature exists.
+- Source metadata, abstracts, generated screening reasons, derived Markdown and summaries remain distinguishable. Missing evidence stays missing; a source failure never means no literature exists.
 - Shared request budgets include retries and waits. A failed write response may mean the write succeeded; reconcile the journal before retrying.
 - API credentials reach only their issuing service and never appear in outputs, logs or run artifacts.
-- Existing Zotero metadata, notes and attachments are preserved. DOI matches and identical attachment bytes are reused; attachment `file_action` reports reuse/upload behavior.
-- Topic search and the local PDF default share one converter chain. Each paper falls through self-hosted MinerU, MinerU cloud, then markitdown. A MinerU hop needs recorded upload consent; markitdown does not upload. `--backend local` writes on-machine text and does not record consent. A missing token or failed conversion leaves the verified PDF usable. A summary requires readable full text, not an abstract alone. The agent writes that summary and does not pause the user for the prose.
-- Cloud read-back checks item identity, collection, summary and attachment bytes. Local verification additionally needs real storage files with matching hashes.
-
-## Delivery states
-
-| State | Meaning |
-|---|---|
-| `awaiting_summaries` | Full text is ready; the Agent writes/checks summaries and uses the returned continuation command |
-| `partial` | Deliverable work exists, with named missing artifacts or evidence |
-| `sync_pending` | Zotero read-back is verified, but local attachment availability is not yet verified |
-| `read_back_verified` | Required read-back evidence is present; inspect the per-artifact report for overall completeness |
-| `metadata_only` | Full-text acquisition was explicitly ended; not a complete paper |
-
-The report's `delivered` count is `read_back_verified` plus `sync_pending`. `metadata_only` and `partial` are counted apart.
-
-Stage preflight checks only that stage's dependencies. Network failure leaves identity/permission unknown, while explicit 401/403 refusal is a distinct observation. Ordinary execution begins with the business command; complete returned evidence is used for delivery without repeating the same checks.
-
-## Development
+- Existing Zotero metadata, notes and attachments are preserved. DOI matches and identical attachment bytes are reused.
+- Topic search and local PDFs share one [converter chain](paper-to-zotero/references/acquisition-and-artifacts.md#markdown). A missing token or failed conversion leaves the verified PDF usable. A summary requires readable full text, not an abstract alone.
+- Delivery states are defined per paper in [zotero-ingestion.md](paper-to-zotero/references/zotero-ingestion.md) and per run in [workflow.md](paper-to-zotero/references/workflow.md#processing).
 
 Read the relevant [ADRs](docs/README.md#architecture-decisions) before changing boundaries. Fixture tests are not live service acceptance. Workflow verification is [verify-paper2zotero](.agents/skills/verify-paper2zotero/SKILL.md).
