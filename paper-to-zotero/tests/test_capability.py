@@ -1,7 +1,7 @@
 """Capability judgements are pure and their semantics live once.
 
 Every runtime precondition ("capability") is a record of
-{ok, detail, remediation}. preflight, verify and the setup doctor all read
+{ok, detail, remediation}. preflight and verify both read
 these records, so a semantic change (e.g. storage_sync_enabled=None means
 Zotero-7 default ON) is written and tested here once.
 """

@@ -3,7 +3,7 @@
 
 Each command prints one JSON line: {"ok": bool, "detail": "..."}. Every
 command is a thin caller of scripts/capability.py (probe + pure judgement),
-the same records preflight and the setup doctor use — so the wizard can
+the same records preflight uses — so the wizard can
 never report "done" while the skill would refuse to run, and vice versa.
 
 Commands:
@@ -16,7 +16,6 @@ Commands:
                     ZOTERO_API_KEY / ZOTERO_LIBRARY_ID in the environment)
   self-id         - print the numeric Zotero user id for the provided API key
   mineru          - one conversion hop is ready (lab, cloud token, or markitdown)
-  doctor          - full preflight readiness (live)
 """
 
 from __future__ import annotations
@@ -24,7 +23,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -32,9 +30,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import capability  # noqa: E402
 import credentials  # noqa: E402
 import agent_installation  # noqa: E402
-
-SKILL_DIR = Path(__file__).resolve().parent.parent
-SCRIPTS = SKILL_DIR / "scripts"
 
 
 def print_record(record: dict[str, str | bool]) -> int:
@@ -92,21 +87,6 @@ def cmd_mineru() -> int:
     return print_record(capability.converter_ready(plan))
 
 
-def cmd_doctor() -> int:
-    try:
-        completed = subprocess.run(
-            [sys.executable, str(SCRIPTS / "preflight.py"), "--json"],
-            text=True, encoding='utf-8', errors='replace', capture_output=True, timeout=60,
-        )
-        payload = json.loads(completed.stdout)
-    except Exception as exc:  # noqa: BLE001
-        print(json.dumps({"ok": False, "detail": f"preflight failed: {type(exc).__name__}"}, ensure_ascii=False))
-        return 1
-    ok = payload.get("ready") is True
-    print(json.dumps({"ok": ok, "detail": "see scripts/setup.py --json for missing items"}, ensure_ascii=False))
-    return 0 if ok else 1
-
-
 COMMANDS = {
     "skill-links": cmd_skill_links,
     "zotero-local": cmd_zotero_local,
@@ -115,7 +95,6 @@ COMMANDS = {
     "zotero-key": cmd_zotero_key,
     "self-id": cmd_self_id,
     "mineru": cmd_mineru,
-    "doctor": cmd_doctor,
 }
 
 

@@ -7,13 +7,11 @@ HTTP call, a daemon status) and are deterministic given their source;
 judgement functions are pure and turn measured facts into a record, so the
 semantics are written and tested once.
 
-The three CLIs that used to duplicate probes and judgements now share this
+The CLIs that used to duplicate probes and judgements now share this
 module:
   scripts/preflight.py — run the probes, combine the capability records into
       a report plus one "ready" decision.
   scripts/verify.py    — thin per-stage caller (one command per capability).
-  scripts/setup.py     — setup doctor: render the records as a human action
-      checklist; missing items get their remediation.
 
 Example semantic that lives here only: in Zotero 7 the attachment file-sync
 preference is ON by default, so an absent prefs.js key means enabled
@@ -44,14 +42,11 @@ ZOTERO_API_BASE = "https://api.zotero.org"
 KIMI_BINARY = Path.home() / ".kimi-webbridge" / "bin" / ("kimi-webbridge.exe" if os.name == "nt" else "kimi-webbridge")
 
 # One canonical human fix per capability (single source for install
-# knowledge, C3). The setup doctor renders `do` for a missing item; the setup
-# wizard prints the same `do` and opens `url` when present. Fields are plain
+# knowledge, C3). Preflight reports `do` for a missing item; the setup wizard
+# prints the same `do` and opens `url` when present. Fields are plain
 # single-line strings (no newlines) so bash can consume them. Never contain
-# secrets.
-#
-# `url` is only the page the wizard should open; the doctor never opens
-# pages. State-specific follow-ups that only the doctor shows (e.g. a live
-# key mismatch) live beside GUIDE as separate constants.
+# secrets. State-specific follow-ups (e.g. a live key mismatch) live beside
+# GUIDE as separate constants.
 GUIDE: dict[str, dict[str, str]] = {
     "zotero_local": {
         "label": "Zotero Desktop 本地 API",
@@ -66,7 +61,7 @@ GUIDE: dict[str, dict[str, str]] = {
     "zotero_mcp": {
         "label": "Zotero MCP 已配置",
         "url": "",
-        "do": "在运行时配置里注册 zotero MCP（本机已验证 54yyyu/zotero-mcp），command 须可执行；配置路径见 setup doctor 的“关键路径”。",
+        "do": "在运行时配置里注册 zotero MCP（本机已验证 54yyyu/zotero-mcp），command 须可执行；Codex 的配置文件是 ~/.codex/config.toml。",
     },
     "zotero_key": {
         "label": "Zotero Web API key",
@@ -95,9 +90,9 @@ GUIDE: dict[str, dict[str, str]] = {
     },
 }
 
-# Doctor-only, state-specific follow-ups (no wizard stage uses them).
+# State-specific follow-ups (no wizard stage uses them).
 KEY_LIVE_NOTE = "确认 key 属于当前 Zotero 桌面登录的账号且具备 library 写权限；撤销在聊天出现过的 key。"
-KEY_SKIP_NOTE = "运行在线检查（不带 --skip-live 的 doctor / preflight）以验证 key 的身份与写权限。"
+KEY_SKIP_NOTE = "运行在线检查（不带 --skip-live 的 preflight）以验证 key 的身份与写权限。"
 
 
 
