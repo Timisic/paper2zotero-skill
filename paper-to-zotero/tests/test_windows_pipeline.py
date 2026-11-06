@@ -139,6 +139,9 @@ def test_updating_one_agent_updates_all_existing_managed_copies(tmp_path, monkey
     (source / 'SKILL.md').write_text('fixture')
     code = source / 'scripts/runtime.py'
     code.write_text('version = 1')
+    for name in install.SKILL_NAMES[1:]:
+        (tmp_path / name).mkdir()
+        (tmp_path / name / 'SKILL.md').write_text(name)
     monkeypatch.setattr(install, 'SOURCE', source)
     install.install('all')
     code.write_text('version = 2')

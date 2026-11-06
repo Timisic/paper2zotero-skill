@@ -69,9 +69,9 @@ def test_target_verification_rejects_empty_directory_and_other_agent(tmp_path, m
     claude = tmp_path / '.claude/skills/paper-to-zotero'
     claude.mkdir(parents=True)
     assert not agent_installation.installation_ok('codex')
-    discussion = codex.parent / 'discussion-drafter'
-    discussion.mkdir()
-    (discussion / 'SKILL.md').write_text('fixture')
+    for name in agent_installation.SKILL_NAMES[1:]:
+        (codex.parent / name).mkdir()
+        (codex.parent / name / 'SKILL.md').write_text('fixture')
     assert agent_installation.installation_ok('codex')
     assert not agent_installation.installation_ok('claude-code')
     assert not agent_installation.installation_ok('all')

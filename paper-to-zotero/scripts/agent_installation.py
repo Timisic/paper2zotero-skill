@@ -12,7 +12,7 @@ from pathlib import Path
 AGENTS = {"codex": ".codex", "claude-code": ".claude", "pi": ".pi/agent"}
 CHOICES = ("auto", *AGENTS, "all")
 SKILL_NAME = "paper-to-zotero"
-SKILL_NAMES = (SKILL_NAME, "discussion-drafter")
+SKILL_NAMES = (SKILL_NAME, "discussion-drafter", "academic-paper", "academic-paper-reviewer", "nature-writing", "nature-shared")
 
 
 def shared_path(name: str, home: Path | None = None) -> Path:

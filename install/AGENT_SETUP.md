@@ -1,12 +1,14 @@
 # Agent 安装执行说明
 
-目标：为用户当前使用的助手安装 `paper-to-zotero` 和 `discussion-drafter` 两个 skills，打开可操作的向导，完成本地账号配置后进行检查。README 是给人的入口；平台分支、参数和完成条件以本文为准。
+目标：为用户当前使用的助手安装 `paper-to-zotero` 和三项写作 skills（`academic-paper` 及其检查表来源 `academic-paper-reviewer`、`nature-writing` 及其共享参考 `nature-shared`、`discussion-drafter`），打开可操作的向导，完成本地账号配置后进行检查。README 是给人的入口；平台分支、参数和完成条件以本文为准。
 
 ## 1. 确定系统与安装目标
 
 从当前运行环境确定操作系统和助手，不让用户选择 Python 版本、目录或服务参数。安装目标参数是 `codex`、`claude-code` 或 `pi`；明确知道当前助手时必须传入。以下示例以 Claude Code 为例，按当前助手替换这个值。`auto` 只安装到已经存在的助手配置目录；无法识别时，交互向导会询问使用哪一个助手。只有用户要求所有助手时才使用 `all`。
 
-安装与验证共用 `paper-to-zotero/scripts/agent_installation.py`。Codex 使用 `~/.codex/skills`（尊重 `CODEX_HOME`）；Claude Code 使用 `~/.claude/skills`（尊重 `CLAUDE_CONFIG_DIR`）；Pi 使用 `~/.pi/agent/skills`。所选助手同时获得两个 skills。已有本安装器管理的其他助手副本也会更新；旧 `literature-to-zotero` 名称在两项技能安装成功后移至可恢复备份。独立安装保留，不自动覆盖。
+安装与验证共用 `paper-to-zotero/scripts/agent_installation.py`。Codex 使用 `~/.codex/skills`（尊重 `CODEX_HOME`）；Claude Code 使用 `~/.claude/skills`（尊重 `CLAUDE_CONFIG_DIR`）；Pi 使用 `~/.pi/agent/skills`。所选助手同时获得全部六个 skill 目录。已有本安装器管理的其他助手副本也会更新；旧 `literature-to-zotero` 名称在全部技能安装成功后移至可恢复备份。独立安装保留，不自动覆盖。
+
+三项写作技能与 `paper-to-zotero` 一起安装：文献综述用 `academic-paper` 的 `lit-review` 模式，引言用 `nature-writing` 的 `intro` 章节，讨论用 `discussion-drafter`。`nature-shared` 是 `nature-writing` 从同级目录读取的参考文件，不单独调用。`academic-paper` 的综述模式从同级的 `academic-paper-reviewer/references/review_criteria_framework.md` 读取方法缺陷检查表。`academic-paper`、`academic-paper-reviewer`、`nature-writing`、`nature-shared` 原样复制自第三方仓库，来源、版本与许可见 [THIRD_PARTY.md](../THIRD_PARTY.md)。`academic-paper` 和 `academic-paper-reviewer` 采用 CC BY-NC 4.0，仅限非商业使用。
 
 普通配置依次为：准备工具、Zotero Desktop 本机写入、检查结果、更多配置。检查行按这个顺序：运行工具、PDF 文本工具、连接 AI 助手、当前检索后端、全文转换、Zotero Desktop。未设置 `SEARCH_BACKEND` 时检索行是 scansci-pdf 1.19.0。未设置 `MINERU_API_BASE` 时全文转换先试实验室 MinerU（`credentials.LAB_MINERU_API_BASE`），再试云端 Token，再试 markitdown。云端 Token 和 OpenAlex 不是完成条件。群组文库再加 Web API 这一步。`scripts/setup.py` 的 ready 不是这个结果。首次使用默认走这条路径。用户要求更多设置时加 `--advanced` / `-Advanced`；群组文库加 `--group` / `-Group`（使用本地 setup 入口）。
 
@@ -74,17 +76,21 @@ bash "$HOME/.local/share/paper2zotero-source/install/setup.sh" --agent claude-co
 
 完成条件按检查顺序：运行工具、PDF 文本工具、连接 AI 助手、当前检索后端、全文转换、Zotero Desktop 本机写入。未设置 `SEARCH_BACKEND` 时检索行是 scansci-pdf 1.19.0。未设置 `MINERU_API_BASE` 时全文转换先试 `credentials.LAB_MINERU_API_BASE`，再试云端 Token，再试 markitdown。云端 Token 和 OpenAlex 不是完成条件。群组文库或已保存的群组类型再加 Zotero Web API 行。此前启用的可选功能，例如 `SETUP_BROWSER=1` 的 Kimi，仍按实际探测。`scripts/setup.py` 的 ready 不是这个结果。报告缺失项及一个继续配置入口。终端就绪、文件安装成功或演示检查通过，均不等于账号配置完成；总检也不证明论文已处理或桌面附件已下载。
 
-最后请当前助手确认可以发现 `paper-to-zotero` 和 `discussion-drafter`。Claude Code 可用 `/paper-to-zotero`、`/discussion-drafter`，Codex 可用 `$paper-to-zotero`、`$discussion-drafter`；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。`discussion-drafter` 另需当前助手连接 Zotero MCP：发现实际工具并只读验证目标集合访问。Web API 配置检查通过不等于 MCP 已连接；缺少连接时明确列为讨论写作的未完成项，不重复申请已有账号。
+最后请当前助手确认可以发现 `paper-to-zotero`、`academic-paper`、`nature-writing` 和 `discussion-drafter`。Claude Code 可用 `/paper-to-zotero`、`/academic-paper`、`/nature-writing`、`/discussion-drafter`，Codex 可用 `$paper-to-zotero`、`$academic-paper`、`$nature-writing`、`$discussion-drafter`；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。`discussion-drafter` 另需当前助手连接 Zotero MCP：发现实际工具并只读验证目标集合访问。Web API 配置检查通过不等于 MCP 已连接；缺少连接时明确列为讨论写作的未完成项，不重复申请已有账号。
 
 交付时简短询问用户是否想换用自己熟悉的总结提示词。若向导已询问，复用该选择，不再重复询问。需要时只给出当前助手实际加载的 skill 下 `references/paper-summary.md` 的绝对路径，以及“修改前半部分的阅读分析要求，保留 `## Save and continue` 及之后的保存／续跑说明”的方法；不打开编辑器、不修改提示词，也不新增配置项。通过 `agent_installation.installed_paths(agent=已选目标)` 定位安装目录，避免把下载仓库里的文件误报为生效文件；自定义配置目录以实际路径为准。已有笔记不自动重写；托管安装会保留自定义总结提示词，仍建议用户保留自己的副本。
 
 ## 通过其他 skill 分发工具安装
 
-本仓库保留两个标准 skill 目录。例如已有 Node.js 的用户可分别安装：
+本仓库保留六个标准 skill 目录。例如已有 Node.js 的用户可分别安装；`nature-writing` 必须与 `nature-shared` 一起安装，`academic-paper` 应与 `academic-paper-reviewer` 一起安装：
 
 ```bash
 npx skills add Timisic/paper2zotero-skill --skill paper-to-zotero --agent claude-code --global
 npx skills add Timisic/paper2zotero-skill --skill discussion-drafter --agent claude-code --global
+npx skills add Timisic/paper2zotero-skill --skill academic-paper --agent claude-code --global
+npx skills add Timisic/paper2zotero-skill --skill academic-paper-reviewer --agent claude-code --global
+npx skills add Timisic/paper2zotero-skill --skill nature-writing --agent claude-code --global
+npx skills add Timisic/paper2zotero-skill --skill nature-shared --agent claude-code --global
 ```
 
 这类工具安装 skill 文件，不安装运行依赖或连接服务。继续按本文启动 setup。若外部管理器已占用同名目录，本安装器会保留它并报冲突；由用户选择保留外部管理或先移走该目录后改用本安装器。不要自动覆盖独立安装。

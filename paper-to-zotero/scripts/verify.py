@@ -7,7 +7,7 @@ the same records preflight and the setup doctor use — so the wizard can
 never report "done" while the skill would refuse to run, and vice versa.
 
 Commands:
-  skill-links     - both skills ready in the selected agent runtime
+  skill-links     - all skills ready in the selected agent runtime
   zotero-local    - Zotero Desktop local API answers on 127.0.0.1:23119
   zotero-sync     - Desktop attachment file sync enabled (absent pref =
                     Zotero 7 default ON) and auto-download not disabled

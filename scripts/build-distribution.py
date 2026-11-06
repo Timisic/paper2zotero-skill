@@ -3,9 +3,13 @@
 from pathlib import Path
 import argparse
 import shutil
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / 'paper-to-zotero/scripts'))
+from agent_installation import SKILL_NAMES
+from install import _files
 
 
 def build(output: Path) -> Path:
@@ -17,16 +21,13 @@ def build(output: Path) -> Path:
         stage = Path(temporary) / release.name
         stage.mkdir(parents=True)
         shutil.copy2(ROOT / 'README.md', stage / 'README.md')
+        shutil.copy2(ROOT / 'THIRD_PARTY.md', stage / 'THIRD_PARTY.md')
         shutil.copytree(ROOT / 'install', stage / 'install')
-        for skill_name in ('paper-to-zotero', 'discussion-drafter'):
-            skill = stage / skill_name
-            skill.mkdir()
-            shutil.copy2(ROOT / skill_name / 'SKILL.md', skill / 'SKILL.md')
-            for name in ('scripts', 'references', 'agents', 'assets'):
-                source = ROOT / skill_name / name
-                if source.is_dir():
-                    shutil.copytree(source, skill / name,
-                                    ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        for skill_name in SKILL_NAMES:
+            for relative in _files(ROOT / skill_name):
+                target = stage / skill_name / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / skill_name / relative, target)
         # User README is standalone; developer links stay in the repository only.
         readme = stage / 'README.md'
         readme.write_text(readme.read_text(encoding='utf-8').split('<!-- repository-only -->')[0].rstrip() + '\n', encoding='utf-8')

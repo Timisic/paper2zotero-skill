@@ -1,6 +1,6 @@
 # Architecture and working context
 
-`paper-to-zotero/` and `discussion-drafter/` are the distributable skills. [README.md](README.md) covers user configuration and use; [SKILL.md](paper-to-zotero/SKILL.md) and its references define literature ingestion. [Discussion Drafter](discussion-drafter/SKILL.md) defines collection-scoped discussion writing through Zotero MCP. Public validation scope and platform limitations are documented in [docs/README.md](docs/README.md).
+`paper-to-zotero/` and `discussion-drafter/` are this repository's skills. `academic-paper/`, `academic-paper-reviewer/`, `nature-writing/` and `nature-shared/` are vendored unmodified writing skills distributed with them ([THIRD_PARTY.md](THIRD_PARTY.md)). [README.md](README.md) covers user configuration and use; [SKILL.md](paper-to-zotero/SKILL.md) and its references define literature ingestion. [Discussion Drafter](discussion-drafter/SKILL.md) defines collection-scoped discussion writing through Zotero MCP. Public validation scope and platform limitations are documented in [docs/README.md](docs/README.md).
 
 ## Workflow
 
