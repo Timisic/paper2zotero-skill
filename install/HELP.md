@@ -59,7 +59,7 @@ Windows 双击 `install/setup-demo.cmd`，macOS/Linux 运行 `bash install/setup
 
 ## 助手里找不到技能
 
-新开一个助手会话再试。仍找不到时，让助手“检查 paper-to-zotero、academic-paper、nature-writing、nature-shared 和 discussion-drafter 是否安装到了当前助手”。安装器支持 Claude Code、Codex 和 Pi，所选助手会同时安装全部技能；需要全部助手时选择 `all`。
+新开一个助手会话再试。仍找不到时，让助手“检查 paper-to-zotero、academic-paper、academic-paper-reviewer、nature-writing、nature-shared 和 discussion-drafter 是否安装到了当前助手”。安装器支持 Claude Code、Codex 和 Pi，所选助手会同时安装全部技能；需要全部助手时选择 `all`。
 
 从旧版升级时，安装器会迁移它管理的 `literature-to-zotero` 安装，旧入口保留在助手目录旁的备份文件夹。独立安装不会覆盖；不同助手中存在冲突的自定义总结提示词时，会保留并提示选择。账号配置继续读取 `~/.config/literature-to-zotero/`，无需重填密钥；该兼容目录不代表旧 skill 仍需使用。
 

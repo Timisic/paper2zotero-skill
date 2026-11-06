@@ -1,6 +1,6 @@
 # Paper to Zotero
 
-告诉 AI 你想研究什么，它会帮你找论文、整理候选清单。你选好后，它会获取全文、按论文语种生成结构化阅读笔记，并保存到 Zotero。已有的 PDF 也能直接处理。本仓库一起安装五个 skill：`paper-to-zotero` 负责文献整理入库；写作用三个，文献综述用 `academic-paper` 的 lit-review 模式，引言用 `nature-writing`（依赖随附的 `nature-shared`），讨论用 `discussion-drafter`。
+告诉 AI 你想研究什么，它会帮你找论文、整理候选清单。你选好后，它会获取全文、按论文语种生成结构化阅读笔记，并保存到 Zotero。已有的 PDF 也能直接处理。本仓库一起安装六个 skill：`paper-to-zotero` 负责文献整理入库；写作用三个，文献综述用 `academic-paper` 的 lit-review 模式（方法缺陷检查表来自随附的 `academic-paper-reviewer`），引言用 `nature-writing`（依赖随附的 `nature-shared`），讨论用 `discussion-drafter`。
 
 ## 一句话开始
 
@@ -29,11 +29,11 @@
 
 入库完成后，写作分三步，都只引用 Zotero 集合里的文献：
 
-- **文献综述**：`academic-paper` 的 lit-review 模式，来自 [academic-research-skills](https://github.com/Imbad0202/academic-research-skills)，CC BY-NC 4.0，仅限非商业使用。
+- **文献综述**：`academic-paper` 的 lit-review 模式，逐篇方法缺陷检查表读自随附的 `academic-paper-reviewer`，均来自 [academic-research-skills](https://github.com/Imbad0202/academic-research-skills)，CC BY-NC 4.0，仅限非商业使用。
 - **引言**：`nature-writing` 的 intro 章节，来自 [nature-skills](https://github.com/yuan1z0825/nature-skills)，Apache-2.0。
 - **讨论**：`discussion-drafter`，见下文。
 
-前两个按原样复制，来源、版本和已知限制见 [THIRD_PARTY.md](THIRD_PARTY.md)。它们不会自己读 Zotero：先让助手通过 Zotero MCP 读出集合里的文献和笔记，再交给它们写。
+综述和引言用到的 skill 按原样复制，来源、版本和已知限制见 [THIRD_PARTY.md](THIRD_PARTY.md)。它们不会自己读 Zotero：先让助手通过 Zotero MCP 读出集合里的文献和笔记，再交给它们写。
 
 [Discussion 撰写助手](discussion-drafter/SKILL.md) 是独立 skill：根据你的研究结果，通过已连接的 Zotero MCP 读取指定分类集合及子集合的笔记，核对关键论断，再生成四部分讨论正文与 APA 第七版参考文献表。默认不导出机器可读引用文件。
 

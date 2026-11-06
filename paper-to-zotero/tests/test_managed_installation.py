@@ -46,6 +46,7 @@ def test_installed_nature_writing_reads_its_sibling_shared_references(tmp_path, 
     install.install('claude-code')
     writing = agent_installation.agent_roots()['claude-code'] / 'nature-writing'
     assert (writing / '../nature-shared/core/nature-introduction.md').is_file()
+    assert (writing.parent / 'academic-paper-reviewer/references/review_criteria_framework.md').is_file()
     for name in agent_installation.SKILL_NAMES:
         assert (writing.parent / name / 'SKILL.md').is_file()
     assert agent_installation.installation_ok('claude-code')
