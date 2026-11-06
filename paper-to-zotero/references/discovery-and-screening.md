@@ -12,7 +12,7 @@ Prefer terminology found in user context and seed papers. Treat model-generated 
 
 ## Rounds and the stopping rule
 
-- The default round is scansci. That is the source when `SEARCH_BACKEND` is unset. One command, `discovery.py`, still runs the round. Set `SEARCH_BACKEND=kimi` for Kimi WebBridge. Set `SEARCH_BACKEND=http` or pass `--sources openalex,semantic_scholar` when OpenAlex and Semantic Scholar should answer together. Those results are merged and deduplicated. An explicit `--sources` list wins over `SEARCH_BACKEND`. One initial round may contain a few controlled queries. Do not dress each query up as its own supplementary round.
+- The default round is scansci. That is the source when `SEARCH_BACKEND` is unset. One command, `discovery.py`, still runs the round. When scansci fails (any status but `ok`, `empty` or `skipped`) and no `--sources` is given, the same round asks Kimi WebBridge with the remaining budget. That outcome's detail starts with `fallback for ScanSci`, and a Kimi failure stays a recorded failure. Set `SEARCH_BACKEND=kimi` to search with Kimi WebBridge only. Set `SEARCH_BACKEND=http` or pass `--sources openalex,semantic_scholar` when OpenAlex and Semantic Scholar should answer together. Those results are merged and deduplicated. An explicit `--sources` list wins over `SEARCH_BACKEND`. One initial round may contain a few controlled queries. Do not dress each query up as its own supplementary round.
 - **At most one supplementary round by default**, and only when reliable candidates are clearly too few or missing information genuinely blocks a relevance judgement. It uses the same sources as the first round. Do not chain every provider.
 - Network retries and the configured direct/proxy switch are not supplementary rounds, but they spend the same run-level time budget. An outer layer never resets an inner one.
 - Stop and show the list when reliable candidates suffice, when the supplementary budget is spent, or when the run's time budget (~5 minutes, `workflow.py status` reports it) is reached. At the boundary, finish the bounded request already in flight and return results with a coverage note — do not start another round.
@@ -39,7 +39,9 @@ python "$SKILL_DIR/scripts/discovery.py" --round supplementary \
 ```
 
 Give each round its own `--output`, then screen across the files and import the
-chosen candidates once with `workflow.py import-candidates`. A round writes its
+chosen candidates with `workflow.py import-candidates`. An import appends: a
+candidate whose id or DOI is already stored is skipped, and the output reports
+`imported` and `skipped`. A round writes its
 file only when at least one source answered — a round nobody answered writes
 nothing and exits non-zero, so a dead network can never replace a list you
 already have with an empty one.

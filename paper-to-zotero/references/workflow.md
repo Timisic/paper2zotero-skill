@@ -15,7 +15,7 @@ python "$SKILL_DIR/scripts/preflight.py" --json --stage ingestion
 | `discovery` | nothing local | Zotero Desktop, file sync, Kimi |
 | `acquisition` | nothing: an open PDF is an HTTPS GET | Kimi WebBridge, Zotero of any kind |
 | `browser_fallback` | Kimi WebBridge connected | Zotero of any kind |
-| `conversion` | One converter: self-hosted MinerU (`MINERU_API_BASE`, default `http://192.168.8.167:8000`), else a MinerU cloud token, else markitdown. Upload hops also need recorded consent | Zotero Desktop |
+| `conversion` | Any one converter: self-hosted MinerU (`MINERU_API_BASE`, default `http://192.168.8.167:8000`), a MinerU cloud token, or markitdown. Each paper falls through them in that order. Upload hops also need recorded consent | Zotero Desktop |
 | `ingestion` | Local Zotero write (`Zotero-Server-ID` on `127.0.0.1:23119`) or a Web API key with write permission | The other write path |
 | `local_sync` | Zotero Desktop local API and attachment file sync | — |
 
@@ -57,7 +57,7 @@ python "$SKILL_DIR/scripts/workflow.py" import-candidates --run-dir <run_dir> --
 python "$SKILL_DIR/scripts/candidate_table.py" --input <candidates.json> --output <candidate-table.md>
 ```
 
-The table needs a screening sentence (`hit_reason`) and refuses more than 15 rows unless `--max-rows` is raised because the user asked for a longer list. `candidate_set` is optional: label candidates only when the distinction helps this user.
+A later import appends only new candidates and reopens the selection gate when it added one. The table needs a screening sentence (`hit_reason`) and refuses more than 15 rows unless `--max-rows` is raised because the user asked for a longer list. `candidate_set` is optional: label candidates only when the distinction helps this user.
 
 After the user's confirmation:
 
@@ -69,6 +69,8 @@ python "$SKILL_DIR/scripts/workflow.py" approve-candidates --run-dir <run_dir> \
 python "$SKILL_DIR/scripts/workflow.py" consent --run-dir <run_dir> \
   --service mineru --decision approved --source '<consent message reference>'
 ```
+
+`approve-candidates` adds its ids to the current selection. To take papers out, run `workflow.py revoke-candidates --run-dir <run_dir> --ids '<id1,id2>'`: they return to `discovered` and keep their artifacts.
 
 `--ids` narrows consent to a subset; omitted means the current selected set. `denied` and `revoked` are also accepted. Later additions are not implicitly consented. Repeating the same selection preserves progress.
 
@@ -142,4 +144,4 @@ Paper | PDF | Markdown | Summary | Zotero read-back | Local sync | Pending
 
 Present it in the user's language, with the collection name and the local run path. A row is complete only when every artifact is present and synced — a readable PDF alone is not a completed paper, and read back with local sync pending is delivered, not blocked.
 
-Each row separates three things. `pending` is what the paper is missing right now, computed from its artifacts, so a warning from an attempt that later succeeded never keeps a finished paper looking unfinished. `notes` is the observed history behind those gaps. `actionable` says whether re-running could still change the row — a paper with no obtainable full text is finished, not waiting. Without `--storage-root` the local copy is never inspected, and the row says `local sync not checked` rather than claiming a sync failure.
+Each row separates three things. `pending` is what the paper is missing right now, computed from its artifacts, so a warning from an attempt that later succeeded never keeps a finished paper looking unfinished. `notes` is the recent history behind those gaps, and a complete row has none. The report counts `delivered` (`read_back_verified` and `sync_pending`), `metadata_only` and `partial` separately. `actionable` says whether re-running could still change the row: a paper with no obtainable full text is finished, not waiting. Without `--storage-root` the local copy is never inspected, and the row says `local sync not checked` rather than claiming a sync failure.

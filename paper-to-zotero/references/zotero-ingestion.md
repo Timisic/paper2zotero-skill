@@ -29,15 +29,15 @@ Each paper ends in one state, and every one of them is a delivery, not a retry s
 | Paper state | Meaning |
 |---|---|
 | `read_back_verified` | PDF and summary written, read back, and present in Desktop storage with matching hashes |
-| `sync_pending` | everything is verified in the cloud; Zotero Desktop has not downloaded the binary yet |
+| `sync_pending` | everything is read back; Zotero Desktop has not downloaded the binary yet |
 | `partial` | written and read back, but an artifact is still missing (`pending` names which) |
 | `metadata_only` | no full text was obtainable; explicitly not a completed paper |
 
-A run-level `status` of `partial` therefore means "delivered, with named gaps", and only `pending` asks the caller to act. `zotero-state.json` holds per-operation and per-paper results. `manifest.json` reflects completed paper stages; a pending operation remains in the writer journal. Read `workflow.py status` and the writer journal together after a failure. The original local artifacts remain the reading source while Desktop sync is pending.
+A run-level `status` of `partial` therefore means "delivered, with named gaps", and only `pending` asks the caller to act. The report's `delivered` count covers `read_back_verified` and `sync_pending` only. `zotero-state.json` holds per-operation and per-paper results. `manifest.json` reflects completed paper stages; a pending operation remains in the writer journal. Read `workflow.py status` and the writer journal together after a failure. The original local artifacts remain the reading source while Desktop sync is pending.
 
 ## Completion and local files
 
-Cloud-verified papers are delivered immediately. When local files are absent or different the paper is reported `sync_pending` and the command still exits 0 — do not hold the batch, poll, or re-download the sources. Re-run the same command later, or use the standalone local check below, to upgrade the evidence. Inspect preflight if sync stays pending: file sync must be enabled, and automatic downloads must allow associated files.
+Read-back papers are delivered immediately. When local files are absent or different the paper is reported `sync_pending` and the command still exits 0. Do not hold the batch, poll, or re-download the sources. Re-run the same command later, or use the standalone local check below, to upgrade the evidence. Inspect preflight if sync stays pending: file sync must be enabled, and automatic downloads must allow associated files.
 
 The standalone local check remains available:
 

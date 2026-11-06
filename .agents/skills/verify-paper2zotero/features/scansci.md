@@ -6,7 +6,8 @@ Search and download through scansci-pdf 1.19.0 when `SEARCH_BACKEND` is unset. G
 
 - `search`: an omitted, empty, or whitespace `SEARCH_BACKEND` calls `scansci_retrieval.search`. A missing install or any version other than `1.19.0` is `not_configured` and names `pip install 'scansci-pdf==1.19.0'`. An empty hit list is `empty`. A library error or a non-list payload is `unavailable`. A spent budget is `skipped` and does not call the library.
 - `download`: `fetch_candidate` prefers a DOI, otherwise an arXiv id, recorded as `preprint`. No DOI and no arXiv id is `NotAddressable` and writes no scansci trail row. Grey sends `strategy=fastest` and `scihub_enabled=True`, so a Sci-Hub file is kept. `--legal-only` or `SCANSCI_LEGAL_ONLY` set to `1`, `true`, `yes`, `legal`, or `legal_only` forces legal sources and drops opaque labels such as Sci-Hub and `local_cache`. An unknown value raises `ValueError`.
-- `backend`: `SEARCH_BACKEND=http` and the aliases `openalex,semantic_scholar` and `openalex+semantic_scholar` select OpenAlex and Semantic Scholar. `SEARCH_BACKEND=kimi` stays Kimi. The HTTP client rejects the source name `scansci`.
+- `fallback`: when no `--sources` is given and scansci fails (any status but `ok`, `empty` or `skipped`), the same round asks Kimi. That outcome's detail starts with `fallback for ScanSci`. A failed Kimi answer is a second recorded failure.
+- `backend`: `SEARCH_BACKEND=http` and the aliases `openalex,semantic_scholar` and `openalex+semantic_scholar` select OpenAlex and Semantic Scholar. `SEARCH_BACKEND=kimi` searches with Kimi only. The HTTP client rejects the source name `scansci`.
 
 ## How to get to it (user POV)
 
