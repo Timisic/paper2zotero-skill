@@ -1,6 +1,6 @@
 # ADR-0002: Use the user's browser as a PDF acquisition channel
 
-Status: Accepted for browser transport. Routing precedence is superseded by [ADR-0004](0004-http-first-discovery-and-acquisition.md).
+Status: Superseded by [ADR-0005](0005-ingest-existing-pdf-scansci-kimi.md).
 
 Some full-text access depends on a logged-in publisher session, institutional access or an interactive challenge. Reimplementing these sessions in an HTTP client would duplicate browser state and make access failures harder to diagnose. Adopting an entire publisher-scraper project would also duplicate the existing browser connection.
 

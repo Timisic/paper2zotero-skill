@@ -133,13 +133,6 @@ def check(*, as_json: bool = False, group: bool = False) -> int:
     rows: list[dict[str, object]] = []
     python_ok = sys.version_info >= (3, 11)
     rows.append({'name': '运行工具', 'ok': python_ok, 'action': '' if python_ok else '重新运行安装入口。'})
-    try:
-        pdf = subprocess.run(['pdftotext', '-v'], capture_output=True, timeout=10)
-        pdf_ok = pdf.returncode == 0
-    except (OSError, subprocess.SubprocessError):
-        pdf_ok = False
-    rows.append({'name': 'PDF 文本工具', 'ok': pdf_ok,
-                 'action': '' if pdf_ok else '重新运行安装入口，修复 PDF 工具。'})
     rows.append(probe('skill-links'))
     rows.append(search_row(credentials.search_backend()))
     rows.append(conversion_row())

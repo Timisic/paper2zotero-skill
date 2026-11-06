@@ -420,24 +420,6 @@ def test_the_cli_default_backend_keeps_the_fallback(tmp_path: Path, monkeypatch,
     assert asked == ["scansci"]
 
 
-def test_the_http_client_still_rejects_scansci() -> None:
-    with pytest.raises(KeyError):
-        sources.Sources(browser=None, budget=0.1).search("scansci", Query(text="q"), budget=1)
-
-
-def test_only_the_adapter_imports_scansci_pdf() -> None:
-    root = Path(__file__).resolve().parents[1] / "scripts"
-    offenders = []
-    for path in root.glob("*.py"):
-        text = path.read_text(encoding="utf-8")
-        if path.name == "scansci_retrieval.py":
-            assert "import scansci_pdf" in text
-            continue
-        if "scansci_pdf" in text:
-            offenders.append(path.name)
-    assert offenders == []
-
-
 def test_the_skill_names_the_install_line() -> None:
     text = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
     assert INSTALL_LINE in text

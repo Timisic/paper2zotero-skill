@@ -9,6 +9,8 @@ import unittest
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'paper-to-zotero/scripts'))
+from agent_installation import SKILL_NAMES  # noqa: E402
 
 
 def environment(home):
@@ -43,7 +45,7 @@ def check_native_repeat_install_and_removed_download(tmp_path):
         result = run_setup(package, env, '-DependenciesOnly')
         assert result.returncode == 0, result.stdout + result.stderr
     skill_root = home / '.codex/skills'
-    assert list(skill_root.rglob('SKILL.md')) == [skill_root / 'paper-to-zotero/SKILL.md']
+    assert sorted(skill_root.glob('*/SKILL.md')) == sorted(skill_root / name / 'SKILL.md' for name in SKILL_NAMES)
     assert not list(home.rglob('.literature-backup-*')), 'identical reinstall should not publish another copy'
     result = run_setup(package, env, '-Check')
     assert result.returncode == 1, result.stdout + result.stderr
@@ -66,11 +68,11 @@ def check_native_terminal_has_tty_and_verified_poppler(tmp_path):
     (package / 'paper-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
 set -euo pipefail
 [[ -t 0 && -t 1 ]]
-[[ "$1" == --demo ]]
+(( $# == 0 ))
 pdftotext -v >/dev/null 2>&1
 printf 'tty-and-poppler-ok' > "$PAPER2ZOTERO_TEST_RESULT"
 ''', encoding='utf-8', newline='\n')
-    result = run_setup(package, env, '-Demo')
+    result = run_setup(package, env)
     assert result.returncode == 0, result.stdout + result.stderr
     assert marker.read_text() == 'tty-and-poppler-ok'
 
@@ -94,19 +96,18 @@ class WindowsSetupTests(unittest.TestCase):
             (package / 'paper-to-zotero/scripts/setup_gui.py').write_text('''import argparse, os, time
 from pathlib import Path
 parser = argparse.ArgumentParser()
-parser.add_argument('--demo', action='store_true')
 parser.add_argument('--advanced', action='store_true')
 parser.add_argument('--agent')
 parser.add_argument('--ready-file')
 args = parser.parse_args()
-assert args.demo and args.agent == 'claude-code'
+assert args.agent == 'claude-code'
 assert args.advanced == (os.environ['PAPER2ZOTERO_TEST_ADVANCED'] == '1')
 Path(args.ready_file).write_text('ready')
 time.sleep(2)
 Path(os.environ['PAPER2ZOTERO_TEST_RESULT']).write_text('native-ok')
 ''', encoding='utf-8')
             result = subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-                                     '-File', str(package / 'install/setup.ps1'), '-Demo',
+                                     '-File', str(package / 'install/setup.ps1'),
                                      '-Agent', 'claude-code', '-LaunchWizard', *(['-Advanced'] if advanced else [])], env=env,
                                     capture_output=True, text=True, encoding='utf-8', timeout=30)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -162,23 +163,9 @@ for failure in -g -echo; do
 done
 printf 'masked-input-restored' > "$PAPER2ZOTERO_TEST_RESULT"
 ''', encoding='utf-8', newline='\n')
-            result = run_setup(package, env, '-Demo')
+            result = run_setup(package, env)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(marker.read_text(), 'masked-input-restored')
-
-    def test_real_demo_stages(self):
-        with tempfile.TemporaryDirectory() as folder:
-            env = environment(Path(folder) / '用户 home')
-            git = shutil.which('git.exe')
-            self.assertIsNotNone(git)
-            bash = Path(git).parent.parent / 'bin/bash.exe'
-            for extra, stage in [([], '4/4'), (['--advanced'], '2/2')]:
-                result = subprocess.run([str(bash), str(ROOT / 'install/windows-wizard.sh'),
-                                         '--demo', *extra], env=env, input='\n' * 40, capture_output=True,
-                                        text=True, encoding='utf-8', errors='replace', timeout=20)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertIn('Stage ' + stage, result.stdout)
-            self.assertFalse((Path(env['HOME']) / '.config/literature-to-zotero/env').exists())
 
     def test_agent_launch_returns_with_terminal_ready(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -193,7 +180,7 @@ test -t 0
 sleep 3
 printf 'finished' > "$PAPER2ZOTERO_TEST_RESULT"
 ''', encoding='utf-8', newline='\n')
-            result = run_setup(package, env, '-Demo', '-LaunchWizard')
+            result = run_setup(package, env, '-LaunchWizard')
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn('Wizard terminal is ready', result.stdout)
             self.assertFalse(marker.exists(), 'Agent waited for the entire wizard to finish')

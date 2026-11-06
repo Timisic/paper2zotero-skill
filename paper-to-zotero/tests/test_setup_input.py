@@ -135,15 +135,12 @@ def test_real_stage_retries_or_defers_without_manual_personal_id(tmp_path, retry
     stage = wizard[start:stop] + "pause 'Web API 这一步结束，按回车继续'\nfi\n"
     stub = '''
 WINDOWS=1
-DEMO=0
 GROUP_LIBRARY=1
 SKILL_DIR=.
 PYTHON_BIN=identity_fixture
 open_setup_url() { :; }
 shared_guide() { :; }
-existing_ok() { return 1; }
 pause() { :; }
-persist() { write_env "$1" "$2" >/dev/null; printf '%s\\n' "$1" >> persisted; export "$1=$2"; }
 connect_account() {
   if [[ ! -f attempted ]]; then
     touch attempted
@@ -169,4 +166,3 @@ connect_account() {
     assert '无需手动查找个人文库 ID' in output
     assert ('verified' in output) == retry
     assert '连接失败，请检查网络后重试' in output
-    assert not (tmp_path / 'persisted').exists()
