@@ -50,6 +50,8 @@ os.environ["MINERU_API_BASE"] = ""
 os.environ.setdefault("LITERATURE_THROTTLE_DIR",
                       tempfile.mkdtemp(prefix="literature-throttle-"))
 os.environ["LITERATURE_BROWSER_DISABLED"] = "1"
+# An installed markitdown would rescue every failed MinerU hop. Tests opt in.
+os.environ["LITERATURE_MARKITDOWN_DISABLED"] = "1"
 
 
 @pytest.fixture(autouse=True)

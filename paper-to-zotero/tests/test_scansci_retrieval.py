@@ -349,6 +349,77 @@ def test_discover_asks_scansci_when_the_backend_is_unset(tmp_path: Path, monkeyp
     assert saved[0]["hit_reason"] is None
 
 
+def _scansci_answers(monkeypatch, tmp_path: Path, status: str, kimi_status: str = "ok") -> list[str]:
+    monkeypatch.setattr(credentials, "SKILL_ENV_FILE", tmp_path / "missing.env")
+    monkeypatch.delenv("SEARCH_BACKEND", raising=False)
+    asked: list[str] = []
+
+    def fake_scansci(query, *, budget):
+        asked.append("scansci")
+        return sources.Answer(source="scansci", question="search", status=status,
+                              detail="scansci-pdf missing" if status != "empty" else "",
+                              observed_at="2026-01-01T00:00:00+00:00")
+
+    def fake_kimi(query, budget):
+        asked.append("kimi")
+        assert budget > 0
+        records = [{"title": "From Kimi", "year": 2024, "authors": ["Ada Lovelace"]}] if kimi_status == "ok" else []
+        return sources.Answer(source="kimi", question="search", status=kimi_status, records=records,
+                              detail="https://example.edu/search", observed_at="2026-01-01T00:00:00+00:00")
+
+    monkeypatch.setattr(scansci_retrieval, "search", fake_scansci)
+    monkeypatch.setattr(discovery, "kimi_search", fake_kimi)
+    return asked
+
+
+def test_a_scansci_channel_failure_falls_back_to_kimi(tmp_path: Path, monkeypatch) -> None:
+    asked = _scansci_answers(monkeypatch, tmp_path, "not_configured")
+    output = tmp_path / "candidates.json"
+    result = discovery.discover(discovery.DiscoveryRequest(query=Query(text="robots"), output=output))
+    assert asked == ["scansci", "kimi"]
+    assert [entry["status"] for entry in result["sources"]] == ["not_configured", "ok"]
+    assert "fallback for ScanSci" in result["sources"][1]["detail"]
+    assert result["status"] == "partial"
+    assert json.loads(output.read_text(encoding="utf-8"))[0]["title"] == "From Kimi"
+
+
+def test_an_empty_scansci_answer_does_not_ask_kimi(tmp_path: Path, monkeypatch) -> None:
+    asked = _scansci_answers(monkeypatch, tmp_path, "empty")
+    result = discovery.discover(discovery.DiscoveryRequest(query=Query(text="robots"),
+                                                           output=tmp_path / "candidates.json"))
+    assert asked == ["scansci"]
+    assert result["status"] == "ok"
+
+
+def test_explicit_scansci_sources_get_no_fallback(tmp_path: Path, monkeypatch) -> None:
+    asked = _scansci_answers(monkeypatch, tmp_path, "unavailable")
+    result = discovery.discover(discovery.DiscoveryRequest(query=Query(text="robots"),
+                                                           output=tmp_path / "candidates.json",
+                                                           sources=("scansci",)))
+    assert asked == ["scansci"]
+    assert result["status"] == "failed"
+
+
+def test_a_failed_kimi_fallback_stays_a_failure(tmp_path: Path, monkeypatch) -> None:
+    asked = _scansci_answers(monkeypatch, tmp_path, "unavailable", kimi_status="unavailable")
+    output = tmp_path / "candidates.json"
+    result = discovery.discover(discovery.DiscoveryRequest(query=Query(text="robots"), output=output))
+    assert asked == ["scansci", "kimi"]
+    assert result["status"] == "failed"
+    assert result["wrote_output"] is False and not output.exists()
+    assert result["failed_sources"] == ["ScanSci", "Kimi"]
+
+
+def test_the_cli_default_backend_keeps_the_fallback(tmp_path: Path, monkeypatch, capsys) -> None:
+    asked = _scansci_answers(monkeypatch, tmp_path, "unavailable")
+    code = discovery.main(["--query", "robots", "--output", str(tmp_path / "candidates.json")])
+    assert code == 0
+    assert asked == ["scansci", "kimi"]
+    asked.clear()
+    discovery.main(["--query", "robots", "--output", str(tmp_path / "again.json"), "--sources", "scansci"])
+    assert asked == ["scansci"]
+
+
 def test_the_http_client_still_rejects_scansci() -> None:
     with pytest.raises(KeyError):
         sources.Sources(browser=None, budget=0.1).search("scansci", Query(text="q"), budget=1)

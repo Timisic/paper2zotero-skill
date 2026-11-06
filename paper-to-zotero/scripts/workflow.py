@@ -16,6 +16,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 from runtime_io import absolute_path, file_lock, text_hash
+from sources import canonical_doi
 
 
 SCHEMA_VERSION = 2
@@ -168,6 +169,11 @@ def resolve_artifact(run_dir: Path, value: str) -> Path:
     return absolute_path(path if path.is_absolute() else run_dir / path)
 
 
+def readback_at(evidence: dict[str, Any]) -> str | None:
+    """When Zotero read the write back. Runs before the rename stored `cloud_verified_at`."""
+    return evidence.get("readback_verified_at") or evidence.get("cloud_verified_at")
+
+
 class Paper:
     """One selected paper: its state, its artifacts and its write evidence.
 
@@ -225,7 +231,7 @@ class Paper:
         return bool(self.pdf) or self.is_metadata_only
 
     def validate_read_back(self, evidence: dict[str, Any]) -> None:
-        if not evidence.get("collection_verified") or not evidence.get("note_key") or not evidence.get("cloud_verified_at"):
+        if not evidence.get("collection_verified") or not evidence.get("note_key") or not readback_at(evidence):
             raise ValueError("collection and note verification evidence required")
         if not self.path("pdf") or not self.path("summary"):
             raise ValueError("PDF and summary required")
@@ -460,7 +466,21 @@ def command_record_search(args: argparse.Namespace) -> None:
     print(json.dumps(summary, ensure_ascii=False))
 
 
+def find_candidate(existing: Sequence[Any], *, doi: str | None = None, identity: str | None = None) -> dict[str, Any] | None:
+    doi_norm = canonical_doi(doi) if doi else None
+    for item in existing:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        if identity and item.get("id") == identity:
+            return item
+        item_doi = canonical_doi(item.get("doi")) if item.get("doi") else None
+        if doi_norm and (item_doi == doi_norm or item.get("id") == f"doi:{doi_norm}"):
+            return item
+    return None
+
+
 def command_import_candidates(args: argparse.Namespace) -> None:
+    """Append candidates the run does not hold yet. Earlier rounds stay."""
     run_dir = absolute_path(args.run_dir)
     manifest = load_manifest(run_dir)
     candidates = read_json(Path(args.file))
@@ -472,17 +492,26 @@ def command_import_candidates(args: argparse.Namespace) -> None:
         if not candidate_id or candidate_id in ids:
             fail("each candidate must have a unique id")
         ids.append(candidate_id)
-        manifest["papers"].setdefault(candidate_id, {"state": PaperState.DISCOVERED.value, "artifacts": {}, "warnings": []})
-    write_json(run_dir / "candidates.json", candidates)
-    manifest["gates"]["candidate_selection"] = "pending"
-    manifest["events"].append({"at": utc_now(), "event": "candidates_imported", "count": len(candidates)})
+    stored = read_json(run_dir / "candidates.json")
+    added = []
+    for candidate in candidates:
+        if not find_candidate(stored, doi=candidate.get("doi"), identity=candidate["id"]):
+            stored.append(candidate)
+            added.append(candidate["id"])
+    for item in stored:
+        manifest["papers"].setdefault(item["id"], {"state": PaperState.DISCOVERED.value, "artifacts": {}, "warnings": []})
+    if added:
+        write_json(run_dir / "candidates.json", stored)
+        manifest["gates"]["candidate_selection"] = "pending"
+    manifest["events"].append({"at": utc_now(), "event": "candidates_imported", "count": len(added),
+                               "skipped": len(candidates) - len(added)})
     save_manifest(run_dir, manifest)
-    print(json.dumps({"imported": len(candidates)}))
+    print(json.dumps({"imported": len(added), "skipped": len(candidates) - len(added)}))
 
 
 def approve_selection(run_dir: Path, ids: Sequence[str], source: str = "user-selection",
                       rule: str = "explicit IDs") -> dict[str, Any]:
-    """Approve exactly these candidate ids. The same selection is left untouched."""
+    """Add these candidate ids to the selection. Ids already selected stay selected."""
     run_dir = absolute_path(run_dir)
     manifest = load_manifest(run_dir)
     requested = list(dict.fromkeys(str(value).strip() for value in ids if str(value).strip()))
@@ -490,9 +519,10 @@ def approve_selection(run_dir: Path, ids: Sequence[str], source: str = "user-sel
     unknown = [value for value in requested if value not in current_ids]
     if unknown:
         raise ValueError("unknown candidate ids: " + ", ".join(unknown))
-    if requested == manifest["selected_ids"] and manifest["gates"]["candidate_selection"] == "approved":
-        return {"selected": requested, "unchanged": True}
-    manifest["selected_ids"] = requested
+    selected = list(dict.fromkeys([*manifest["selected_ids"], *requested]))
+    if selected == manifest["selected_ids"] and manifest["gates"]["candidate_selection"] == "approved":
+        return {"selected": selected, "unchanged": True}
+    manifest["selected_ids"] = selected
     for candidate_id in requested:
         if manifest["papers"][candidate_id]["state"] == PaperState.DISCOVERED.value:
             manifest["papers"][candidate_id]["state"] = PaperState.SELECTED.value
@@ -502,18 +532,40 @@ def approve_selection(run_dir: Path, ids: Sequence[str], source: str = "user-sel
     if not snapshot.exists():
         write_json(snapshot, read_json(run_dir / "candidates.json"))
     manifest["selection"] = {
-        "ids": requested, "at": utc_now(),
+        "ids": selected, "requested": requested, "at": utc_now(),
         "source": source, "rule": rule,
         "candidate_sha256": snapshot_hash, "candidate_snapshot": str(snapshot),
     }
     manifest["events"].append({"event": "candidate_selection_approved", **manifest["selection"]})
     save_manifest(run_dir, manifest)
-    return {"selected": requested}
+    return {"selected": selected}
+
+
+def revoke_selection(run_dir: Path, ids: Sequence[str], source: str = "user-selection") -> dict[str, Any]:
+    """Remove these ids from the selection. Recorded artifacts stay on disk and in the manifest."""
+    run_dir = absolute_path(run_dir)
+    manifest = load_manifest(run_dir)
+    revoked = list(dict.fromkeys(str(value).strip() for value in ids if str(value).strip()))
+    unknown = [value for value in revoked if value not in manifest["selected_ids"]]
+    if unknown:
+        raise ValueError("ids are not selected: " + ", ".join(unknown))
+    manifest["selected_ids"] = [value for value in manifest["selected_ids"] if value not in revoked]
+    for candidate_id in revoked:
+        if manifest["papers"][candidate_id]["state"] == PaperState.SELECTED.value:
+            manifest["papers"][candidate_id]["state"] = PaperState.DISCOVERED.value
+    manifest["events"].append({"at": utc_now(), "event": "candidate_selection_revoked",
+                               "ids": revoked, "source": source})
+    save_manifest(run_dir, manifest)
+    return {"selected": manifest["selected_ids"], "revoked": revoked}
 
 
 def command_approve_candidates(args: argparse.Namespace) -> None:
     requested = [value.strip() for value in args.ids.split(",") if value.strip()]
     print(json.dumps(approve_selection(args.run_dir, requested, args.source, args.rule), ensure_ascii=False))
+
+
+def command_revoke_candidates(args: argparse.Namespace) -> None:
+    print(json.dumps(revoke_selection(args.run_dir, args.ids.split(","), args.source), ensure_ascii=False))
 
 
 def command_consent(args: argparse.Namespace) -> None:
@@ -671,23 +723,21 @@ def command_record_paper(args: argparse.Namespace) -> None:
     print(json.dumps({"id": args.id, "state": args.state}))
 
 
-DELIVERED_STATES = {
-    PaperState.READ_BACK_VERIFIED.value, PaperState.SYNC_PENDING.value,
-    PaperState.METADATA_ONLY.value, PaperState.PARTIAL.value,
-}
+DELIVERED_STATES = {PaperState.READ_BACK_VERIFIED.value, PaperState.SYNC_PENDING.value}
 
 
 def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
     """One row of the delivery table: per-artifact truth, not one success rate.
 
-    Cloud completion and local sync are separate columns because a verified
-    cloud attachment is deliverable while Zotero Desktop is still downloading
+    Read-back and local sync are separate columns because an attachment
+    Zotero read back is deliverable while Zotero Desktop is still downloading
     it, and a missing summary must never be hidden behind a written PDF.
 
     `pending` is computed from what the paper has right now, never from its
     warning history — a warning recorded before a retry succeeded must not
-    keep a finished paper looking unfinished forever. The history stays in
-    `notes`, which is why the two fields are separate.
+    keep a finished paper looking unfinished forever. `notes` carries the
+    latest warnings for an unfinished row only. The full history stays in
+    the manifest.
     """
     evidence = paper.zotero
     attachments = evidence.get("attachments", {})
@@ -699,7 +749,7 @@ def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
         pending.append(evidence.get("markdown_status") or "markdown_unavailable")
     if has["pdf"] and not has["summary"]:
         pending.append("summary pending")
-    if has["pdf"] and not evidence.get("cloud_verified_at"):
+    if has["pdf"] and not readback_at(evidence):
         pending.append("Zotero write pending")
     local = None
     if attachments:
@@ -707,6 +757,7 @@ def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
         if not local:
             pending.append("local sync not checked" if evidence.get("local_checked") is False
                            else "local sync pending")
+    complete = not pending and has["pdf"]
     return {
         "id": paper.id,
         "title": title or paper.id,
@@ -714,15 +765,13 @@ def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
         "pdf": has["pdf"],
         "markdown": has["markdown"],
         "summary": has["summary"],
-        "cloud_verified_at": evidence.get("cloud_verified_at"),
+        "readback_verified_at": readback_at(evidence),
         "local_synced": local,
         "pending": list(dict.fromkeys(pending)),
-        # Observed history: why something went the way it did. Read alongside
-        # `pending`, which says what is actually still missing now.
-        "notes": list(dict.fromkeys(paper.warnings))[-3:],
+        "notes": [] if complete else list(dict.fromkeys(paper.warnings))[-3:],
         # Every artifact present, written and synced. A readable PDF alone is
         # not a complete paper, however far the Zotero write got.
-        "complete": not pending and has["pdf"],
+        "complete": complete,
         # Whether re-running could still change this row. A paper with no
         # obtainable full text is finished, not waiting for another attempt.
         "actionable": bool(pending) and not paper.is_metadata_only,
@@ -732,7 +781,7 @@ def paper_report(paper: Paper, title: str | None = None) -> dict[str, Any]:
 def render_report(rows: list[dict[str, Any]]) -> str:
     def mark(value: bool | None) -> str:
         return {True: "yes", False: "no", None: "-"}[value]
-    lines = ["Paper | PDF | Markdown | Summary | Zotero cloud | Local sync | Pending",
+    lines = ["Paper | PDF | Markdown | Summary | Zotero read-back | Local sync | Pending",
              "--- | --- | --- | --- | --- | --- | ---"]
     for row in rows:
         # The latest note explains an incomplete row; a finished row needs no
@@ -741,7 +790,7 @@ def render_report(rows: list[dict[str, Any]]) -> str:
         lines.append(" | ".join([
             str(row["title"]).replace("|", "\\|"),
             mark(row["pdf"]), mark(row["markdown"]), mark(row["summary"]),
-            "verified" if row["cloud_verified_at"] else "-",
+            "verified" if row["readback_verified_at"] else "-",
             mark(row["local_synced"]),
             "; ".join(reasons) or "-",
         ]))
@@ -758,6 +807,8 @@ def command_report(args: argparse.Namespace) -> None:
         "run_dir": str(run.directory),
         "collection": run.collection,
         "delivered": sum(1 for row in rows if row["state"] in DELIVERED_STATES),
+        "metadata_only": sum(1 for row in rows if row["state"] == PaperState.METADATA_ONLY.value),
+        "partial": sum(1 for row in rows if row["state"] == PaperState.PARTIAL.value),
         "papers": rows,
         "table": render_report(rows),
     }, ensure_ascii=False))
@@ -822,6 +873,12 @@ def build_parser() -> argparse.ArgumentParser:
     approve_candidates.add_argument("--source", default="user-selection")
     approve_candidates.add_argument("--rule", default="explicit IDs")
     approve_candidates.set_defaults(func=command_approve_candidates)
+
+    revoke_candidates = commands.add_parser("revoke-candidates", help="remove ids from the selection")
+    revoke_candidates.add_argument("--run-dir", required=True)
+    revoke_candidates.add_argument("--ids", required=True)
+    revoke_candidates.add_argument("--source", default="user-selection")
+    revoke_candidates.set_defaults(func=command_revoke_candidates)
 
     consent = commands.add_parser("consent")
     consent.add_argument("--run-dir", required=True)

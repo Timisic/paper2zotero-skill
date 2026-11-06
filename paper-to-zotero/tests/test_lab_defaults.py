@@ -320,12 +320,21 @@ def test_a_healthy_env_host_is_preferred_over_markitdown(tmp_path: Path, monkeyp
     assert written is not None and written.read_text(encoding="utf-8") == "# From the lab\n"
 
 
-def test_a_tasks_failure_is_reported_and_markitdown_is_not_substituted(tmp_path: Path, monkeypatch) -> None:
+def _fake_markitdown(monkeypatch) -> None:
+    monkeypatch.setattr(mineru_parse, "markitdown_available", lambda: True)
+
+    def fake(pdf: Path) -> str:
+        dest = pdf.parent / "markitdown" / "paper.md"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text("<!-- converter: markitdown; not a MinerU layout parse -->\n\nlocal\n", encoding="utf-8")
+        return str(dest)
+
+    monkeypatch.setattr(mineru_parse, "convert_markitdown", fake)
+
+
+def test_a_tasks_failure_without_markitdown_is_reported(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("MINERU_TOKEN", raising=False)
-    monkeypatch.setattr(
-        mineru_parse, "convert_markitdown",
-        lambda _pdf: (_ for _ in ()).throw(AssertionError("markitdown")),
-    )
+    monkeypatch.setattr(mineru_parse, "markitdown_available", lambda: False)
     run, pdf = _consented_pdf(tmp_path)
     respond, holder = _tasks_peer("# Unused\n", create=500)
     with server(respond) as base:
@@ -337,20 +346,73 @@ def test_a_tasks_failure_is_reported_and_markitdown_is_not_substituted(tmp_path:
         )
     assert result["converted"] == []
     assert "HTTP 500" in result["failed"]["doi:10.1000/alpha"]
+    warnings = workflow.Run.open(run).paper("doi:10.1000/alpha").warnings
+    assert any(item.startswith("markdown_unavailable") and "HTTP 500" in item for item in warnings)
     assert not (pdf.parent / "markitdown").exists()
+
+
+def test_a_tasks_failure_falls_through_to_markitdown(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("MINERU_TOKEN", raising=False)
+    _fake_markitdown(monkeypatch)
+    run, _pdf = _consented_pdf(tmp_path)
+    respond, holder = _tasks_peer("# Unused\n", create=500)
+    with server(respond) as base:
+        holder["base"] = base
+        monkeypatch.setenv("MINERU_API_BASE", base)
+        result = process_run.stage_convert(
+            process_run.ProcessRequest(run_dir=run, poll_timeout=5),
+            ["doi:10.1000/alpha"],
+        )
+    assert result["converted"] == ["doi:10.1000/alpha"], result
+    assert result["failed"] == {} and result["skipped"] == {}
+    assert result["attempts"] == {"doi:10.1000/alpha": [
+        {"converter": "mineru-self-hosted", "reason": "MinerU task create failed: HTTP 500"}]}
+    paper = workflow.Run.open(run).paper("doi:10.1000/alpha")
+    assert paper.markdown is not None and "converter: markitdown" in paper.markdown.read_text(encoding="utf-8")
+    assert not any(item.startswith("markdown_unavailable") for item in paper.warnings)
+
+
+def test_a_paper_without_upload_consent_is_converted_by_markitdown(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("MINERU_TOKEN", raising=False)
+    _fake_markitdown(monkeypatch)
+    run, _pdf = run_with_pdf(tmp_path)
+    respond, holder = _tasks_peer("# Never uploaded\n")
+    calls: list[str] = []
+
+    def recording(method, path, body, headers):
+        calls.append(f"{method} {path}")
+        return respond(method, path, body, headers)
+
+    with server(recording) as base:
+        holder["base"] = base
+        monkeypatch.setenv("MINERU_API_BASE", base)
+        result = process_run.stage_convert(
+            process_run.ProcessRequest(run_dir=run, poll_timeout=5),
+            ["doi:10.1000/alpha"],
+        )
+    assert result["converted"] == ["doi:10.1000/alpha"], result
+    assert result["skipped"] == {}
+    assert "POST /v1/tasks" not in calls
+
+
+def test_an_explicit_base_replaces_the_self_hosted_hop(monkeypatch) -> None:
+    monkeypatch.setenv("MINERU_TOKEN", "sk-fixture")
+    monkeypatch.setattr(mineru_parse, "markitdown_available", lambda: True)
+    respond, holder = _tasks_peer("# Unused\n")
+    with server(respond) as base:
+        holder["base"] = base
+        hops, _miss = process_run.conversion_plan(process_run.ProcessRequest(run_dir=Path("."), mineru_api_base=base))
+    assert hops == [("mineru-self-hosted", base), ("mineru-cloud", mineru_parse.CLOUD_API), ("markitdown", "")]
+    respond, holder = _tasks_peer("# Unused\n", health=500)
+    with server(respond) as base:
+        holder["base"] = base
+        hops, _miss = process_run.conversion_plan(process_run.ProcessRequest(run_dir=Path("."), mineru_api_base=base))
+    assert hops == [("mineru-cloud", base), ("markitdown", "")]
 
 
 def test_markitdown_names_the_self_hosted_health_failure(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("MINERU_TOKEN", raising=False)
-    monkeypatch.setattr(mineru_parse, "markitdown_available", lambda: True)
-
-    def fake(pdf: Path) -> str:
-        dest = pdf.parent / "markitdown" / "paper.md"
-        dest.parent.mkdir(parents=True)
-        dest.write_text("<!-- converter: markitdown; not a MinerU layout parse -->\n\nlocal\n", encoding="utf-8")
-        return str(dest)
-
-    monkeypatch.setattr(mineru_parse, "convert_markitdown", fake)
+    _fake_markitdown(monkeypatch)
     run, _pdf = _consented_pdf(tmp_path)
     respond, holder = _tasks_peer("# Unused\n", health=500)
     with server(respond) as base:

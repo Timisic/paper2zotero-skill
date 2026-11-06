@@ -72,7 +72,7 @@ def test_a_paper_without_a_summary_comes_back_as_an_agent_handoff(tmp_path: Path
     assert "resume_command" in body["next_action"]
     # The PDF was still written and read back while the summary is outstanding.
     assert body["papers"][0]["pdf"] is True
-    assert body["papers"][0]["cloud_verified_at"]
+    assert body["papers"][0]["readback_verified_at"]
 
 
 def test_rerunning_after_the_summary_completes_without_repeating_work(tmp_path: Path) -> None:

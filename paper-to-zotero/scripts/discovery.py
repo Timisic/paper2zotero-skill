@@ -238,7 +238,12 @@ class Budget:
 # ── Retrieval ──────────────────────────────────────────────────────────────
 
 def discover(request: DiscoveryRequest, client: Sources | None = None) -> dict[str, Any]:
-    """Run one retrieval round over every requested source and write the list."""
+    """Run one retrieval round over every requested source and write the list.
+
+    With no named sources the round follows SEARCH_BACKEND, and a source whose
+    channel fails is retried on its `DISCOVERY_FALLBACK` source.
+    """
+    fallbacks = credentials.DISCOVERY_FALLBACK if request.sources is None else {}
     names = tuple(request.sources) if request.sources is not None else credentials.discovery_sources_for()
     request = replace(request, sources=names)
     client = client or Sources()
@@ -248,31 +253,36 @@ def discover(request: DiscoveryRequest, client: Sources | None = None) -> dict[s
     outcomes: list[dict[str, Any]] = []
     raw_total = 0
 
-    for name in request.sources:
+    def ask(name: str) -> Answer:
         fixture = request.fixtures.get(name)
         if fixture is not None:
             payload = json.loads(Path(fixture).read_text(encoding="utf-8"))
             records = list(payload.get("results") or payload.get("data") or [])
-            answer = Answer(source=name, question="search", status="ok" if records else "empty",
-                            records=records, detail="fixture", observed_at=timestamp)
-        elif budget.remaining() <= 0:
+            return Answer(source=name, question="search", status="ok" if records else "empty",
+                          records=records, detail="fixture", observed_at=timestamp)
+        if budget.remaining() <= 0:
             # Recorded, not silently dropped: an unasked source is a coverage
             # fact the user is entitled to see next to the results.
-            answer = Answer(source=name, question="search", status="skipped",
-                            detail="retrieval budget spent", observed_at=timestamp)
-        elif name == "kimi":
-            answer = kimi_search(request.query, budget=min(budget.remaining(), PER_SOURCE_CEILING))
-        elif name == scansci_retrieval.SOURCE:
-            answer = scansci_retrieval.search(
-                request.query,
-                budget=min(budget.remaining(), PER_SOURCE_CEILING),
-            )
-        else:
-            answer = client.search(name, request.query,
-                                   budget=min(budget.remaining(), PER_SOURCE_CEILING, client.budget))
-        outcomes.append(answer.report())
-        raw_total += len(answer.records)
-        batches.append([source_module.normalize(name, record, timestamp) for record in answer.records])
+            return Answer(source=name, question="search", status="skipped",
+                          detail="retrieval budget spent", observed_at=timestamp)
+        if name == "kimi":
+            return kimi_search(request.query, budget=min(budget.remaining(), PER_SOURCE_CEILING))
+        if name == scansci_retrieval.SOURCE:
+            return scansci_retrieval.search(request.query, budget=min(budget.remaining(), PER_SOURCE_CEILING))
+        return client.search(name, request.query,
+                             budget=min(budget.remaining(), PER_SOURCE_CEILING, client.budget))
+
+    for name in request.sources:
+        answers = [(name, ask(name))]
+        fallback = fallbacks.get(name)
+        if fallback and answers[0][1].status not in ("ok", "empty", "skipped"):
+            backup = ask(fallback)
+            detail = f"fallback for {source_module.LABELS.get(name, name)}"
+            answers.append((fallback, replace(backup, detail=f"{detail}: {backup.detail}" if backup.detail else detail)))
+        for asked, answer in answers:
+            outcomes.append(answer.report())
+            raw_total += len(answer.records)
+            batches.append([source_module.normalize(asked, record, timestamp) for record in answer.records])
 
     candidates, merged_count = merge(batches)
     delivered = [entry for entry in outcomes if entry["status"] in ("ok", "empty")]
@@ -570,6 +580,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if unknown:
         workflow.fail("unknown discovery source(s): " + ", ".join(unknown))
     request = request_from_args(args, names)
+    if not args.sources:
+        request = replace(request, sources=None)
     claim_round(request)
     result = discover(request)
     print(json.dumps(result, ensure_ascii=False))

@@ -82,7 +82,7 @@ def test_crlf_summary_readback_uses_same_hash_as_note_writer(tmp_path):
     pdf.write_bytes(b'%PDF-fixture')
     summary.write_bytes('研究 — result\r\nsecond line\r\n'.encode('utf-8'))
     paper = workflow.Paper(tmp_path, 'paper', {'artifacts': {'pdf': str(pdf), 'summary': str(summary)}})
-    evidence = {'collection_verified': True, 'note_key': 'NOTE', 'cloud_verified_at': 'now',
+    evidence = {'collection_verified': True, 'note_key': 'NOTE', 'readback_verified_at': 'now',
                 'note_sha256': hashlib.sha256(summary.read_text(encoding='utf-8').encode('utf-8')).hexdigest(),
                 'attachments': {'source.pdf': {'state': 'binary_verified', 'sha256': hashlib.sha256(pdf.read_bytes()).hexdigest(),
                                                'local_path': str(pdf)}}}

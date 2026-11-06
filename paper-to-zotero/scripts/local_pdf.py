@@ -28,6 +28,7 @@ import paper_artifacts  # noqa: E402
 import process_run  # noqa: E402
 import sources  # noqa: E402
 import workflow  # noqa: E402
+from workflow import find_candidate  # noqa: E402
 
 # A title match this strong is the same work. Anything weaker must not donate
 # its DOI: nearby papers share ordinary words, and a borrowed DOI would become
@@ -274,19 +275,6 @@ def load_candidates(run_dir: Path) -> list[Any]:
     return payload
 
 
-def find_candidate(existing: Sequence[Any], *, doi: str | None = None, identity: str | None = None) -> dict[str, Any] | None:
-    doi_norm = sources.canonical_doi(doi) if doi else None
-    for item in existing:
-        if not isinstance(item, dict) or not item.get("id"):
-            continue
-        if identity and item.get("id") == identity:
-            return item
-        item_doi = sources.canonical_doi(item.get("doi")) if item.get("doi") else None
-        if doi_norm and (item_doi == doi_norm or item.get("id") == f"doi:{doi_norm}"):
-            return item
-    return None
-
-
 def display_title(title: str | None, pdf: Path) -> str:
     if title:
         return title
@@ -478,9 +466,7 @@ def _run_local_pdfs(run_dir: Path, pdfs: Sequence[Path], *, backend: str,
     add_candidates(run_dir, existing, added)
     identities = list(dict.fromkeys(str(plan["id"]) for plan in plans if plan.get("id")))
     if identities:
-        selected = workflow.load_manifest(run_dir)["selected_ids"]
-        workflow.approve_selection(run_dir, list(dict.fromkeys([*selected, *identities])),
-                                   SELECTION_SOURCE, SELECTION_RULE)
+        workflow.approve_selection(run_dir, identities, SELECTION_SOURCE, SELECTION_RULE)
     imported: dict[str, Any] = {}
     seen: set[str] = set()
     mapping: list[dict[str, str]] = []

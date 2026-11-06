@@ -484,7 +484,7 @@ class Writer:
         if self.state['collection'] not in self.get('/items/' + key)['data'].get('collections', []):
             raise ValueError('collection membership changed before read-back')
         result['collection_verified'] = self.state['collection']
-        result['cloud_verified_at'] = utc_now()
+        result['readback_verified_at'] = utc_now()
         local_ok = bool(storage)
         result['local_checked'] = bool(storage)
         for record in attachments:
@@ -500,7 +500,7 @@ class Writer:
             # is a different statement from "Desktop has not downloaded it".
             pending.append('local sync pending' if storage else 'local sync not checked')
         result['pending'] = pending
-        # A cloud-verified paper is deliverable now. `partial` means an artifact
+        # A read-back paper is deliverable now. `partial` means an artifact
         # is still missing; `sync_pending` means only Desktop has yet to catch
         # up. Neither is a failure, and neither reruns the batch.
         if not paper.summary:

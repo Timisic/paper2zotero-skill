@@ -74,8 +74,9 @@ def test_a_warning_from_a_failed_attempt_does_not_outlive_the_fix(tmp_path: Path
     assert row["pending"] == []
     assert row["complete"] is True
     assert body["status"] == "complete", body
-    # The history is still recorded, just not mistaken for outstanding work.
-    assert "markdown_unavailable: no MinerU token" in row["notes"]
+    # A finished row carries no stale notes. The history stays in the run.
+    assert row["notes"] == []
+    assert "markdown_unavailable: no MinerU token" in workflow.Run.open(run).paper("doi:10.1000/alpha").warnings
 
 
 def test_dry_run_never_downloads_or_uploads(tmp_path: Path) -> None:
@@ -94,6 +95,31 @@ def test_a_paper_with_no_full_text_is_finished_not_actionable(tmp_path: Path) ->
     row = json.loads(run_script("workflow.py", "report", "--run-dir", str(run)).stdout)["papers"][0]
     assert row["pending"] == ["no full text"]
     assert row["actionable"] is False
+
+
+def test_metadata_only_and_partial_papers_are_counted_apart_from_delivered(tmp_path: Path) -> None:
+    run = selected_run(tmp_path)
+    run_script("workflow.py", "approve-candidates", "--run-dir", str(run), "--ids", "openalex:W3")
+    run_script("workflow.py", "record-paper", "--run-dir", str(run), "--id", "doi:10.1000/alpha",
+               "--state", "metadata_only")
+    run_script("workflow.py", "record-paper", "--run-dir", str(run), "--id", "openalex:W3",
+               "--state", "partial", "--warning", "acquisition: no verified source PDF")
+    report = json.loads(run_script("workflow.py", "report", "--run-dir", str(run)).stdout)
+    assert (report["delivered"], report["metadata_only"], report["partial"]) == (0, 1, 1)
+    rows = {row["id"]: row for row in report["papers"]}
+    assert rows["openalex:W3"]["notes"] == ["acquisition: no verified source PDF"]
+
+
+def test_a_run_written_before_the_rename_still_reports_its_read_back(tmp_path: Path) -> None:
+    run, _ = run_with_pdf(tmp_path)
+    manifest = json.loads((run / "manifest.json").read_text())
+    manifest["papers"]["doi:10.1000/alpha"]["zotero"] = {"cloud_verified_at": "2026-01-01T00:00:00+00:00"}
+    (run / "manifest.json").write_text(json.dumps(manifest))
+    report = json.loads(run_script("workflow.py", "report", "--run-dir", str(run)).stdout)
+    row = report["papers"][0]
+    assert row["readback_verified_at"] == "2026-01-01T00:00:00+00:00"
+    assert "Zotero write pending" not in row["pending"]
+    assert "Zotero read-back" in report["table"]
 
 
 def test_a_selected_paper_missing_from_the_candidate_file_is_reported(tmp_path: Path) -> None:

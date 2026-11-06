@@ -4,6 +4,8 @@
 
 ## Workflow
 
+Three stages. Ingest: scansci searches and downloads, with Kimi WebBridge as the fallback for both. Write: Zotero MCP or the local Desktop API saves and reads back. Use: writing skills such as discussion-drafter read the Zotero collection.
+
 Research intent → one candidate list → confirmation of selected papers, collection and MinerU upload choice → PDF acquisition/verification → conversion → full-text summary → Zotero ingestion/read-back → per-artifact result.
 
 A supplied PDF starts at `local_pdf.py`: extract a DOI or title, complete the record, verify, and convert with MinerU after recorded upload consent. `--backend local` writes on-machine text and does not record consent. Topic search confirms MinerU upload with the candidate list. Both paths use the same convert. Existing authorization is reused within its scope. One failed paper does not block independent work on others. A run is continued rather than recreated after interruption.
@@ -20,7 +22,7 @@ A supplied PDF starts at `local_pdf.py`: extract a DOI or title, complete the re
 | `paper_artifacts.py` | PDF integrity and identity verification |
 | `mineru_parse.py` | Consented conversion, batch checkpoints, response-loss recovery and extracted artifacts |
 | `summary_artifact.py` | Store the Agent's summary with provider, template version and source basis |
-| `zotero_ingest.py` | DOI reuse, journaled writes, missing-field merges, artifact reuse and cloud/local read-back |
+| `zotero_ingest.py` | DOI reuse, journaled writes, missing-field merges, artifact reuse and Zotero/local read-back |
 | `credentials.py`, `capability.py` | Credential resolution and capability semantics; preflight/setup/verify consume these |
 | `http_client.py` | Bounded requests, shared pacing, credential-safe redirects and uncertain-write outcomes |
 
@@ -29,7 +31,7 @@ Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Determini
 ## Domain terms
 
 - **Candidate**: a bibliographic work with source metadata, stable identity and screening evidence. DOI is the primary identity; title/year/first author are the fallback.
-- **Selection**: the exact user-authorized candidate IDs, including any deterministic selection rule and its fixed snapshot.
+- **Selection**: the exact user-authorized candidate IDs, including any deterministic selection rule and its fixed snapshot. Approval adds ids, revocation removes only the ids it names, and a candidate import appends.
 - **Consent**: permission to upload specified PDFs to MinerU. Added papers are outside previous consent until explicitly covered.
 - **Source PDF**: the original downloaded/provided paper, distinct from browser printouts, derived text and generated notes.
 - **Verification**: `verified` when identity matches; `rejected` when bytes or identity are wrong; `unverified` when identity cannot be established. Unreadable is not the same as wrong.
@@ -47,7 +49,7 @@ Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Determini
 - Shared request budgets include retries and waits. A failed write response may mean the write succeeded; reconcile the journal before retrying.
 - API credentials reach only their issuing service and never appear in outputs, logs or run artifacts.
 - Existing Zotero metadata, notes and attachments are preserved. DOI matches and identical attachment bytes are reused; attachment `file_action` reports reuse/upload behavior.
-- Topic search and the local PDF default both convert with MinerU and need recorded upload consent. Without consent the verified PDF stays and nothing is uploaded. `--backend local` writes on-machine text and does not record consent. A missing token or failed conversion leaves the verified PDF usable. A summary requires readable full text, not an abstract alone. The agent writes that summary and does not pause the user for the prose.
+- Topic search and the local PDF default share one converter chain. Each paper falls through self-hosted MinerU, MinerU cloud, then markitdown. A MinerU hop needs recorded upload consent; markitdown does not upload. `--backend local` writes on-machine text and does not record consent. A missing token or failed conversion leaves the verified PDF usable. A summary requires readable full text, not an abstract alone. The agent writes that summary and does not pause the user for the prose.
 - Cloud read-back checks item identity, collection, summary and attachment bytes. Local verification additionally needs real storage files with matching hashes.
 
 ## Delivery states
@@ -56,12 +58,14 @@ Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Determini
 |---|---|
 | `awaiting_summaries` | Full text is ready; the Agent writes/checks summaries and uses the returned continuation command |
 | `partial` | Deliverable work exists, with named missing artifacts or evidence |
-| `sync_pending` | Cloud content is verified, but local attachment availability is not yet verified |
+| `sync_pending` | Zotero read-back is verified, but local attachment availability is not yet verified |
 | `read_back_verified` | Required read-back evidence is present; inspect the per-artifact report for overall completeness |
 | `metadata_only` | Full-text acquisition was explicitly ended; not a complete paper |
+
+The report's `delivered` count is `read_back_verified` plus `sync_pending`. `metadata_only` and `partial` are counted apart.
 
 Stage preflight checks only that stage's dependencies. Network failure leaves identity/permission unknown, while explicit 401/403 refusal is a distinct observation. Ordinary execution begins with the business command; complete returned evidence is used for delivery without repeating the same checks.
 
 ## Development
 
-Read the relevant [ADRs](docs/README.md#architecture-decisions) before changing boundaries. Fixture tests are not live service acceptance. Workflow verification is [verify-paper2zotero](.agents/skills/verify-paper2zotero/SKILL.md). The lab path is Kimi search, MinerU at `http://192.168.8.167:8000`, then the local Zotero API.
+Read the relevant [ADRs](docs/README.md#architecture-decisions) before changing boundaries. Fixture tests are not live service acceptance. Workflow verification is [verify-paper2zotero](.agents/skills/verify-paper2zotero/SKILL.md).
