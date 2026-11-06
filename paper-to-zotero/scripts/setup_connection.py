@@ -39,8 +39,7 @@ SERVICES = {
         'MinerU 云端 Token',
         'https://mineru.net/apiManage/token',
         'MINERU_TOKEN',
-        '云端那一跳才需要 Token。不要把实验室地址写进 MINERU_API_BASE。\n'
-        '留空时先试实验室 MinerU，失败再用这个 Token，再失败用本机 markitdown。\n'
+        '可选。全文转换先用这个 Token，失败再用本机 markitdown。\n'
         '① 在 API 管理页面创建 Token。\n'
         '② 粘贴后验证。',
     ),

@@ -320,7 +320,7 @@ def test_product_default_check_passes_without_openalex_or_a_cloud_token(tmp_path
     assert report['items'][4] == {
         'name': 'Zotero Desktop · 本机附件', 'ok': True, 'detail': '127.0.0.1:23119', 'action': ''}
     assert all('OpenAlex' not in item['name'] for item in report['items'])
-    assert seen == [configure.credentials.LAB_MINERU_API_BASE]
+    assert seen == []
     assert 'MINERU_API_BASE' not in os.environ
     assert (env.read_bytes() if env.exists() else None) == before
 

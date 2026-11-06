@@ -39,7 +39,7 @@ def search_report() -> dict[str, Any]:
 def converter_report(*, live: bool) -> dict[str, Any]:
     plan = mineru_parse.converter_plan(live=live)
     return {key: plan[key] for key in (
-        "selected", "chain", "available", "api_base", "lab_default", "tailscale",
+        "selected", "chain", "available", "api_base",
         "health", "markitdown", "markitdown_install")}
 
 

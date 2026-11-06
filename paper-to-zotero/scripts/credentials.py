@@ -231,11 +231,6 @@ def mineru_token() -> str:
     return token
 
 
-# Lab MinerU 4.1 Tasks API. The LAN host is the default. Tailscale stays
-# available by setting MINERU_API_BASE. An explicit empty MINERU_API_BASE or
-# MINERU_ENDPOINT disables the self-hosted hop.
-LAB_MINERU_API_BASE = "http://192.168.8.167:8000"
-LAB_MINERU_API_BASE_TAILSCALE = "http://100.92.231.38:8000"
 DISCOVERY_BY_BACKEND: dict[str, tuple[str, ...]] = {
     "scansci": ("scansci",),
     "kimi": ("kimi",),
@@ -273,12 +268,12 @@ def _choice(name: str, default: str, allowed: tuple[str, ...], aliases: dict[str
 
 
 def mineru_api_base() -> str:
-    """Self-hosted MinerU origin. The lab LAN host is the default."""
+    """Self-hosted MinerU 4.1 Tasks API origin, or empty when none is configured."""
     for name in ("MINERU_API_BASE", "MINERU_ENDPOINT"):
         value = configured_value(name)
         if value is not None:
             return value.rstrip("/")
-    return LAB_MINERU_API_BASE
+    return ""
 
 
 def search_backend() -> str:

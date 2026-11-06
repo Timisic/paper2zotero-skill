@@ -47,10 +47,10 @@ CASES = {
         'test_lab_defaults.py::test_an_outage_page_is_unavailable',
         'test_lab_defaults.py::test_a_real_empty_page_does_not_open_another_search',
         'test_lab_defaults.py::test_a_configured_search_url_is_not_replaced_when_it_is_down',
-        'test_lab_defaults.py::test_mineru_default_is_the_lan_host',
+        'test_lab_defaults.py::test_unset_mineru_api_base_has_no_self_hosted_hop',
         'test_lab_defaults.py::test_unhealthy_self_host_drops_out_of_the_chain',
         'test_lab_defaults.py::test_tasks_api_unpacks_full_md',
-        'test_lab_defaults.py::test_preflight_names_scansci_and_the_lan_host',
+        'test_lab_defaults.py::test_preflight_names_scansci_and_no_default_self_hosted_host',
         'test_lab_defaults.py::test_ingestion_stage_is_ready_from_local_write_without_calling_the_web_key',
         'test_lab_defaults.py::test_ingest_uses_the_local_api_without_a_web_key'],
 }

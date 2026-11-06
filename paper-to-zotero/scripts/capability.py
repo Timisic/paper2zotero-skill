@@ -76,7 +76,7 @@ GUIDE: dict[str, dict[str, str]] = {
     "mineru": {
         "label": "全文转换",
         "url": "https://mineru.net/apiManage/token",
-        "do": "pip install 'markitdown[pdf]'。MINERU_API_BASE 留空时先试实验室 MinerU，再试云端 Token，再试本机 markitdown。云端 Token 不是完成条件。",
+        "do": "pip install 'markitdown[pdf]'。设置了 MINERU_API_BASE 时先试自建 MinerU，再试云端 Token，再试本机 markitdown。云端 Token 不是完成条件。",
     },
     "discovery_sources": {
         "label": "文献检索来源",

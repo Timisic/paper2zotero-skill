@@ -1,5 +1,4 @@
-"""These tests stay on loopback. They do not dial the lab host.
-"""
+"""These tests stay on loopback."""
 from __future__ import annotations
 
 import hashlib
@@ -8,6 +7,8 @@ import json
 import sys
 import zipfile
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -23,9 +24,6 @@ from test_cli import run_script  # noqa: E402
 from test_partial_delivery import run_with_pdf  # noqa: E402
 from test_workflow_resume import selected_run  # noqa: E402
 from zotero_peer import ZoteroLibrary  # noqa: E402
-
-LAN = "http://192.168.8.167:8000"
-
 
 def test_search_backend_defaults_to_scansci(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(credentials, "SKILL_ENV_FILE", tmp_path / "missing.env")
@@ -212,23 +210,21 @@ def test_a_configured_search_url_is_not_replaced_when_it_is_down(monkeypatch) ->
     assert navigated == ["https://example.edu/search?q=robots"]
 
 
-def test_mineru_default_is_the_lan_host(monkeypatch, tmp_path: Path) -> None:
+def test_unset_mineru_api_base_has_no_self_hosted_hop(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(credentials, "SKILL_ENV_FILE", tmp_path / "missing.env")
     monkeypatch.delenv("MINERU_API_BASE", raising=False)
     monkeypatch.delenv("MINERU_ENDPOINT", raising=False)
-    assert credentials.mineru_api_base() == LAN
-    assert credentials.LAB_MINERU_API_BASE_TAILSCALE == "http://100.92.231.38:8000"
     monkeypatch.setenv("MINERU_TOKEN", "sk-fixture")
-    plan = mineru_parse.converter_plan(live=False)
-    assert plan["api_base"] == LAN
-    assert plan["lab_default"] == LAN
-    assert plan["chain"][:2] == ["mineru-self-hosted", "mineru-cloud"]
-    assert plan["available"][0] == "mineru-self-hosted"
-    assert plan["selected"] == "mineru-self-hosted"
-    monkeypatch.setenv("MINERU_API_BASE", "")
-    muted = mineru_parse.converter_plan(live=False)
-    assert "mineru-self-hosted" not in muted["available"]
-    assert muted["selected"] == "mineru-cloud"
+    monkeypatch.setattr(mineru_parse, "tasks_health", lambda *a, **k: pytest.fail("probed a self-hosted host"))
+    plan = mineru_parse.converter_plan(live=True)
+    assert plan["api_base"] is None
+    assert plan["chain"] == ["mineru-cloud"]
+    assert plan["selected"] == "mineru-cloud"
+    monkeypatch.setenv("MINERU_API_BASE", "http://mineru.example:8000/")
+    configured = mineru_parse.converter_plan(live=False)
+    assert configured["api_base"] == "http://mineru.example:8000"
+    assert configured["chain"][:2] == ["mineru-self-hosted", "mineru-cloud"]
+    assert configured["selected"] == "mineru-self-hosted"
 
 
 def test_unhealthy_self_host_drops_out_of_the_chain(monkeypatch) -> None:
@@ -456,14 +452,13 @@ def test_tasks_api_unpacks_full_md(tmp_path: Path) -> None:
     assert Path(markdown).read_text(encoding="utf-8") == "# Parsed\n"
 
 
-def test_preflight_names_scansci_and_the_lan_host(monkeypatch) -> None:
+def test_preflight_names_scansci_and_no_default_self_hosted_host(monkeypatch) -> None:
     monkeypatch.delenv("SEARCH_BACKEND", raising=False)
     monkeypatch.delenv("MINERU_API_BASE", raising=False)
     monkeypatch.delenv("MINERU_ENDPOINT", raising=False)
     conversion = json.loads(run_script("preflight.py", "--json", "--skip-live", "--stage", "conversion").stdout)
-    assert conversion["converter"]["api_base"] == LAN
-    assert conversion["converter"]["lab_default"] == LAN
-    assert conversion["converter"]["selected"] == "mineru-self-hosted"
+    assert conversion["converter"]["api_base"] is None
+    assert "mineru-self-hosted" not in conversion["converter"]["chain"]
     assert "token" not in conversion["converter"]
     discovered = json.loads(run_script("preflight.py", "--json", "--skip-live", "--stage", "discovery").stdout)
     assert discovered["search"] == {"backend": "scansci", "sources": ["scansci"]}
