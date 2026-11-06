@@ -10,7 +10,7 @@ Carry a confirmed batch through acquisition, conversion, summary handoff and Zot
 
 ## How to get to it (user POV)
 
-After selection use `process_run.py --stages acquire,convert,ingest`, write the returned summary artifact and resume. The documented modern split-pass/summary-batch entry is an additional path not covered by these three legacy-compatible full-chain scenarios.
+After selection use `process_run.py --stages acquire,convert,ingest`, write the returned summary artifact and resume. The documented modern split-pass/summary-batch entry is an additional path not covered by these legacy-compatible full-chain scenarios.
 
 ## Driving it with verify_runner
 
@@ -26,6 +26,6 @@ Inspect `commands.jsonl` for the action and return value, `results.xml` for each
 
 ## Gotchas
 
-Peer read-back proves the real writer/client behavior against a simulated service. `readback_verified_at` in fixture output is not evidence of a live Zotero read-back. Notes contain synthetic text. These three nodes pass an explicit `--mineru-api-base` to a MinerU v4 fixture. They do not call the LAN Tasks API. The product default, when that flag stays `https://mineru.net`, is self-hosted MinerU at `http://192.168.8.167:8000`, then MinerU cloud when `MINERU_TOKEN` is set, then markitdown, each paper falling through in order. The suite sets `LITERATURE_MARKITDOWN_DISABLED=1`, so an installed markitdown does not rescue the conversion-failure node. These nodes also pass a fixture `--api-base`, so they stay on the Web API client. A default write prefers `http://127.0.0.1:23119/api` and falls back to the Web API. Live Desktop must return `Zotero-Server-ID` and accept `POST /api/local/authorize`.
+Peer read-back proves the real writer/client behavior against a simulated service. `readback_verified_at` in fixture output is not evidence of a live Zotero read-back. Notes contain synthetic text. These nodes pass an explicit `--mineru-api-base` to a MinerU v4 fixture. They do not call a self-hosted Tasks API. When that flag stays `https://mineru.net`, the product tries self-hosted MinerU only if `MINERU_API_BASE` is set, then MinerU cloud when `MINERU_TOKEN` is set, then markitdown, each paper falling through in order. The suite sets `LITERATURE_MARKITDOWN_DISABLED=1`, so an installed markitdown does not rescue the conversion-failure node. These nodes also pass a fixture `--api-base`, so they stay on the Web API client. A default write prefers `http://127.0.0.1:23119/api` and falls back to the Web API. Live Desktop must return `Zotero-Server-ID` and accept `POST /api/local/authorize`.
 
 Local API upload reads the artifact in `Writer.upload`, posts it with `POST .../file`, then posts those bytes to a same-origin `/api/local/uploads/` URL with `Zotero-API-Key` and `Zotero-Server-ID`. `GET /file` read-back uses `_LocalFileRedirect.http_error_302` to read the `file://` path from disk. These nodes pass a fixture `--api-base`, so they exercise the Web API client. Do not read that fixture ingest as a live Desktop attach. Split-pass/batch-summary, deep paths and Windows variants remain unrun.

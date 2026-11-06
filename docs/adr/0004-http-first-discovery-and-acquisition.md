@@ -1,6 +1,6 @@
 # ADR-0004: Prefer HTTP; use the browser when needed
 
-Status: Accepted. Supersedes the browser-first routing in [ADR-0002](0002-browser-acquisition-channel.md).
+Status: Superseded by [ADR-0005](0005-ingest-existing-pdf-scansci-kimi.md).
 
 Routing every paper through the browser added interaction overhead and blocked open-access PDFs when the browser extension was disconnected. Depending on one discovery provider also made a single service failure limit the whole search.
 
