@@ -49,6 +49,45 @@ def test_release_survives_download_removal_and_repeat_install(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_offline_build_lays_out_runtime_version_and_start_page(tmp_path, monkeypatch):
+    import zipfile
+    spec = importlib.util.spec_from_file_location('build_distribution', ROOT / 'scripts/build-distribution.py')
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+
+    def download_python(triple, runtime):
+        assert triple == 'aarch64-apple-darwin'
+        (runtime / 'python/bin').mkdir(parents=True)
+        (runtime / 'python/bin/python3.12').write_text('interpreter')
+        (runtime / 'python/bin/python3.12').chmod(0o755)
+        if os.name != 'nt':
+            (runtime / 'python/bin/python3').symlink_to('python3.12')
+
+    def download_wheels(tags, wheels):
+        assert tags == ['macosx_11_0_arm64']
+        wheels.mkdir()
+        with zipfile.ZipFile(wheels / 'pymupdf-1.0-cp310-abi3-macosx_11_0_arm64.whl', 'w') as wheel:
+            wheel.writestr('pymupdf-1.0.dist-info/METADATA',
+                           'Metadata-Version: 2.4\nName: PyMuPDF\nVersion: 1.0\nLicense-Expression: AGPL-3.0-or-later\n')
+
+    monkeypatch.setattr(builder, 'download_python', download_python)
+    monkeypatch.setattr(builder, 'download_wheels', download_wheels)
+    archive = builder.build_offline(tmp_path, 'macos-arm64', 'v9.9.9')
+    assert archive == tmp_path / 'paper2zotero-v9.9.9-macos-arm64.zip'
+    root = 'paper2zotero-v9.9.9-macos-arm64/'
+    with zipfile.ZipFile(archive) as bundle:
+        names = set(bundle.namelist())
+        assert bundle.read(root + 'VERSION').decode() == 'v9.9.9\n'
+        assert 'install/AGENT_SETUP.md' in bundle.read(root + '开始.md').decode()
+        assert '| PyMuPDF | 1.0 | AGPL-3.0-or-later |' in bundle.read(root + 'runtime/LICENSES.md').decode()
+        interpreter = bundle.getinfo(root + 'runtime/python/bin/python3')
+        assert os.name == 'nt' or interpreter.external_attr >> 16 & 0o100, 'the interpreter stays executable after unzip'
+    assert root + 'runtime/python/bin/python3.12' not in names
+    assert root + 'runtime/wheels/pymupdf-1.0-cp310-abi3-macosx_11_0_arm64.whl' in names
+    assert root + 'paper-to-zotero/SKILL.md' in names
+    assert not [name for name in names if '/tests/' in name]
+
+
 def test_conflict_preserves_existing_skill(tmp_path):
     existing = tmp_path / '.codex/skills/paper-to-zotero'
     existing.mkdir(parents=True)
