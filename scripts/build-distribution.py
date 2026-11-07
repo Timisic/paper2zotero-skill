@@ -40,7 +40,7 @@ def stage(destination: Path) -> None:
             shutil.copy2(ROOT / skill_name / relative, target)
     # User README is standalone; developer links stay in the repository only.
     readme = destination / 'README.md'
-    readme.write_text(readme.read_text(encoding='utf-8').split('<!-- repository-only -->')[0].rstrip() + '\n', encoding='utf-8')
+    readme.write_text(readme.read_text(encoding='utf-8').split('<!-- repository-only -->')[0].rstrip() + '\n', encoding='utf-8', newline='\n')
 
 
 def build(output: Path) -> Path:
@@ -110,8 +110,8 @@ def build_offline(output: Path, platform: str, version: str) -> Path:
         if (python / 'bin/python3.12').is_file():
             os.replace(python / 'bin/python3.12', python / 'bin/python3')
         download_wheels(tags, runtime / 'wheels')
-        (runtime / 'LICENSES.md').write_text(licenses(runtime / 'wheels'), encoding='utf-8')
-        (root / 'VERSION').write_text(version + '\n', encoding='utf-8')
+        (runtime / 'LICENSES.md').write_text(licenses(runtime / 'wheels'), encoding='utf-8', newline='\n')
+        (root / 'VERSION').write_text(version + '\n', encoding='utf-8', newline='\n')
         return Path(shutil.make_archive(str(output / name), 'zip', temporary, name))
 
 
