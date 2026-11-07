@@ -42,8 +42,6 @@ jobs:
             platform: windows-x64
           - os: macos-latest
             platform: macos-arm64
-          - os: ubuntu-latest
-            platform: linux-x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     env:
@@ -55,7 +53,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python scripts/build-distribution.py --output "${{ runner.temp }}/dist" --platform ${{ matrix.platform }} --version ci
-      - name: Install the bundle offline in a fresh home (macOS/Linux)
+      - name: Install the bundle offline in a fresh home (macOS)
         if: runner.os != 'Windows'
         env:
           PIP_NO_INDEX: '1'

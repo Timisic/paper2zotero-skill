@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Build the lite zip and the four offline zips
+      - name: Build the lite zip and the three offline zips
         run: |
           python scripts/build-distribution.py --output dist
           mv dist/paper-to-zotero.zip "dist/paper2zotero-$TAG-lite.zip"
