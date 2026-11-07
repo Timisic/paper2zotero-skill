@@ -404,8 +404,6 @@ def converter_plan(*, live: bool = False) -> dict[str, Any]:
         "chain": chain,
         "available": available,
         "api_base": base or None,
-        "lab_default": credentials.LAB_MINERU_API_BASE,
-        "tailscale": credentials.LAB_MINERU_API_BASE_TAILSCALE,
         "health": health,
         "markitdown": local,
         "markitdown_install": "pip install 'markitdown[pdf]'",

@@ -96,17 +96,13 @@ def test_requested_optional_feature_failure_is_not_ready(tmp_path, monkeypatch, 
     assert '待完成 浏览器获取全文' in capsys.readouterr().out
 
 
-def test_wizard_keeps_template_library_and_isolates_demo():
+def test_wizard_keeps_template_library():
     import hashlib
     sys.path.insert(0, str(SCRIPTS))
     import setup_connection
     wizard = (SCRIPTS / 'setup-wizard.sh').read_text()
     library = wizard.split('BASIC_COUNT=1\n')[0]
-    assert hashlib.sha256(library.encode()).hexdigest() == 'c9459b25a3584a9117a0a946843e07c7754b03e8e0b84d49dd69d3c67f773616'
-    assert 'ENV_FILE="$DEMO_DIR/env"' in wizard
-    assert "trap 'rm -rf \"$DEMO_DIR\"' EXIT" in wizard
-    assert 'open_url() { note "[模拟打开网页] $1"; }' in wizard
-    assert 'bootstrap.sh" --probe' in wizard
+    assert hashlib.sha256(library.encode()).hexdigest() == '68497de599f7e6cbb4fe77abeb78eea57fdd5b15fa7015043da691ce3664d672'
     assert wizard.count('\nstage "') == 5
     assert '必配' not in wizard
     basic_count = int(wizard.split('BASIC_COUNT=', 1)[1].split('\n', 1)[0])

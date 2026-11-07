@@ -10,7 +10,6 @@ from tkinter import ttk
 from typing import Any
 
 import agent_installation
-import configure
 import setup_connection as connection
 
 TITLE = '论文工具配置 · Windows 图形向导 v2'
@@ -18,19 +17,18 @@ AGENTS = {'Claude Code': 'claude-code', 'Codex': 'codex', 'Pi': 'pi'}
 
 
 class Wizard:
-    def __init__(self, root: tk.Tk, *, agent='auto', demo=False, group=None, ready_file=None, advanced=False):
-        self.root, self.demo = root, demo
-        self.group, self.saved_group_id = (bool(group), '') if demo else connection.library_target(group)
+    def __init__(self, root: tk.Tk, *, agent='auto', group=None, ready_file=None, advanced=False):
+        self.root = root
+        self.group, self.saved_group_id = connection.library_target(group)
         self.agent = agent
         self.page = len(self.page_titles()) - 1 if advanced else 0
         self.extra_inputs: dict[str, tk.StringVar] = {}
         self.busy = False
         self.work: queue.Queue[tuple[Any, Any, str | None]] = queue.Queue()
         self.ready_file = ready_file
-        self.prepared = False
         self.connected: set[str] = set()
         self.controls: list[tk.Widget] = []
-        self.root.title(TITLE + (' · 演示' if demo else ''))
+        self.root.title(TITLE)
         self.root.geometry('880x690')
         self.root.minsize(780, 660)
         self.root.configure(bg='#f4f6fa')
@@ -92,7 +90,7 @@ class Wizard:
                 child.destroy()
         self.controls = []
         self.root.unbind('<MouseWheel>')
-        self.status.set('演示模式：不会连接服务、安装工具或保存授权码。' if self.demo else '')
+        self.status.set('')
         titles = self.page_titles()
         basic = self.basic_services()
         self.step.configure(text='  →  '.join(f'{i + 1}. {name}' for i, name in enumerate(titles)))
@@ -105,7 +103,7 @@ class Wizard:
                 names['全部助手'] = 'all'
             selected = next((label for label, value in names.items() if value == self.agent), '')
             if not selected:
-                detected = agent_installation.selected_roots('auto') if not self.demo else []
+                detected = agent_installation.selected_roots('auto')
                 matches = [label for label, value in names.items()
                            if agent_installation.agent_roots().get(value) in detected]
                 selected = matches[0] if len(matches) == 1 else ''
@@ -120,7 +118,7 @@ class Wizard:
                     self.status.set('请先选择你使用的 AI 助手。')
                     return
                 self.agent = chosen
-                self.run(lambda: None if self.demo else connection.prepare(chosen), self.prepared_next,
+                self.run(lambda: connection.prepare(chosen), self.prepared_next,
                          '正在准备工具和安装文件，请稍候……')
             self.button(self.footer, '开始配置', prepare, True).pack(side='right')
         elif 1 <= self.page <= len(basic):
@@ -133,7 +131,6 @@ class Wizard:
             self.button(self.footer, '上一步', lambda: self.goto(self.page - 1)).pack(side='left')
 
     def prepared_next(self, _):
-        self.prepared = True
         self.goto(1)
 
     def goto(self, page):
@@ -168,7 +165,7 @@ class Wizard:
         ttk.Label(self.body, textvariable=self.input_note, style='Muted.TLabel').pack(anchor='w', pady=(0, 8))
         self.key.trace_add('write', lambda *_: self.input_note.set(
             '已收到输入，点击“验证并保存”继续。' if self.key.get() else '尚未输入授权码。'))
-        if not self.demo and connection.existing_key(service):
+        if connection.existing_key(service):
             self.input_note.set('已有保存的授权。输入框留空可验证已有授权，粘贴新码可替换。')
         self.group_entry = None
         if zotero and self.group:
@@ -179,10 +176,7 @@ class Wizard:
             self.controls.append(self.group_entry)
         elif zotero:
             self.label('个人文库会自动识别，无需填写文库 ID。', style='Muted.TLabel')
-        if self.demo:
-            self.button(self.body, '复制示例授权码', self.copy_demo).pack(anchor='w', pady=8)
-        self.button(self.footer, '验证并保存' if not self.demo else '模拟验证',
-                    lambda: self.verify(service), True).pack(side='right')
+        self.button(self.footer, '验证并保存', lambda: self.verify(service), True).pack(side='right')
         self.button(self.footer, '下一步' if service in self.connected else '暂时跳过',
                     lambda: self.goto(self.page + 1)).pack(side='right', padx=10)
         self.root.after_idle(entry.focus_set)
@@ -191,23 +185,17 @@ class Wizard:
         self.label(connection.SERVICES[service][3])
 
         def complete(values):
-            if not self.demo:
-                try:
-                    connection.save_account(values)
-                except Exception:
-                    self.status.set('检查通过，但保存未完成，请重试。')
-                    return
+            try:
+                connection.save_account(values)
+            except Exception:
+                self.status.set('检查通过，但保存未完成，请重试。')
+                return
             self.connected.add(service)
             self.render()
-            prefix = '模拟检查通过（没有保存）' if self.demo else '本机 Zotero 可以写入，已保存'
-            self.status.set(prefix + '。点击“下一步”继续。')
+            self.status.set('本机 Zotero 可以写入，已保存。点击“下一步”继续。')
 
         def check():
-            def job():
-                if self.demo:
-                    return {}
-                return connection.accept(service)
-            self.run(job, complete, '正在检查本机 Zotero，请稍候……')
+            self.run(lambda: connection.accept(service), complete, '正在检查本机 Zotero，请稍候……')
 
         self.button(self.body, '检查本机 Zotero', check, True).pack(anchor='w', pady=(0, 10))
 
@@ -224,15 +212,7 @@ class Wizard:
         except tk.TclError:
             self.status.set('剪贴板里没有文字，请先在网页上复制完整授权码。')
 
-    def copy_demo(self):
-        self.root.clipboard_clear()
-        self.root.clipboard_append('demo-authorization-for-paste-test')
-        self.status.set('示例已复制。现在点击输入框按 Ctrl+V，或点击“粘贴”。')
-
     def open_page(self, url):
-        if self.demo:
-            self.status.set('演示模式不打开账号网页。可复制示例授权码体验输入。')
-            return
         try:
             connection.open_page(url)
             self.status.set('已请求系统打开浏览器。若没有看到网页，可复制上方网址打开。')
@@ -243,29 +223,24 @@ class Wizard:
         if self.busy:
             return
         value = self.key.get()
-        if not value and not self.demo:
+        if not value:
             value = connection.existing_key(service)
         group_id = self.group_entry.get().strip() if self.group_entry else ''
         def job():
-            key = connection.normalize_key(value)
-            if self.demo:
-                return {'ZOTERO_API_KEY': key, 'ZOTERO_LIBRARY_ID': '12345678', 'ZOTERO_LIBRARY_TYPE': 'user'} if service == 'zotero' else {connection.SERVICES[service][2]: key}
-            return connection.accept(service, key, group_id=group_id, group=self.group)
+            return connection.accept(service, connection.normalize_key(value), group_id=group_id, group=self.group)
         def complete(values):
             # Save only after a successful result is accepted by the live UI.
             # Closing the window during a request therefore cannot save later.
-            if not self.demo:
-                try:
-                    connection.save_account(values)
-                except Exception:
-                    self.status.set('连接成功，但本机保存未完成。请重试；原有配置已保留。')
-                    return
+            try:
+                connection.save_account(values)
+            except Exception:
+                self.status.set('连接成功，但本机保存未完成。请重试；原有配置已保留。')
+                return
             self.connected.add(service)
             if service == 'zotero' and self.group:
                 self.saved_group_id = values['ZOTERO_LIBRARY_ID']
             self.render()
-            prefix = '模拟连接成功（没有保存）' if self.demo else '连接成功，已安全保存'
-            self.status.set(prefix + (f'。已自动识别文库 {values["ZOTERO_LIBRARY_ID"]}。点击“下一步”继续。'
+            self.status.set('连接成功，已安全保存' + (f'。已自动识别文库 {values["ZOTERO_LIBRARY_ID"]}。点击“下一步”继续。'
                                       if service == 'zotero' else '。点击“下一步”继续。'))
         self.run(job, complete, '正在连接并检查授权，请稍候……')
 
@@ -294,18 +269,10 @@ class Wizard:
             self.results.configure(state='disabled')
             self.status.set('检查通过，可以开始使用。' if report['ready'] else '部分项目尚未完成。返回对应步骤继续即可，已保存内容会保留。')
         def check():
-            def report():
-                if self.demo:
-                    ready = self.prepared and set(connection.BASIC_SERVICES) <= self.connected
-                    return {'ready': ready, 'items': [
-                        {'name': '工具与助手（演示）', 'ok': self.prepared},
-                        *({'name': connection.SERVICES[name][0] + '（演示）', 'ok': name in self.connected}
-                          for name in connection.BASIC_SERVICES)]}
-                return connection.check(self.agent, group=bool(self.group))
-            self.run(report, complete, '正在检查工具和服务，可能需要几十秒……')
+            self.run(lambda: connection.check(self.agent, group=bool(self.group)), complete, '正在检查工具和服务，可能需要几十秒……')
         self.button(self.footer, '检查配置', check, True).pack(side='right')
         self.button(self.footer, '完成并关闭', self.root.destroy).pack(side='right', padx=10)
-        paths = [] if self.demo else agent_installation.installed_paths(agent=self.agent)
+        paths = agent_installation.installed_paths(agent=self.agent)
         if paths:
             self.label('如需更换总结要求，可修改：\n' + str(Path(paths[0]) / 'references/paper-summary.md') +
                        '\n保留 “## Save and continue” 及其后的保存说明。', style='Muted.TLabel')
@@ -356,7 +323,7 @@ class Wizard:
                 note = tk.StringVar(value='留空保留已有设置。')
                 value.trace_add('write', lambda *_, value=value, note=note: note.set(
                     '已收到输入，点击本项“保存设置”。' if value.get() else '留空保留已有设置。'))
-                if not self.demo and connection.extra_value(service):
+                if connection.extra_value(service):
                     note.set('已有设置；留空保留，粘贴新内容可替换。')
                 ttk.Label(card, textvariable=note, style='Muted.TLabel').pack(anchor='w')
                 if service == 'semantic_scholar':
@@ -364,10 +331,6 @@ class Wizard:
                 def save(service=service, value=value):
                     if not value.get().strip():
                         self.status.set('没有填写新内容，已有设置未改变。')
-                        return
-                    if self.demo:
-                        value.set('')
-                        self.status.set('演示保存成功（没有写入配置）。')
                         return
                     try:
                         connection.save_account(connection.accept(service, value.get()))
@@ -382,19 +345,14 @@ class Wizard:
                 button = self.button(card, '保存设置', save, True)
             else:
                 def complete(values, service=service):
-                    if not self.demo:
-                        try:
-                            connection.save_account(values)
-                        except Exception:
-                            self.status.set('检查通过，但保存未完成，请重试。')
-                            return
-                    self.status.set('演示检查通过（没有连接服务或保存）。' if self.demo else connection.SERVICES[service][0] + '：连接检查通过，已启用。')
+                    try:
+                        connection.save_account(values)
+                    except Exception:
+                        self.status.set('检查通过，但保存未完成，请重试。')
+                        return
+                    self.status.set(connection.SERVICES[service][0] + '：连接检查通过，已启用。')
                 def check(service=service, complete=complete):
-                    def job(service=service):
-                        if self.demo:
-                            return {}
-                        return connection.accept(service)
-                    self.run(job, complete, '正在检查连接，请稍候……')
+                    self.run(lambda: connection.accept(service), complete, '正在检查连接，请稍候……')
                 button = self.button(card, '启动并检查' if service == 'kimi' else '检查本机 Zotero', check, True)
             button.pack(anchor='e', pady=(8, 0))
             self.extra_actions[service] = button
@@ -438,13 +396,12 @@ class Wizard:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--agent', default='auto', choices=agent_installation.CHOICES)
-    parser.add_argument('--demo', action='store_true')
     parser.add_argument('--group', action='store_true', default=None)
     parser.add_argument('--advanced', action='store_true')
     parser.add_argument('--ready-file')
     args = parser.parse_args()
     root = tk.Tk()
-    Wizard(root, agent=args.agent, demo=args.demo, group=args.group, ready_file=args.ready_file, advanced=args.advanced)
+    Wizard(root, agent=args.agent, group=args.group, ready_file=args.ready_file, advanced=args.advanced)
     root.mainloop()
 
 

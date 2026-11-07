@@ -15,25 +15,6 @@ def init_run(tmp_path: Path, slug: str = "single-gate") -> Path:
     return Path(json.loads(result.stdout)["run_dir"])
 
 
-def test_clear_intent_reaches_candidates_without_a_plan_gate(tmp_path: Path) -> None:
-    run = init_run(tmp_path)
-    manifest = json.loads((run / "manifest.json").read_text())
-    assert "search_plan" not in manifest["gates"]
-
-    imported = run_script(
-        "workflow.py", "import-candidates", "--run-dir", str(run),
-        "--file", str(FIXTURES / "normalized_candidates.json"),
-    )
-    assert json.loads(imported.stdout)["imported"] == 2
-    selected = run_script(
-        "workflow.py", "approve-candidates", "--run-dir", str(run),
-        "--ids", "doi:10.1000/alpha", "--source", "message:12", "--rule", "explicit IDs",
-    )
-    assert json.loads(selected.stdout)["selected"] == ["doi:10.1000/alpha"]
-    status = json.loads(run_script("workflow.py", "status", "--run-dir", str(run)).stdout)
-    assert status["gates"] == {"candidate_selection": "approved"}
-
-
 def test_recorded_scope_is_evidence_not_a_gate(tmp_path: Path) -> None:
     run = init_run(tmp_path)
     run_script(

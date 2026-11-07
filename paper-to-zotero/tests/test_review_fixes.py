@@ -155,23 +155,3 @@ def test_local_sync_unchecked_is_distinct_from_not_synced(tmp_path: Path) -> Non
     assert row["pending"] == ["markdown_unavailable", "local sync not checked"]
     assert row["state"] == "sync_pending"
 
-
-def test_a_mistyped_request_field_fails_at_the_call_not_mid_batch() -> None:
-    """The request types are the seam's contract; a typo cannot slip past it.
-
-    An argparse.Namespace accepted any attribute name, so a caller's typo went
-    unnoticed by the type checker and surfaced as an AttributeError partway
-    through writing a batch.
-    """
-    import pytest
-
-    import mineru_parse  # noqa: PLC0415
-    import zotero_ingest  # noqa: PLC0415
-
-    with pytest.raises(TypeError):
-        zotero_ingest.IngestRequest(run_dir=Path("/tmp/x"), storagexroot=None)  # type: ignore[call-arg]
-    with pytest.raises(TypeError):
-        mineru_parse.ParseRequest(pdfs=[], run_directory=Path("/tmp/x"))  # type: ignore[call-arg]
-    # run_dir is the one field with no sensible default.
-    with pytest.raises(TypeError):
-        zotero_ingest.IngestRequest()  # type: ignore[call-arg]

@@ -3,11 +3,11 @@
 set -euo pipefail
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ "${1:-}" == --help ]]; then
-  echo 'Usage: bash setup.sh [--dependencies-only | --check | --probe | --runtime-only]'
+  echo 'Usage: bash setup.sh [--dependencies-only | --check | --runtime-only]'
   echo 'Default: install dependencies and skill, then configure services interactively.'
   exit 0
 fi
-case "${1:-}" in ''|--dependencies-only|--check|--probe|--runtime-only) ;; *) echo 'Unknown option; use --help' >&2; exit 2;; esac
+case "${1:-}" in ''|--dependencies-only|--check|--runtime-only) ;; *) echo 'Unknown option; use --help' >&2; exit 2;; esac
 caller_path="$PATH"
 prefix_path="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin"
 export PATH="$prefix_path:$PATH"
@@ -62,7 +62,6 @@ if pdf_bin="$(working_pdftotext "$caller_path" || working_pdftotext "$prefix_pat
 else
   echo '待安装或修复：Poppler'
 fi
-if [[ "${1:-}" == --probe ]]; then exit 0; fi
 if [[ "${1:-}" == --check ]]; then
   find_python || { echo 'Python 缺失，请运行 setup.sh'; exit 1; }
   check_args=(--check)

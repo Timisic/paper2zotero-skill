@@ -39,8 +39,7 @@ SERVICES = {
         'MinerU 云端 Token',
         'https://mineru.net/apiManage/token',
         'MINERU_TOKEN',
-        '云端那一跳才需要 Token。不要把实验室地址写进 MINERU_API_BASE。\n'
-        '留空时先试实验室 MinerU，失败再用这个 Token，再失败用本机 markitdown。\n'
+        '可选。全文转换先用这个 Token，失败再用本机 markitdown。\n'
         '① 在 API 管理页面创建 Token。\n'
         '② 粘贴后验证。',
     ),
@@ -215,19 +214,14 @@ def prepare(agent: str) -> None:
     directory = Path.home() / '.config/literature-to-zotero'
     pdf = os.environ.get('PAPER2ZOTERO_PDF_BIN', '')
     tool = Path(pdf) / 'pdftotext.exe' if pdf else Path(shutil.which('pdftotext') or '')
-    if not tool.is_file():
-        raise ValueError('PDF 工具尚未就绪，请从 install/setup.cmd 重新打开。')
-    result = subprocess.run([str(tool), '-v'], capture_output=True, timeout=10,
-                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-    if result.returncode:
-        raise ValueError('PDF 工具无法运行，请从 install/setup.cmd 重新打开。')
     ensure_default_tools()
     with contextlib.redirect_stdout(io.StringIO()):
         importlib.import_module('install').install(agent)
     directory.mkdir(parents=True, exist_ok=True)
     python = Path(sys.executable).with_name('python.exe') if os.name == 'nt' else Path(sys.executable)
     (directory / 'python-path').write_text(str(python) + '\n', encoding='utf-8')
-    (directory / 'pdf-bin').write_text(str(tool.parent) + '\n', encoding='utf-8')
+    if tool.is_file():
+        (directory / 'pdf-bin').write_text(str(tool.parent) + '\n', encoding='utf-8')
 
 
 def check(agent: str, *, group: bool = False) -> dict:
