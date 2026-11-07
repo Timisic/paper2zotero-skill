@@ -1,6 +1,6 @@
 # Acquire a verified source PDF
 
-Download a verified PDF. scansci-pdf runs first for a DOI or an arXiv id. A miss continues to known HTTP links. These nodes disable that first fetch and prove the HTTP route, including identity and content checks.
+Download a verified PDF. `acquire()` checks an existing `source.pdf` first and returns channel `existing` when identity verification succeeds. scansci-pdf runs next, for a DOI or an arXiv id. A miss continues to known HTTP links, then a metadata lookup, then one Kimi WebBridge attempt. These three nodes disable the scansci fetch, pass `--no-source-lookup`, and prove the known-link HTTP route, including identity and content checks.
 
 ## Sub-features
 
@@ -10,7 +10,7 @@ Download a verified PDF. scansci-pdf runs first for a DOI or an arXiv id. A miss
 
 ## How to get to it (user POV)
 
-After candidate confirmation, the agent calls `process_run.py --stages acquire`; lower-level acquisition uses the production acquire client. Browser fallback is an alternate entry but real browser access is not covered.
+After candidate confirmation, the agent calls `process_run.py --stages acquire`. That command uses the production acquire client. Kimi WebBridge is the last rung of the same `acquire()` call. These three nodes do not reach it, and real browser access is not covered.
 
 ## Driving it with verify_runner
 
@@ -26,4 +26,4 @@ Inspect `commands.jsonl` for the action and return value, `results.xml` for each
 
 ## Gotchas
 
-The suite sets `LITERATURE_SCANSCI_DISABLED=1` and replaces `fetch_candidate` with `NotAddressable`, so these nodes record channel `http` from an ephemeral local peer. The success node observes browser non-use via the absent marker file. The HTML and wrong-paper nodes pass no browser command. `run --feature scansci` drives the mocked scansci download, including the grey default and `--legal-only`. A green HTTP run is not live scansci-pdf acceptance. Institutional access, live redirects and real Kimi sessions remain unverified.
+These three nodes run `process_run.py` in a subprocess. They inherit `LITERATURE_SCANSCI_DISABLED=1` and skip `fetch_candidate`. The autouse stub that returns `NotAddressable` stays in the pytest process and does not run in that subprocess. The nodes record channel `http` from an ephemeral local peer. The success node observes browser non-use via the absent marker file. The HTML and wrong-paper nodes pass no browser command. `run --feature scansci` drives the mocked scansci download, including the grey default and `--legal-only`. A green HTTP run is not live scansci-pdf acceptance. Institutional access, live redirects and real Kimi sessions remain unverified.
