@@ -22,7 +22,7 @@ Preconditions: run Doctor from the parent SKILL.md; Python/pytest/Poppler are av
 
 `test_http_acquisition.py::test_a_known_open_pdf_is_fetched_without_the_browser` calls `process_run.py --stages acquire --no-source-lookup` with a recording browser adapter, then `workflow.py status`. Require `pdf_acquired`, matching source bytes, an HTTP acquisition trail with SHA-256 and identity `verified`, and no browser marker file. The HTML and wrong-paper nodes in the runner call that same CLI. `stage_acquire` then uses the production acquire client. Direct `acquire.acquire` calls in the same test file are outside these nodes.
 
-Inspect `commands.jsonl` for the action and return value, `results.xml` for each assertion outcome, and `state/` for persisted artifacts. Run cleanup is automatic and must leave evidence intact.
+Inspect `commands.jsonl` for `command` and `exit_code`, `results.xml` for each assertion outcome, and `state/` for persisted artifacts. Run cleanup is automatic and must leave evidence intact.
 
 ## Gotchas
 
