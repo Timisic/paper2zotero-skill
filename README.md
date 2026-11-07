@@ -28,7 +28,7 @@
 
 ## 用库内文献写作
 
-本仓库一起安装六个 skill。入库后，写作只引用 Zotero 集合里的文献：文献综述用 `academic-paper` 的 lit-review 模式，引言用 `nature-writing`，讨论用 [`discussion-drafter`](discussion-drafter/SKILL.md)。`academic-paper` 和 `academic-paper-reviewer` 仅限非商业使用；来源、许可和已知限制见 [THIRD_PARTY.md](THIRD_PARTY.md)。写作 skill 需要助手已连接 Zotero MCP。
+本仓库一起安装六个 skill。入库后，写作只引用 Zotero 集合里的文献：文献综述用 `academic-paper` 的 lit-review 模式，引言用 `nature-writing`，讨论用 [`discussion-drafter`](discussion-drafter/SKILL.md)。`academic-paper` 和 `academic-paper-reviewer` 仅限非商业使用；来源、许可和已知限制见 [THIRD_PARTY.md](THIRD_PARTY.md)。本仓库自有代码采用 [MIT 许可](LICENSE)。写作 skill 需要助手已连接 Zotero MCP。
 
 > 使用 discussion-drafter。研究背景是……，核心发现是……；只使用 Zotero 中“AI 与学习”集合及子集合的文献，撰写中文讨论。
 
@@ -47,7 +47,7 @@ irm https://raw.githubusercontent.com/Timisic/paper2zotero-skill/main/install/in
 curl -fsSL https://raw.githubusercontent.com/Timisic/paper2zotero-skill/main/install/install.sh | bash
 ```
 
-网络受限（无法访问 GitHub 或 PyPI）时，从 [Releases](https://github.com/Timisic/paper2zotero-skill/releases) 下载对应系统的离线安装包，解压后按其中的 `开始.md` 操作。
+网络受限（无法访问 GitHub 或 PyPI）时，从 [Releases](https://github.com/Timisic/paper2zotero-skill/releases) 下载 Windows 或 macOS 的离线安装包，解压后按其中的 `开始.md` 操作。
 
 已经下载仓库：Windows 双击 `install/setup.cmd`；macOS/Linux 运行 `bash install/setup.sh`。以后可让助手“继续文献工具的配置”或“打开文献工具的更多设置”。[安装与使用帮助](install/HELP.md)包含 Windows 操作说明、数据流向和常见问题。
 

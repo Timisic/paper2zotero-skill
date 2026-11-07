@@ -85,6 +85,7 @@ def test_offline_build_lays_out_runtime_version_and_start_page(tmp_path, monkeyp
     assert root + 'runtime/python/bin/python3.12' not in names
     assert root + 'runtime/wheels/pymupdf-1.0-cp310-abi3-macosx_11_0_arm64.whl' in names
     assert root + 'paper-to-zotero/SKILL.md' in names
+    assert 'MIT License' in zipfile.ZipFile(archive).read(root + 'LICENSE').decode()
     assert not [name for name in names if '/tests/' in name]
 
 

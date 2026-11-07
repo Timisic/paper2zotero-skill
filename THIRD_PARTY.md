@@ -1,6 +1,6 @@
 # Third-party skills
 
-The installer puts six skills into the selected agent. Two belong to this repository: `paper-to-zotero` saves papers to Zotero, and `discussion-drafter` writes a discussion from a Zotero collection. The other four are vendored writing skills, described below: `academic-paper` (literature review), `academic-paper-reviewer` (the checklist `academic-paper` reads), `nature-writing` (introduction) and `nature-shared` (shared guidance for `nature-writing`).
+The installer puts six skills into the selected agent. Two belong to this repository: `paper-to-zotero` saves papers to Zotero, and `discussion-drafter` writes a discussion from a Zotero collection. Both are under the repository's MIT License (`LICENSE`). The other four are vendored writing skills, described below: `academic-paper` (literature review), `academic-paper-reviewer` (the checklist `academic-paper` reads), `nature-writing` (introduction) and `nature-shared` (shared guidance for `nature-writing`).
 
 These folders are copied unmodified from their upstream repositories. Only a `LICENSE` file, the upstream repository's root license, was added to each. Report problems with their content upstream. To update one, copy the folder again from a newer commit and change the commit below.
 
@@ -58,7 +58,7 @@ Known limits. It reads shared guidance from the sibling folder `../nature-shared
 
 ## Offline bundle runtime
 
-The offline zips (`paper2zotero-<version>-<platform>.zip`) also carry a `runtime/` folder that the repository does not contain. `scripts/build-distribution.py` downloads it at build time.
+The Windows and macOS offline zips (`paper2zotero-<version>-<platform>.zip`) also carry a `runtime/` folder that the repository does not contain. `scripts/build-distribution.py` downloads it at build time.
 
 - `runtime/python/`: CPython 3.12 from [python-build-standalone](https://github.com/astral-sh/python-build-standalone), release `20261021`, `install_only_stripped` build, SHA-256 checked against that release's `SHA256SUMS`. CPython is under the PSF License. The build also links libraries under their own licenses, among them OpenSSL, SQLite, XZ, zlib, libffi and Tcl/Tk. See `LICENSE.txt` inside `runtime/python/` and the project's license notes.
 - `runtime/wheels/`: scansci-pdf, markitdown and their dependencies, unmodified. `runtime/LICENSES.md` lists each wheel's name, version and declared license. PyMuPDF, pymupdf4llm and pymupdf-layout are AGPL-3.0 or an Artifex commercial license.

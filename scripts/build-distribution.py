@@ -25,15 +25,12 @@ PLATFORMS = {
     'windows-x64': ('x86_64-pc-windows-msvc', ['win_amd64']),
     'macos-arm64': ('aarch64-apple-darwin', ['macosx_11_0_arm64']),
     'macos-x64': ('x86_64-apple-darwin', ['macosx_11_0_x86_64']),
-    # manylinux2014 alone resolves an obsolete markitdown.
-    'linux-x64': ('x86_64-unknown-linux-gnu',
-                  ['manylinux_2_28_x86_64', 'manylinux_2_17_x86_64', 'manylinux2014_x86_64']),
 }
 
 
 def stage(destination: Path) -> None:
     destination.mkdir(parents=True)
-    for name in ('README.md', 'THIRD_PARTY.md', '开始.md'):
+    for name in ('README.md', 'LICENSE', 'THIRD_PARTY.md', '开始.md'):
         shutil.copy2(ROOT / name, destination / name)
     shutil.copytree(ROOT / 'install', destination / 'install')
     for skill_name in SKILL_NAMES:
