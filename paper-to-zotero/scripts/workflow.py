@@ -112,28 +112,7 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
     path = manifest_path(run_dir)
     if not path.is_file():
         fail(f"run package has no manifest: {run_dir}")
-    return migrate(read_json(path))
-
-
-def migrate(manifest: dict[str, Any]) -> dict[str, Any]:
-    """Read a schema-1 run without reinstating its retired search-plan gate.
-
-    Schema 1 blocked retrieval behind a separate plan approval. That gate is
-    gone, so an old run carrying `search_plan: pending` must not be stuck: the
-    approved plan text survives as recorded scope, and only the candidate gate
-    still holds work back.
-    """
-    gates = manifest.setdefault("gates", {})
-    if "search_plan" in gates:
-        del gates["search_plan"]
-        manifest.setdefault("search_scope", manifest.get("search_plan"))
-    manifest.setdefault("search", {
-        "rounds": [],
-        "supplementary_budget": DEFAULT_SUPPLEMENTARY_BUDGET,
-        "budget_seconds": DEFAULT_SEARCH_SECONDS,
-    })
-    gates.setdefault("candidate_selection", "pending")
-    return manifest
+    return read_json(path)
 
 
 def search_summary(manifest: dict[str, Any]) -> dict[str, Any]:

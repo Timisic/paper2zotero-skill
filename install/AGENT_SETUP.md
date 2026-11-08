@@ -6,7 +6,7 @@
 
 从当前运行环境确定操作系统和助手，不让用户选择 Python 版本、目录或服务参数。安装目标参数是 `codex`、`claude-code` 或 `pi`；明确知道当前助手时必须传入。以下示例以 Claude Code 为例，按当前助手替换这个值。`auto` 只安装到已经存在的助手配置目录；无法识别时，交互向导会询问。只有用户要求所有助手时才使用 `all`。
 
-安装与验证共用 `paper-to-zotero/scripts/agent_installation.py`。Codex 使用 `~/.codex/skills`（尊重 `CODEX_HOME`）；Claude Code 使用 `~/.claude/skills`（尊重 `CLAUDE_CONFIG_DIR`）；Pi 使用 `~/.pi/agent/skills`。所选助手同时获得全部六个 skill 目录。已有本安装器管理的其他助手副本也会更新；旧 `literature-to-zotero` 名称在全部 skill 安装成功后移至可恢复备份。独立安装保留，不自动覆盖。
+安装与验证共用 `paper-to-zotero/scripts/agent_installation.py`。Codex 使用 `~/.codex/skills`（尊重 `CODEX_HOME`）；Claude Code 使用 `~/.claude/skills`（尊重 `CLAUDE_CONFIG_DIR`）；Pi 使用 `~/.pi/agent/skills`。所选助手同时获得全部六个 skill 目录。已有本安装器管理的其他助手副本也会更新。独立安装保留，不自动覆盖。
 
 普通配置依次为：准备工具、Zotero Desktop 本机写入、检查结果、更多配置。首次使用走这条路径。用户要求更多设置时加 `--advanced` / `-Advanced`，它直接打开更多配置，不重复基础账号；群组文库加 `--group` / `-Group`（使用本地 setup 入口）。更多配置的项目见 [HELP.md](HELP.md#更多配置)。
 

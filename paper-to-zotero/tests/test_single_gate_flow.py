@@ -92,21 +92,3 @@ def test_a_note_recorded_without_a_state_never_rewinds_the_paper(tmp_path: Path)
     # The same observation twice is one warning, not a growing list.
     paper = workflow.Run.record(run, "doi:10.1000/alpha", warning="acquisition: no verified source PDF")
     assert paper.warnings == ["acquisition: no verified source PDF"]
-
-
-def test_legacy_run_with_a_plan_gate_still_advances(tmp_path: Path) -> None:
-    run = init_run(tmp_path, "legacy")
-    manifest = json.loads((run / "manifest.json").read_text())
-    manifest["schema_version"] = 1
-    manifest["gates"] = {"search_plan": "pending", "candidate_selection": "pending"}
-    manifest.pop("search", None)
-    (run / "manifest.json").write_text(json.dumps(manifest))
-    run_script(
-        "workflow.py", "import-candidates", "--run-dir", str(run),
-        "--file", str(FIXTURES / "normalized_candidates.json"),
-    )
-    run_script(
-        "workflow.py", "approve-candidates", "--run-dir", str(run), "--ids", "doi:10.1000/alpha",
-    )
-    status = json.loads(run_script("workflow.py", "status", "--run-dir", str(run)).stdout)
-    assert status["gates"]["candidate_selection"] == "approved"
