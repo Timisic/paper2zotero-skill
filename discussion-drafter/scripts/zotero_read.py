@@ -123,7 +123,7 @@ def collection_tree(library: Library) -> dict[str, dict[str, Any]]:
     rows = {c["key"]: c["data"] for c in library.all("/collections")}
 
     def path(key: str) -> str:
-        parent = rows[key].get("parentCollection") or None
+        parent = rows[key].get("parentCollection") or ""
         return (path(parent) + " / " if parent in rows else "") + rows[key]["name"]
 
     return {key: {"key": key, "name": data["name"], "parent": data.get("parentCollection") or None,
@@ -268,7 +268,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     args = build_parser().parse_args()
     try:
         result = COMMANDS[args.command](Library(args.group), args)
