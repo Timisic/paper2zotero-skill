@@ -1,6 +1,6 @@
 ---
 name: paper-to-zotero
-description: Find, screen, acquire, verify, summarize, and save scholarly papers to Zotero from a natural-language research intent, known paper identifiers, or local PDFs. Use for literature searches that need a user-confirmed reading list, source PDFs, derived Markdown, and auditable Zotero ingestion. Search and PDF download use scansci-pdf 1.19.0 with grey sources including Sci-Hub on, and fall back to Kimi WebBridge. `--legal-only` or `SCANSCI_LEGAL_ONLY=1` forces legal sources. Each PDF falls through self-hosted MinerU (only when MINERU_API_BASE is set), a MinerU cloud token, then local markitdown. Uploading a PDF needs recorded consent. Zotero writes use Zotero MCP or the local Desktop API. Do not use for writing a literature review, introduction, or discussion.
+description: Find, screen, acquire, verify, summarize, and save scholarly papers to Zotero from a natural-language research intent, known paper identifiers, or local PDFs. Use for literature searches that need a user-confirmed reading list, source PDFs, derived Markdown, and auditable Zotero ingestion. Search and PDF download use scansci-pdf 1.19.0 with grey sources including Sci-Hub on, and fall back to Kimi WebBridge. `--legal-only` or `SCANSCI_LEGAL_ONLY=1` forces legal sources. Each PDF falls through self-hosted MinerU (only when MINERU_API_BASE is set), a MinerU cloud token, then local markitdown. Uploading a PDF needs recorded consent. Zotero writes use the journaled writer over the local Desktop API, or the Web API. Do not use for writing a literature review, introduction, or discussion.
 ---
 
 # Paper to Zotero
@@ -12,7 +12,7 @@ Resolve `SKILL_DIR` to the directory containing this `SKILL.md` (Claude Code als
 ## Three stages
 
 1. **Ingest**: scansci searches and downloads. Kimi WebBridge is the fallback for both.
-2. **Write**: Zotero MCP or the local Desktop API saves items, PDFs, Markdown and notes, then reads them back ([zotero-ingestion.md](references/zotero-ingestion.md)).
+2. **Write**: the journaled writer saves items, PDFs, Markdown and notes through the local Desktop API, or the Web API, then reads them back ([zotero-ingestion.md](references/zotero-ingestion.md)).
 3. **Use**: writing skills read the Zotero collection. This skill ends at stage 2.
 
 ## Choose the entry path
@@ -51,7 +51,7 @@ Normal delivery ends with the returned table, read-back evidence and links to ex
    Add `--legal-only` when the user wants legal PDF sources only. The advisory `--check-ingestion` failure does not block PDFs, conversion or summaries. Resume the same run with `--ids` for named gaps. Do not compose a new ingestion script at runtime.
 8. If `acquire.browser_handoff` is present, complete the [MyLOFT handoff](references/acquisition-and-artifacts.md#myloft-handoff) in the same browser session after the command exits. This is already-authorized work. Then run `--stages convert` for newly acquired files, without retrying unresolved downloads.
 9. `status: awaiting_summaries` returns `summary_batch_file`, whose `summaries` list gives each full-text source, its basis and hash, Markdown section locations and a `content_file`. Read [paper-summary.md](references/paper-summary.md). Write each `content_file` yourself, in this turn, in the paper's language unless the user specifies otherwise, then self-check once. Do not pause the user for the prose. Run `summary_batch_command` with the actual agent model as provider, then its `resume_command` (or `resume_shell`) to ingest.
-10. Deliver the returned `table` (`workflow.py report` regenerates it) with the collection and the local run path. Report read-back papers as delivered while Desktop downloads. When the papers and notes are saved, add one short reminder in the user's language, naming the actual collection: “基于本次 Zotero 集合及子集合，可以用 academic-paper 的 lit-review 模式写文献综述，用 nature-writing 写引言；提供研究背景和核心发现后，用 discussion-drafter 写讨论并附 APA 参考文献表。” Say that the writing skills need a working Zotero MCP connection. This is a suggestion, not permission to start drafting.
+10. Deliver the returned `table` (`workflow.py report` regenerates it) with the collection and the local run path. Report read-back papers as delivered while Desktop downloads. When the papers and notes are saved, add one short reminder in the user's language, naming the actual collection: “基于本次 Zotero 集合及子集合，可以用 academic-paper 的 lit-review 模式写文献综述，用 nature-writing 写引言；提供研究背景和核心发现后，用 discussion-drafter 写讨论并附 APA 参考文献表。” Say that the writing skills read this collection through Zotero Desktop's local API, so Zotero must be open while drafting; no Zotero MCP is needed. This is a suggestion, not permission to start drafting.
 
 ## Hard invariants
 

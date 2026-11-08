@@ -1,6 +1,6 @@
 ---
 name: discussion-drafter
-description: 根据用户的研究结果撰写或完善论文 Discussion，通过 Zotero MCP 读取指定分类集合的文献与笔记，为论断核对依据，并生成 APA 第七版文内引用和参考文献表。用于限定 Zotero 文献来源的讨论写作，不负责库外文献检索或文献入库。
+description: 根据用户的研究结果撰写或完善论文 Discussion，通过 Zotero 本地 API 读取指定分类集合的文献与笔记，为论断核对依据，并生成 APA 第七版文内引用和参考文献表。用于限定 Zotero 文献来源的讨论写作，不负责库外文献检索或文献入库。
 ---
 
 # Discussion 撰写助手
@@ -11,27 +11,28 @@ description: 根据用户的研究结果撰写或完善论文 Discussion，通�
 
 从已有对话、稿件或结果文件中取得研究背景、主要研究问题与核心发现。仅询问仍缺失的必要输入：研究背景、核心发现、目标分类集合。研究假设、设计、样本及统计结果只采用用户实际提供的内容；信息不足的位置明确待补，不编造结果、假设或局限。
 
-用 Zotero MCP 解析用户指定的分类集合，记录当前 library 身份、集合名称与 key，默认包含子集合。同名集合按所属库与完整路径区分；无法唯一确定时才请用户选择。若用户指定其他个人库或群组库，先确认当前 MCP 能否访问该库，不能用当前库替代。
+用下一节的读取脚本解析用户指定的分类集合，记录 library、集合完整路径与 key，默认包含子集合。同名集合按完整路径区分；无法唯一确定时才请用户选择。群组库传 `--group <群组 ID>`；读不到该库时报告，不能用个人库替代。
 
 文献来源必须属于这个范围。引言中提到的文献也要核对集合归属；模型记忆、互联网搜索和库外条目不能补充进引用。用户自己的研究结果是本研究的依据，不要求事先存入 Zotero。
 
-## 2. 通过 Zotero MCP 读取材料
+## 2. 通过 Zotero 本地 API 读取材料
 
-先发现当前连接实际提供的工具和参数，再调用对应能力。以下名称是已知接口示例，以当前工具 schema 为准：
+读取只走 Zotero Desktop 的本地 API，不写入文库，不需要密钥或 MCP。前提是 Zotero 7 已打开，并在 设置 → 高级 中勾选“允许此计算机上的其他应用程序与 Zotero 通信”。`SKILL_DIR` 指本文件所在目录。macOS/Linux 和 Git Bash 运行 `"$(cat ~/.config/literature-to-zotero/python-path)" "$SKILL_DIR/scripts/zotero_read.py" <命令>`；Windows PowerShell 运行 `& (Get-Content "$env:USERPROFILE\.config\literature-to-zotero\python-path" -TotalCount 1) "$SKILL_DIR\scripts\zotero_read.py" <命令>`。这是 paper-to-zotero 安装的 Python；没有该文件时用 `python3`，此时按页读取 PDF 和读取未建索引的 PDF 需要另装 PyMuPDF。每条命令输出 JSON。
 
-| 任务 | 工具与关键用法 |
+| 任务 | 命令 |
 | --- | --- |
-| 解析集合 | `zotero_search_collections`；必要时 `zotero_get_collections` 查看层级 |
-| 枚举范围 | `zotero_get_collection_items`，显式传入 `collection_key`、`include_subcollections=true`，按 `offset` 翻页直到结束 |
-| 枚举笔记及附件 | `zotero_get_item_children`；用作子项清单，正文可能截断，不能视为完整笔记 |
-| 读取笔记 | `zotero_get_notes(item_key=父条目key, truncate=false)`，显式设置足够的 `limit`，与子项清单核对数量 |
-| 读取高亮及批注 | `zotero_get_annotations`，始终限定范围内的 `item_key` 并检查条数限制 |
-| 核对元数据 | `zotero_get_item_metadata(item_key, format="json")` |
-| 核对论文内容 | `zotero_read_pdf_pages`、`zotero_get_item_fulltext`，或通过 `zotero_get_attachment_path` 读取已归属该条目的本地附件 |
+| 解析集合 | `collections --name <名称片段>`，返回 key、名称与完整路径 |
+| 枚举范围 | `items --collection <key>`，已包含全部子集合、翻完所有页并按 key 去重；只要本集合时加 `--no-subcollections` |
+| 库内检索 | `search --query <词> --collection <key>`，搜标题、作者与全文 |
+| 笔记、附件与批注 | `children --item <父条目 key>`，返回全部完整笔记正文、附件清单和 PDF 高亮／批注（含页码） |
+| 核对论文内容 | `fulltext --item <父条目或附件 key>` 返回每个附件的全文；`pages --item <key> --pages 3-5` 按页读取 PDF，用于页码定位 |
+| 引文与参考文献 | `cite --items <key,key,...>`，见第 5 节 |
 
-完成集合分页，按 library 与 item key 去重，排除已删除条目，建立允许引用的文献清单。若一页达到请求上限，即使没有下一页提示，也继续递增 offset，直到末页或可核对的总数；返回重复页时报告分页异常。附件和子笔记追溯至父文献；集合中的独立笔记可作写作线索，必须能关联到范围内的文献才能用作该文献的证据。
+本机 Zotero 不可达时，命令以非零状态退出并给出开启方法。此时，若当前助手已连接 Zotero MCP，可改用其对应工具读取；先发现实际工具 schema，笔记读取须设置不截断，否则同样按缺口处理。
 
-读取范围内全部可用笔记正文，并核对读取覆盖情况。注意 `get_notes` 默认截断且有条数限制，没有 `offset` 时不能凭默认返回认定已读完；调整 limit，或按已枚举的笔记 key 用 `get_item_metadata(format="json")` 读取完整 `note` 字段补齐。独立笔记也按此方式读取。摘要、子项清单、搜索片段均不等于完整笔记。对笔记正文附带的高亮或批注，按需读取其原文上下文。
+用 `items` 的结果建立允许引用的文献清单，核对 `count` 与列出的条目数一致。附件和子笔记追溯至父文献；集合中的独立笔记可作写作线索，必须能关联到范围内的文献才能用作该文献的证据。
+
+对清单中每篇文献运行 `children`，读取全部笔记正文，并核对读取覆盖情况。摘要和搜索结果都不等于完整笔记。对笔记正文附带的高亮或批注，按需读取其原文上下文。
 
 库内检索可用于筛选相关材料，但任何结果都要按允许引用的清单过滤。若笔记或附件不可读、输出被截断或读取量超过本轮可完成的范围，记录具体缺口；分批继续，仍未完成时说明覆盖范围，不声称读完全部材料。
 
@@ -71,9 +72,9 @@ description: 根据用户的研究结果撰写或完善论文 Discussion，通�
 
 特别检查作者字段：自然人若被存为单字段 `name`，引用引擎可能把整个姓名当作姓，生成包含全名的作者年份引用。机构作者使用单字段可以是正常情况；自然人姓名的拆分须有库内原文依据，不能按空格猜测。有疑点的条目先标记待核实，不能仅因工具成功返回就称为标准 APA。
 
-优先调用 `zotero_export_bibliography`，显式传入最终的 `item_keys` 与 `style="apa"`，分别使用 `export_format="citation"` 与 `export_format="bib"` 生成文内引用与参考文献表。默认使用 APA 第七版；检查实际样式，无法确认版本则说明未核实。不要省略范围参数而导出全库，也不要把集合中未引用的文献放进文后表。
+用 `cite --items <最终被引 key>` 一次生成文内引用（`citations`）与参考文献表（`bibliography`，斜体以 `*…*` 标出），由 Zotero 引用引擎按 `--style apa`（默认）排版；`missing` 列出未能生成引用的 key。只传正文实际引用的 key，不把集合中未引用的文献放进文后表。检查实际样式，无法确认是第七版则说明未核实。
 
-引用应在最终全部被引文献的上下文中核对：作者年份对应、同作者同年 a/b 消歧、同姓作者区分、文内文后对应及参考文献排序。不能假定独立生成或分批拼接的引文已完成全文消歧。当前示例接口每次最多 100 项；超限时先取得完整结果，再检查跨批次一致性，无法验证的部分明确待核实。Zotero 的格式化结果也须与元数据及正文实际含义核对；清理工具包装编号与 `&amp;` 等 HTML 实体，并检查目标输出中的必要斜体格式。
+引用应在最终全部被引文献的上下文中核对：作者年份对应、同作者同年 a/b 消歧、同姓作者区分、文内文后对应及参考文献排序。不能假定独立生成或分批拼接的引文已完成全文消歧。`cite` 每次最多 100 项；超限时分批取得完整结果，再检查跨批次一致性，无法验证的部分明确待核实。Zotero 的格式化结果也须与元数据及正文实际含义核对。
 
 若导出失败，保留文献身份与论断的对应关系，以明确的待补引用标记交付部分草稿，不把手写条目冒充为 Zotero 导出或已校验的 APA 引用。
 

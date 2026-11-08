@@ -60,7 +60,7 @@ bash "$HOME/.local/share/paper2zotero-source/install/setup.sh" --agent claude-co
 
 完成条件按检查顺序：运行工具、连接 AI 助手、当前检索后端（未设置 `SEARCH_BACKEND` 时是 scansci-pdf 1.19.0）、全文转换（任一路可用：设置了 `MINERU_API_BASE` 的自建 MinerU、MinerU 云端 Token 或本机 markitdown）、Zotero Desktop 本机写入。群组文库再加 Zotero Web API 行。此前启用的可选功能，例如 `SETUP_BROWSER=1` 的 Kimi，仍按实际探测。云端 Token 和 OpenAlex 不是完成条件。报告缺失项及一个继续配置入口。终端就绪或文件安装成功不等于账号配置完成；总检也不证明论文已处理或桌面附件已下载。
 
-最后请当前助手确认可以发现 `paper-to-zotero`、`academic-paper`、`nature-writing` 和 `discussion-drafter`（Claude Code 用 `/名称`，Codex 用 `$名称`）；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。写作 skill 另需当前助手连接 Zotero MCP：发现实际工具并只读验证目标集合。缺少连接时列为写作的未完成项。
+最后请当前助手确认可以发现 `paper-to-zotero`、`academic-paper`、`nature-writing` 和 `discussion-drafter`（Claude Code 用 `/名称`，Codex 用 `$名称`）；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。写作 skill 通过本地 API 读取 Zotero，不需要 Zotero MCP，也不要替用户注册 MCP。用 `discussion-drafter/scripts/zotero_read.py collections` 只读验证一次（解释器同 `python-path`），能列出集合即为可写作。
 
 交付时简短询问用户是否想换用自己的总结提示词；向导已问过则复用该选择。需要时通过 `agent_installation.installed_paths(agent=已选目标)` 给出生效的 `references/paper-summary.md` 绝对路径，修改方法见 [HELP.md](HELP.md#更换总结提示词)。不打开编辑器，不修改提示词。
 

@@ -28,7 +28,7 @@
 
 ## 用库内文献写作
 
-本仓库一起安装六个 skill。入库后，写作只引用 Zotero 集合里的文献：文献综述用 `academic-paper` 的 lit-review 模式，引言用 `nature-writing`，讨论用 [`discussion-drafter`](discussion-drafter/SKILL.md)。`academic-paper` 和 `academic-paper-reviewer` 仅限非商业使用；来源、许可和已知限制见 [THIRD_PARTY.md](THIRD_PARTY.md)。本仓库自有代码采用 [MIT 许可](LICENSE)。写作 skill 需要助手已连接 Zotero MCP。
+本仓库一起安装六个 skill。入库后，写作只引用 Zotero 集合里的文献：文献综述用 `academic-paper` 的 lit-review 模式，引言用 `nature-writing`，讨论用 [`discussion-drafter`](discussion-drafter/SKILL.md)。`academic-paper` 和 `academic-paper-reviewer` 仅限非商业使用；来源、许可和已知限制见 [THIRD_PARTY.md](THIRD_PARTY.md)。本仓库自有代码采用 [MIT 许可](LICENSE)。写作 skill 通过 Zotero Desktop 的本地 API 读取集合，不需要 Zotero MCP；写作时保持 Zotero 打开即可。
 
 > 使用 discussion-drafter。研究背景是……，核心发现是……；只使用 Zotero 中“AI 与学习”集合及子集合的文献，撰写中文讨论。
 
