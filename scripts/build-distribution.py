@@ -23,6 +23,12 @@ from scansci_retrieval import PIN
 
 PYTHON_RELEASE = 'https://github.com/astral-sh/python-build-standalone/releases/download/20261021/'
 PYTHON_ARCHIVE = 'cpython-3.12.15+20261021-{}-install_only_stripped.tar.gz'
+# Pinned: the release's SHA256SUMS asset can answer 504 while the archives still download.
+PYTHON_SHA256 = {
+    'x86_64-pc-windows-msvc': 'aac5d331fc3307343f95928fdbea4583f0d53973d08c7e1d081884fbd229a0e1',
+    'aarch64-apple-darwin': '7b8d00b751db21cea87dc551a8f8165147c5fbc5251d5537d7e5497dde00a219',
+    'x86_64-apple-darwin': 'f12e0504397683d6be0745ffd4c39ef45a455cec169adf35c628840d06133773',
+}
 PLATFORMS = {
     'windows-x64': ('x86_64-pc-windows-msvc', ['win_amd64']),
     'macos-arm64': ('aarch64-apple-darwin', ['macosx_11_0_arm64']),
@@ -75,10 +81,9 @@ def fetch(url: str) -> bytes:
 
 def download_python(triple: str, runtime: Path) -> None:
     name = PYTHON_ARCHIVE.format(triple)
-    sums = {line.split()[1]: line.split()[0] for line in fetch(PYTHON_RELEASE + 'SHA256SUMS').decode().splitlines() if line.strip()}
     archive = runtime / name
     archive.write_bytes(fetch(PYTHON_RELEASE + name))
-    if hashlib.sha256(archive.read_bytes()).hexdigest() != sums[name]:
+    if hashlib.sha256(archive.read_bytes()).hexdigest() != PYTHON_SHA256[triple]:
         raise SystemExit(f'SHA-256 不匹配：{name}')
     with tarfile.open(archive) as tar:
         # share/ holds man pages and terminfo, whose case-only name clashes break macOS builds.
