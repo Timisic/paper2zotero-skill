@@ -10,6 +10,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -55,12 +57,27 @@ def build(output: Path) -> Path:
     return release
 
 
+def fetch(url: str) -> bytes:
+    """GitHub release downloads answer 504 now and then; retry server errors and timeouts."""
+    for attempt in range(5):
+        try:
+            with urllib.request.urlopen(url, timeout=120) as response:
+                return response.read()
+        except urllib.error.HTTPError as error:
+            if error.code < 500 or attempt == 4:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 4:
+                raise
+        time.sleep(2 ** attempt * 5)
+    raise AssertionError('unreachable')
+
+
 def download_python(triple: str, runtime: Path) -> None:
     name = PYTHON_ARCHIVE.format(triple)
-    with urllib.request.urlopen(PYTHON_RELEASE + 'SHA256SUMS', timeout=60) as response:
-        sums = {line.split()[1]: line.split()[0] for line in response.read().decode().splitlines() if line.strip()}
+    sums = {line.split()[1]: line.split()[0] for line in fetch(PYTHON_RELEASE + 'SHA256SUMS').decode().splitlines() if line.strip()}
     archive = runtime / name
-    urllib.request.urlretrieve(PYTHON_RELEASE + name, archive)
+    archive.write_bytes(fetch(PYTHON_RELEASE + name))
     if hashlib.sha256(archive.read_bytes()).hexdigest() != sums[name]:
         raise SystemExit(f'SHA-256 不匹配：{name}')
     with tarfile.open(archive) as tar:
