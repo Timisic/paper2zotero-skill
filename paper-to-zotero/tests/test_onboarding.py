@@ -97,6 +97,7 @@ def test_private_writer_preserves_unicode_and_literal_shell_text(tmp_path):
     assert config.read_bytes() == before
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='Windows setup runs through setup.ps1')
 def test_bootstrap_check_forwards_group(tmp_path):
     fake = tmp_path / 'python'
     fake.write_text('#!/bin/sh\nif [ "$1" = -c ]; then exit 0; fi\nprintf "%s\\n" "$@" > "$OUT"\n', encoding='utf-8')
@@ -115,6 +116,7 @@ def test_bootstrap_check_forwards_group(tmp_path):
         assert ('--group' in lines) is forwarded
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='Windows setup runs through setup.ps1')
 def test_bootstrap_with_a_ready_python_prepares_the_runtime_without_package_managers(tmp_path):
     blocker = tmp_path / 'no-install'
     blocker.mkdir()
@@ -147,7 +149,7 @@ printf '%s\\n' "$@" >> "$OUT"
     assert not [line for line in log.split() if line.endswith(('apt-get', 'brew', 'sudo'))]
 
 
-@pytest.mark.skipif(os.name == 'nt', reason='Windows bundles run through setup.ps1')
+@pytest.mark.skipif(os.name == 'nt', reason='Windows setup runs through setup.ps1')
 def test_offline_bundle_uses_its_python_and_never_calls_package_managers(tmp_path):
     scripts = tmp_path / 'bundle/paper-to-zotero/scripts'
     scripts.mkdir(parents=True)
