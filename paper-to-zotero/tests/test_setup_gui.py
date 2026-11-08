@@ -31,7 +31,7 @@ def test_result_check_passes_the_group_flag(monkeypatch):
     def fake_check(agent, group=False):
         seen['agent'] = agent
         seen['group'] = group
-        return {'ready': True, 'items': [{'name': 'Zotero Desktop · 本机附件', 'ok': True}]}
+        return {'ready': True, 'items': [{'name': 'Zotero 本地 API', 'ok': True}]}
 
     monkeypatch.setattr(setup_gui.connection, 'check', fake_check)
     app = setup_gui.Wizard(root, agent='claude-code', group=True)

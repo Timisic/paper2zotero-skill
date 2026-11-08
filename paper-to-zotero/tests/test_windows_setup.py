@@ -52,7 +52,7 @@ def check_native_repeat_install_and_removed_download(tmp_path):
     assert not list(home.rglob('.literature-backup-*')), 'identical reinstall should not publish another copy'
     result = run_setup(package, env, '-Check')
     assert result.returncode == 1, result.stdout + result.stderr
-    assert 'Zotero Desktop · 本机附件' in result.stdout
+    assert '待完成 Zotero 本地 API' in result.stdout
     assert '安装已保存' in result.stdout
     shutil.rmtree(package)
     result = subprocess.run([sys.executable,
