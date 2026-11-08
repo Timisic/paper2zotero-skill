@@ -46,10 +46,6 @@ python "$SKILL_DIR/scripts/zotero_sync.py" --kind attachment-file --key <attachm
   --storage-root <Zotero-data-dir> --expected-sha256 <source-sha256>
 ```
 
-`record-paper --state read_back_verified` requires matching evidence from the writer journal (`--verification <run_dir>/zotero-state.json`) or the paper's stored Zotero result. Metadata visibility alone does not satisfy it. Metadata-only papers remain explicitly labeled even after successful metadata writes.
-
-## Compatibility helper
-
-`zotero_markdown.py` remains a standalone PyZotero workaround for a runtime whose attachment tool rejects `.md`. Prefer the journaled writer for batch runs: the standalone helper has no run-level deduplication or recovery ledger. If conversion was declined or unavailable, preserve the PDF and label the missing derived artifact; a readable PDF may support a summary with `source_basis=pdf`.
+`record-paper --state read_back_verified` requires matching evidence from the writer journal (`--verification <run_dir>/zotero-state.json`) or the paper's stored Zotero result. Metadata visibility alone does not satisfy it. Metadata-only papers remain explicitly labeled even after successful metadata writes. If conversion was declined or unavailable, preserve the PDF and label the missing derived artifact; a readable PDF may support a summary with `source_basis=pdf`.
 
 For network and interrupted-write recovery, read [recovery.md](recovery.md).
