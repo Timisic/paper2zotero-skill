@@ -1,4 +1,4 @@
-# Lab defaults on loopback
+# Backend defaults on loopback
 
 Check the current search, conversion, and Zotero write defaults on loopback peers.
 
@@ -14,13 +14,13 @@ Leave `SEARCH_BACKEND`, `MINERU_API_BASE`, and `ZOTERO_WRITE_BACKEND` unset. Sea
 
 ## Driving it with verify_runner
 
-Preconditions: run Doctor from the parent SKILL.md. Python, pytest, and Poppler are available. Only disposable fixture state is used.
+Preconditions: run Doctor from the parent SKILL.md. Python, pytest, and pymupdf are available. Only disposable fixture state is used.
 
 ```bash
-"$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature lab-defaults
+"$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature backend-defaults
 ```
 
-The nodes in `tests/test_lab_defaults.py` stay on loopback. `test_wrapped_evaluate_hits_still_become_candidates` writes one candidate when `command("evaluate")` returns `{type, value}` and the page JSON is in `value`. Five nodes drive the one-page failure contract on the same fixture transport: a down, unreadable, or outage page is `unavailable` after a single navigate; a readable page with no hits is `empty` and does not open `scholar.google.com`; a configured `KIMI_SEARCH_URL` is the only page when that page is down. None of these nodes open the Kimi daemon. `test_tasks_api_unpacks_full_md` unpacks a zip from `http_fixture.server`. `test_ingest_uses_the_local_api_without_a_web_key` creates one item on an in-process peer and does not attach a file.
+The nodes in `tests/test_backend_defaults.py` stay on loopback. `test_wrapped_evaluate_hits_still_become_candidates` writes one candidate when `command("evaluate")` returns `{type, value}` and the page JSON is in `value`. Five nodes drive the one-page failure contract on the same fixture transport: a down, unreadable, or outage page is `unavailable` after a single navigate; a readable page with no hits is `empty` and does not open `scholar.google.com`; a configured `KIMI_SEARCH_URL` is the only page when that page is down. None of these nodes open the Kimi daemon. `test_tasks_api_unpacks_full_md` unpacks a zip from `http_fixture.server`. `test_ingest_uses_the_local_api_without_a_web_key` creates one item on an in-process peer and does not attach a file.
 
 Inspect `commands.jsonl`, `results.xml`, and `state/`. Run cleanup is automatic and must leave evidence intact.
 

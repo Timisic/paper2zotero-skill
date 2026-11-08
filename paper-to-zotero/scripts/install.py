@@ -10,14 +10,13 @@ import shutil
 import tempfile
 import uuid
 
-from agent_installation import CHOICES, SKILL_NAMES, selected_roots, agent_roots, shared_path
+from agent_installation import CHOICES, SKILL_NAMES, selected_roots, agent_roots, shared_path, source_dir
 from runtime_io import file_lock
 
 WINDOWS = os.name == 'nt'
 MARKER = '.literature-to-zotero-managed'
 MANIFEST = '.literature-to-zotero-version.json'
 SOURCE = Path(__file__).resolve().parent.parent
-LEGACY_NAME = 'literature-to-zotero'
 SUMMARY = 'references/paper-summary.md'
 
 
@@ -98,7 +97,7 @@ def _finish_publication(journal: Path) -> bool:
         target, staged, backup = (Path(entry[key]) for key in ('target', 'staged', 'backup'))
         parent = target.parent.parent.resolve()
         # These paths share the target volume and stay outside discoverable skills.
-        if (not target.is_absolute() or target.name not in ('skill', LEGACY_NAME, *SKILL_NAMES)
+        if (not target.is_absolute() or target.name not in ('skill', *SKILL_NAMES)
                 or staged.parent.parent.resolve() != parent
                 or not staged.parent.name.startswith('.literature-update-')
                 or backup.parent.parent.resolve() != parent
@@ -221,23 +220,18 @@ def _custom_summary(paths: list[Path]) -> bytes | None:
     return next(iter(customized), None)
 
 
-def _managed_legacy(path: Path, legacy_shared: Path) -> bool:
-    return _owned(path) or (path.is_symlink() and path.resolve() in {
-        legacy_shared.resolve(), SOURCE.resolve(), SOURCE.parent / LEGACY_NAME})
-
-
 def install(agent: str = 'auto') -> None:
     roots = list(dict.fromkeys(selected_roots(agent)))
     if not roots:
         raise SystemExit('未找到已使用的 AI 助手。请运行 setup 并选择 Codex、Claude Code 或 Pi；Agent 可传 --agent。')
-    legacy_shared = Path.home() / '.local/share/literature-to-zotero/skill'
-    sources = {name: SOURCE if name == SKILL_NAMES[0] else SOURCE.parent / name for name in SKILL_NAMES}
-    # Existing managed installations participate in renaming; independent
-    # shared-root installations remain owned by the user.
+    # A repository or bundle keeps writing skills under writing/; the installed runtime keeps them flat.
+    nested = (SOURCE.parent / 'writing').is_dir()
+    sources = {name: SOURCE if name == SKILL_NAMES[0]
+               else (source_dir(SOURCE.parent, name) if nested else SOURCE.parent / name) for name in SKILL_NAMES}
+    # Other managed installations update together; independent ones stay the user's.
     existing_roots = [*agent_roots().values(), Path.home() / '.agents/skills', Path.home() / '.hermes/skills']
     for root in existing_roots:
-        if root not in roots and (_managed_legacy(root / LEGACY_NAME, legacy_shared)
-                                  or any(_owned(root / name) for name in SKILL_NAMES)):
+        if root not in roots and any(_owned(root / name) for name in SKILL_NAMES):
             roots.append(root)
     # Preflight the entire bundle before publishing any skill.
     for name, source in sources.items():
@@ -252,11 +246,6 @@ def install(agent: str = 'auto') -> None:
                     continue
                 raise SystemExit(f'已有独立安装，已保留：{target}。请先移动该目录后重跑 setup。')
     with file_lock(shared_path(SKILL_NAMES[0]).parent / '.install.lock'):
-        legacy_journal = _journal(legacy_shared)
-        if legacy_journal.exists():
-            with file_lock(legacy_shared.parent / '.install.lock'):
-                if not _finish_publication(legacy_journal):
-                    raise SystemExit('旧版安装有未完成的恢复记录，已保留。请先恢复旧版安装。')
         for name, source in sources.items():
             destination = shared_path(name)
             journal = _journal(destination)
@@ -264,8 +253,6 @@ def install(agent: str = 'auto') -> None:
             if journal.exists():
                 summary_paths.extend(Path(entry['backup']) for entry in
                                      json.loads(journal.read_text(encoding='utf-8'))['entries'])
-            if not any(_owned(path) for path in summary_paths):
-                summary_paths.extend([legacy_shared, *(root / LEGACY_NAME for root in roots)])
             summary = _custom_summary(summary_paths) if name == SKILL_NAMES[0] else None
             if journal.exists():
                 original = json.loads(journal.read_text(encoding='utf-8'))
@@ -276,17 +263,6 @@ def install(agent: str = 'auto') -> None:
             _publish(targets, source, destination, journal, summary)
             for root in roots:
                 print(f'已安装：{root / name}')
-        # Only retire the old discoverable names after ALL skills are ready.
-        for root in roots:
-            legacy = root / LEGACY_NAME
-            if legacy.exists() or legacy.is_symlink():
-                if _managed_legacy(legacy, legacy_shared):
-                    backup = root.parent / ('.literature-backup-' + uuid.uuid4().hex)
-                    backup.mkdir(parents=True)
-                    legacy.rename(backup / LEGACY_NAME)
-                    print(f'旧名称已备份：{backup / LEGACY_NAME}')
-                else:
-                    print(f'保留独立旧版安装：{legacy}')
         print(f'运行文件：{shared_path(SKILL_NAMES[0]).parent}')
 
 

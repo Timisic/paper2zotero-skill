@@ -16,8 +16,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
@@ -47,29 +45,6 @@ class BibliographyClient(Protocol):
     def search(self, source: str, query: sources.Query, *, budget: float | None = None) -> sources.Answer: ...
 
     def bibliographic(self, title: str, *, rows: int = 5, budget: float | None = None) -> sources.Answer: ...
-
-
-def full_text(pdf: Path) -> str:
-    """The whole PDF as text. Identity checks only need the front; conversion does not."""
-    executable = shutil.which("pdftotext")
-    if not executable:
-        return ""
-    try:
-        completed = subprocess.run(
-            [executable, "-enc", "UTF-8", str(pdf), "-"],
-            text=True, encoding="utf-8", errors="replace",
-            capture_output=True, timeout=60,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return (completed.stdout or "") if completed.returncode == 0 else ""
-
-
-def extract_document(pdf: Path) -> tuple[str, str]:
-    text = full_text(pdf)
-    if paper_artifacts.has_words(text):
-        return text, "pdftotext"
-    return paper_artifacts.extract_text(pdf)
 
 
 def usable_title(value: str | None) -> str | None:
@@ -113,7 +88,7 @@ def extract_pdf(pdf: Path) -> dict[str, Any]:
     if not pdf.is_file():
         return {"status": "extraction_failed", "reason": "file does not exist",
                 "doi": None, "title": None, "text": "", "extractor": "none"}
-    text, extractor = extract_document(pdf)
+    text, extractor = paper_artifacts.extract_text(pdf, pages=None)
     if extractor == "none" or not text.strip():
         return {"status": "extraction_failed", "reason": "no readable text could be extracted from this PDF",
                 "doi": None, "title": None, "text": "", "extractor": extractor}

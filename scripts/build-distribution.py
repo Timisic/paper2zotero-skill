@@ -10,17 +10,25 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'paper-to-zotero/scripts'))
-from agent_installation import SKILL_NAMES
+from agent_installation import SKILL_NAMES, source_dir
 from install import _files
 from scansci_retrieval import PIN
 
 PYTHON_RELEASE = 'https://github.com/astral-sh/python-build-standalone/releases/download/20261021/'
 PYTHON_ARCHIVE = 'cpython-3.12.15+20261021-{}-install_only_stripped.tar.gz'
+# Pinned: the release's SHA256SUMS asset can answer 504 while the archives still download.
+PYTHON_SHA256 = {
+    'x86_64-pc-windows-msvc': 'aac5d331fc3307343f95928fdbea4583f0d53973d08c7e1d081884fbd229a0e1',
+    'aarch64-apple-darwin': '7b8d00b751db21cea87dc551a8f8165147c5fbc5251d5537d7e5497dde00a219',
+    'x86_64-apple-darwin': 'f12e0504397683d6be0745ffd4c39ef45a455cec169adf35c628840d06133773',
+}
 PLATFORMS = {
     'windows-x64': ('x86_64-pc-windows-msvc', ['win_amd64']),
     'macos-arm64': ('aarch64-apple-darwin', ['macosx_11_0_arm64']),
@@ -34,10 +42,10 @@ def stage(destination: Path) -> None:
         shutil.copy2(ROOT / name, destination / name)
     shutil.copytree(ROOT / 'install', destination / 'install')
     for skill_name in SKILL_NAMES:
-        for relative in _files(ROOT / skill_name):
-            target = destination / skill_name / relative
+        for relative in _files(source_dir(ROOT, skill_name)):
+            target = source_dir(destination, skill_name) / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ROOT / skill_name / relative, target)
+            shutil.copy2(source_dir(ROOT, skill_name) / relative, target)
     # User README is standalone; developer links stay in the repository only.
     readme = destination / 'README.md'
     readme.write_text(readme.read_text(encoding='utf-8').split('<!-- repository-only -->')[0].rstrip() + '\n', encoding='utf-8', newline='\n')
@@ -55,13 +63,27 @@ def build(output: Path) -> Path:
     return release
 
 
+def fetch(url: str) -> bytes:
+    """GitHub release downloads answer 504 now and then; retry server errors and timeouts."""
+    for attempt in range(5):
+        try:
+            with urllib.request.urlopen(url, timeout=120) as response:
+                return response.read()
+        except urllib.error.HTTPError as error:
+            if error.code < 500 or attempt == 4:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 4:
+                raise
+        time.sleep(2 ** attempt * 5)
+    raise AssertionError('unreachable')
+
+
 def download_python(triple: str, runtime: Path) -> None:
     name = PYTHON_ARCHIVE.format(triple)
-    with urllib.request.urlopen(PYTHON_RELEASE + 'SHA256SUMS', timeout=60) as response:
-        sums = {line.split()[1]: line.split()[0] for line in response.read().decode().splitlines() if line.strip()}
     archive = runtime / name
-    urllib.request.urlretrieve(PYTHON_RELEASE + name, archive)
-    if hashlib.sha256(archive.read_bytes()).hexdigest() != sums[name]:
+    archive.write_bytes(fetch(PYTHON_RELEASE + name))
+    if hashlib.sha256(archive.read_bytes()).hexdigest() != PYTHON_SHA256[triple]:
         raise SystemExit(f'SHA-256 不匹配：{name}')
     with tarfile.open(archive) as tar:
         # share/ holds man pages and terminfo, whose case-only name clashes break macOS builds.

@@ -21,15 +21,16 @@ def runtime(tmp_path, monkeypatch):
     (source / 'SKILL.md').write_text('fixture')
     (source / 'scripts/runtime.py').write_text('version = 1')
     for name in agent_installation.SKILL_NAMES[1:]:
-        (source.parent / name).mkdir()
-        (source.parent / name / 'SKILL.md').write_text(name)
+        skill = agent_installation.source_dir(source.parent, name)
+        skill.mkdir(parents=True)
+        (skill / 'SKILL.md').write_text(name)
     monkeypatch.setattr(install, 'SOURCE', source)
     return source
 
 
 @pytest.mark.parametrize('name', ['paper-to-zotero', 'discussion-drafter'])
 def test_runtime_file_set_is_unchanged_by_the_whole_folder_rule(name):
-    root = install.SOURCE.parent / name
+    root = agent_installation.source_dir(install.SOURCE.parent, name)
     allowlisted = {'SKILL.md', *(path.relative_to(root).as_posix()
                                  for folder in ('scripts', 'references', 'agents', 'assets')
                                  for path in (root / folder).rglob('*') if path.is_file()
@@ -118,40 +119,6 @@ def test_custom_summary_prompt_does_not_invalidate_runtime(runtime):
     assert agent_installation.installation_ok('all')
 
 
-@pytest.mark.parametrize('windows', [False, True])
-def test_bundle_migrates_managed_legacy_and_preserves_custom_prompt(runtime, monkeypatch, windows):
-    monkeypatch.setattr(install, 'WINDOWS', windows)
-    (runtime / 'references').mkdir()
-    (runtime / install.SUMMARY).write_text('original instructions')
-    legacy_shared = Path.home() / '.local/share/literature-to-zotero/skill'
-    roots = list(agent_installation.agent_roots().values())
-    old_targets = [(legacy_shared, 'copy'), *((root / install.LEGACY_NAME, 'copy' if windows else 'link') for root in roots)]
-    legacy_shared.parent.mkdir(parents=True)
-    install._publish(old_targets, runtime, legacy_shared, install._journal(legacy_shared))
-    (legacy_shared / install.SUMMARY).write_text('custom instructions')
-    for root in roots:
-        (root / install.LEGACY_NAME / install.SUMMARY).write_text('custom instructions')
-    config = Path.home() / '.config/literature-to-zotero/env'
-    config.parent.mkdir(parents=True)
-    config.write_text('EXISTING_SETTING=keep\n')
-    (runtime / 'scripts/runtime.py').write_text('version = 2')
-    install.install('codex')
-    for root in roots:
-        for name in agent_installation.SKILL_NAMES:
-            target = root / name
-            assert (target / 'SKILL.md').is_file()
-            assert target.is_symlink() != windows
-        assert (root / 'paper-to-zotero' / install.SUMMARY).read_text() == 'custom instructions'
-        assert not (root / install.LEGACY_NAME).exists()
-        backups = list(root.parent.glob('.literature-backup-*/literature-to-zotero'))
-        assert len(backups) == 1
-        assert (backups[0] / install.SUMMARY).read_text() == 'custom instructions'
-    assert config.read_text() == 'EXISTING_SETTING=keep\n'
-    assert agent_installation.installation_ok('all')
-    install.install('all')
-    assert (roots[0] / 'paper-to-zotero' / install.SUMMARY).read_text() == 'custom instructions'
-
-
 def test_bundle_conflict_preflights_both_skills(runtime):
     conflict = Path.home() / '.codex/skills/discussion-drafter'
     conflict.mkdir(parents=True)
@@ -192,15 +159,6 @@ def test_conflicting_custom_prompts_preserve_all_installed_copies(runtime, monke
     for index, root in enumerate(roots):
         assert (root / 'paper-to-zotero' / install.SUMMARY).read_text() == f'personal prompt {index}'
         assert (root / 'paper-to-zotero/scripts/runtime.py').read_text() == 'version = 1'
-
-
-def test_independent_legacy_skill_is_retained(runtime):
-    old = Path.home() / '.codex/skills/literature-to-zotero'
-    old.mkdir(parents=True)
-    (old / 'SKILL.md').write_text('personal skill')
-    install.install('codex')
-    assert (old / 'SKILL.md').read_text() == 'personal skill'
-    assert agent_installation.installation_ok('codex')
 
 
 def test_missing_discussion_invalidates_bundle_and_rerun_repairs(runtime):

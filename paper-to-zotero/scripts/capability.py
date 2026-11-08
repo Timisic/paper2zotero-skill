@@ -59,9 +59,9 @@ GUIDE: dict[str, dict[str, str]] = {
         "do": "Zotero → 偏好设置 → 同步 → 设置：勾选“同步附件文件”以及“下载从其他设备添加的文件”，然后点右上角同步。",
     },
     "zotero_mcp": {
-        "label": "Zotero MCP 已配置",
+        "label": "Zotero MCP（可选）",
         "url": "",
-        "do": "在运行时配置里注册 zotero MCP（本机已验证 54yyyu/zotero-mcp），command 须可执行；Codex 的配置文件是 ~/.codex/config.toml。",
+        "do": "可选。入库和写作都走 Zotero 本地 API，不需要 MCP；只有想在助手里用语义搜索时，才在运行时配置里注册 zotero MCP（本机已验证 54yyyu/zotero-mcp）。",
     },
     "zotero_key": {
         "label": "Zotero Web API key",

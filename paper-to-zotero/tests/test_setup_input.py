@@ -138,7 +138,7 @@ WINDOWS=1
 GROUP_LIBRARY=1
 SKILL_DIR=.
 PYTHON_BIN=identity_fixture
-open_setup_url() { :; }
+open_url() { :; }
 shared_guide() { :; }
 pause() { :; }
 connect_account() {

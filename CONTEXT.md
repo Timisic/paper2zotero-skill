@@ -1,10 +1,10 @@
 # Architecture and working context
 
-`paper-to-zotero/` and `discussion-drafter/` are this repository's skills. The vendored writing skills and their licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md). [SKILL.md](paper-to-zotero/SKILL.md) and its references define literature ingestion. Maintainer docs start at [docs/README.md](docs/README.md).
+`paper-to-zotero/` and `writing/discussion-drafter/` are this repository's skills. All writing skills live in `writing/`; the vendored ones and their licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md). [SKILL.md](paper-to-zotero/SKILL.md) and its references define literature ingestion. Maintainer docs start at [docs/README.md](docs/README.md).
 
 ## Workflow
 
-Three stages. Ingest: scansci searches and downloads, with Kimi WebBridge as the fallback for both ([ADR-0005](docs/adr/0005-ingest-existing-pdf-scansci-kimi.md)). Write: Zotero MCP or the local Desktop API saves and reads back. Use: the writing skills read the Zotero collection.
+Three stages. Ingest: scansci searches and downloads, with Kimi WebBridge as the fallback for both ([ADR-0005](docs/adr/0005-ingest-existing-pdf-scansci-kimi.md)). Write: the journaled writer saves through the local Desktop API, or the Web API, and reads back. Use: the writing skills read the Zotero collection through the local Desktop API with `writing/discussion-drafter/scripts/zotero_read.py`. Zotero MCP is optional for both.
 
 Research intent → one candidate list → confirmation of selected papers, collection and upload choice → PDF acquisition and verification → conversion → full-text summary → Zotero ingestion and read-back → per-artifact result. A supplied PDF starts at `local_pdf.py` and joins the same conversion, summary and ingestion steps. One failed paper does not block the others. An interrupted run is continued, not recreated.
 
@@ -24,6 +24,7 @@ Research intent → one candidate list → confirmation of selected papers, coll
 | `zotero_ingest.py` | DOI reuse, journaled writes, missing-field merges, artifact reuse and Zotero/local read-back |
 | `credentials.py`, `capability.py` | Credential resolution and capability semantics; preflight, setup and verify consume these |
 | `http_client.py` | Bounded requests, shared pacing, credential-safe redirects and uncertain-write outcomes |
+| `writing/discussion-drafter/scripts/zotero_read.py` | Read-only library reads over the local Desktop API: collections, items, full notes, annotations, attachment text, PDF pages and APA citations. Standard library plus PyMuPDF, so it runs without the paper-to-zotero modules |
 
 Scripts use `Run`/`Paper` rather than duplicating manifest navigation. Deterministic scripts own service operations and recovery; the Agent owns research interpretation, screening and summarization. Write paths are in [zotero-ingestion.md](paper-to-zotero/references/zotero-ingestion.md).
 

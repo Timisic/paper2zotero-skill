@@ -136,7 +136,7 @@ def test_requested_optional_feature_failure_is_not_ready(tmp_path, monkeypatch, 
                         subprocess.CompletedProcess(command, 1 if command[-1] == 'kimi' else 0,
                                                     '{"ok": false}' if command[-1] == 'kimi' else '{"ok": true}', ''))
     assert module.check() == 1
-    assert '待完成 浏览器获取全文' in capsys.readouterr().out
+    assert '待完成 Kimi WebBridge（浏览器备用下载）' in capsys.readouterr().out
 
 
 def test_wizard_keeps_template_library():

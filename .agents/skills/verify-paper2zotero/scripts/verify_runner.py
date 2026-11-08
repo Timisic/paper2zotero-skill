@@ -38,21 +38,21 @@ CASES = {
         'test_full_chain.py::test_one_invocation_carries_a_confirmed_selection_to_read_back[ordinary-path]',
         'test_full_chain.py::test_a_conversion_failure_still_delivers_the_pdf',
         'test_full_chain.py::test_a_lost_mineru_submission_does_not_strand_the_chain'],
-    'lab-defaults': [
-        'test_lab_defaults.py::test_search_backend_defaults_to_scansci',
-        'test_lab_defaults.py::test_kimi_search_writes_browser_hits_and_a_block_is_unavailable',
-        'test_lab_defaults.py::test_wrapped_evaluate_hits_still_become_candidates',
-        'test_lab_defaults.py::test_a_down_default_page_is_unavailable',
-        'test_lab_defaults.py::test_an_unreadable_evaluate_is_unavailable',
-        'test_lab_defaults.py::test_an_outage_page_is_unavailable',
-        'test_lab_defaults.py::test_a_real_empty_page_does_not_open_another_search',
-        'test_lab_defaults.py::test_a_configured_search_url_is_not_replaced_when_it_is_down',
-        'test_lab_defaults.py::test_unset_mineru_api_base_has_no_self_hosted_hop',
-        'test_lab_defaults.py::test_unhealthy_self_host_drops_out_of_the_chain',
-        'test_lab_defaults.py::test_tasks_api_unpacks_full_md',
-        'test_lab_defaults.py::test_preflight_names_scansci_and_no_default_self_hosted_host',
-        'test_lab_defaults.py::test_ingestion_stage_is_ready_from_local_write_without_calling_the_web_key',
-        'test_lab_defaults.py::test_ingest_uses_the_local_api_without_a_web_key'],
+    'backend-defaults': [
+        'test_backend_defaults.py::test_search_backend_defaults_to_scansci',
+        'test_backend_defaults.py::test_kimi_search_writes_browser_hits_and_a_block_is_unavailable',
+        'test_backend_defaults.py::test_wrapped_evaluate_hits_still_become_candidates',
+        'test_backend_defaults.py::test_a_down_default_page_is_unavailable',
+        'test_backend_defaults.py::test_an_unreadable_evaluate_is_unavailable',
+        'test_backend_defaults.py::test_an_outage_page_is_unavailable',
+        'test_backend_defaults.py::test_a_real_empty_page_does_not_open_another_search',
+        'test_backend_defaults.py::test_a_configured_search_url_is_not_replaced_when_it_is_down',
+        'test_backend_defaults.py::test_unset_mineru_api_base_has_no_self_hosted_hop',
+        'test_backend_defaults.py::test_unhealthy_self_host_drops_out_of_the_chain',
+        'test_backend_defaults.py::test_tasks_api_unpacks_full_md',
+        'test_backend_defaults.py::test_preflight_names_scansci_and_no_default_self_hosted_host',
+        'test_backend_defaults.py::test_ingestion_stage_is_ready_from_local_write_without_calling_the_web_key',
+        'test_backend_defaults.py::test_ingest_uses_the_local_api_without_a_web_key'],
 }
 
 
@@ -103,12 +103,12 @@ def doctor(repo):
         'python': sys.version.split()[0], 'interpreter': sys.executable,
         'python_supported': sys.version_info >= (3, 11),
         'pytest': importlib.util.find_spec('pytest') is not None,
-        'pdftotext': shutil.which('pdftotext'), 'pdfinfo': shutil.which('pdfinfo'),
+        'pymupdf': importlib.util.find_spec('pymupdf') is not None,
         'scripts_present': all(path.is_file() for path in files),
         'source_sha256': {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in files if path.is_file()},
         'mode': 'offline fixtures; no persistent production instance',
     }
-    checks['ok'] = all(checks[key] for key in ('python_supported', 'pytest', 'pdftotext', 'pdfinfo', 'scripts_present'))
+    checks['ok'] = all(checks[key] for key in ('python_supported', 'pytest', 'pymupdf', 'scripts_present'))
     return checks
 
 
@@ -154,7 +154,7 @@ def main():
         ports.touch()
         # A fresh child environment, never a dump/filter of host credentials.
         env = {
-            'PATH': os.defpath + os.pathsep + str(Path(sys.executable).parent) + ':/opt/homebrew/bin:/usr/local/bin',
+            'PATH': os.defpath + os.pathsep + str(Path(sys.executable).parent),
             'HOME': str(profile), 'USERPROFILE': str(profile), 'CODEX_HOME': str(profile / '.codex'),
             'TMPDIR': str(temp), 'TMP': str(temp), 'TEMP': str(temp),
             'PYTHONPATH': str(Path(__file__).parent), 'PYTHONDONTWRITEBYTECODE': '1',

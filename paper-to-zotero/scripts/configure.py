@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 from pathlib import Path
 import subprocess
 import sys
@@ -49,7 +50,7 @@ CHECKS = {
     ),
     'zotero-local': ('连接电脑上的 Zotero', '打开 Zotero，在设置的高级选项中开启本地接口。'),
     'zotero-sync': ('下载 Zotero 附件', '在 Zotero 的同步设置中开启附件同步和自动下载。'),
-    'kimi': ('浏览器获取全文', '打开已安装扩展的浏览器，确认连接服务已启动。'),
+    'kimi': ('Kimi WebBridge（浏览器备用下载）', capability.GUIDE['kimi']['do']),
 }
 SETTINGS = {
     'ZOTERO_API_KEY', 'ZOTERO_LIBRARY_ID', 'ZOTERO_LIBRARY_TYPE', 'MINERU_TOKEN',
@@ -68,8 +69,9 @@ def probe(command: str) -> dict[str, object]:
     if command == 'skill-links':
         agent = os.environ.get('PAPER2ZOTERO_AGENT', 'auto')
         ok = agent_installation.installation_ok(agent)
-        detail = ', '.join(path for name in agent_installation.SKILL_NAMES
-                           for path in agent_installation.installed_paths(agent=agent, skill_name=name))
+        roots = dict.fromkeys(str(Path(path).parent) for name in agent_installation.SKILL_NAMES
+                              for path in agent_installation.installed_paths(agent=agent, skill_name=name))
+        detail = f"{len(agent_installation.SKILL_NAMES)} 个 skill → {'、'.join(roots)}"
     else:
         try:
             result = subprocess.run([sys.executable, str(SCRIPTS / 'verify.py'), command],
@@ -83,8 +85,13 @@ def probe(command: str) -> dict[str, object]:
 
 
 def render(record: dict[str, object]) -> None:
-    print(f"{'✓' if record['ok'] else '待完成'} {record['name']}")
-    if not record['ok']:
+    if record['ok']:
+        print(f"✓ {record['name']}" + (f"：{record['detail']}" if record.get('detail') else ''))
+    elif record.get('optional'):
+        print(f"○ {record['name']}：可选，未就绪")
+        print(f"  需要时：{record['action']}")
+    else:
+        print(f"待完成 {record['name']}")
         print(f"  下一步：{record['action']}")
 
 
@@ -112,15 +119,16 @@ def conversion_row() -> dict[str, object]:
     import mineru_parse
     plan = mineru_parse.converter_plan(live=True)
     record = capability.converter_ready(plan)
-    return {'name': '全文转换', 'ok': record['ok'] is True, 'detail': str(record['detail']),
+    hops = {'mineru-self-hosted': '自建 MinerU', 'mineru-cloud': 'MinerU 云端', 'markitdown': '本机 markitdown'}
+    detail = '、'.join(hops[hop] for hop in plan['available']) + ' 可用' if record['ok'] else str(record['detail'])
+    return {'name': '全文转换', 'ok': record['ok'] is True, 'detail': detail,
             'action': '' if record['ok'] else str(record['remediation'])}
 
 
 def desktop_row() -> dict[str, object]:
-    import setup_connection
-    name = setup_connection.SERVICES['desktop'][0]
+    name = 'Zotero 本地 API'
     if capability.probe_zotero_local_write():
-        return {'name': name, 'ok': True, 'detail': '127.0.0.1:23119', 'action': ''}
+        return {'name': name, 'ok': True, 'detail': '127.0.0.1:23119 可写入，写作 skill 也从这里读取', 'action': ''}
     if capability.probe_zotero_local():
         detail = '本地 API 没有返回 Zotero-Server-ID，不能作为写入目标。'
     else:
@@ -132,7 +140,8 @@ def check(*, as_json: bool = False, group: bool = False) -> int:
     import setup_connection
     rows: list[dict[str, object]] = []
     python_ok = sys.version_info >= (3, 11)
-    rows.append({'name': '运行工具', 'ok': python_ok, 'action': '' if python_ok else '重新运行安装入口。'})
+    rows.append({'name': '运行工具', 'ok': python_ok, 'detail': f'Python {platform.python_version()}',
+                 'action': '' if python_ok else '重新运行安装入口。'})
     rows.append(probe('skill-links'))
     rows.append(search_row(credentials.search_backend()))
     rows.append(conversion_row())
@@ -142,15 +151,19 @@ def check(*, as_json: bool = False, group: bool = False) -> int:
         rows.append(desktop_row())
     if group or credentials.zotero_credentials()['library_type'] == 'group':
         rows.append(probe('zotero-key'))
-    if credentials._skill_env().get('SETUP_BROWSER') == '1':
-        rows.append(probe('kimi'))
-    ready = all(row['ok'] for row in rows)
+    for row in rows:
+        row['optional'] = False
+    # Kimi is the fallback for search and download: always reported, required only once enabled.
+    kimi = probe('kimi')
+    rows.append({**kimi, 'detail': '已连接浏览器扩展' if kimi['ok'] else kimi['detail'],
+                 'optional': credentials._skill_env().get('SETUP_BROWSER') != '1'})
+    ready = all(row['ok'] or row['optional'] for row in rows)
     if as_json:
         print(json.dumps({'ready': ready, 'items': rows}, ensure_ascii=False))
     else:
         for row in rows:
             render(row)
-        print('已通过检查，可以开始找论文、保存和生成阅读材料。' if ready else
+        print('环境已就绪：可以找论文、保存到 Zotero，并用写作 skill 读取 Zotero 集合。' if ready else
               '安装已保存；仍有未完成项，可在向导中继续修复。当前可用功能以上方检查为准。')
         print('额外检索来源按需使用；电脑上的附件是否已下载，在处理论文时单独检查。')
     return 0 if ready else 1

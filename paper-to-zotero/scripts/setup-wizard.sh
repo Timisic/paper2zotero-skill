@@ -105,8 +105,7 @@ BASIC_COUNT=1
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SKILL_DIR/scripts/setup-input.sh"
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-WINDOWS=0
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WINDOWS=1 ;; esac
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) echo 'Windows 请双击 install\setup.cmd。' >&2; exit 2 ;; esac
 MODE=""
 GROUP_LIBRARY=0
 ADVANCED=0
@@ -167,38 +166,25 @@ prepare_extra() {
   if [[ "$1" == desktop ]]; then
     if [[ "$(uname -s)" == Darwin ]]; then
       if [[ ! -d /Applications/Zotero.app && ! -d "$HOME/Applications/Zotero.app" ]]; then
-        if command -v brew >/dev/null 2>&1; then brew install --cask zotero || warn '请按网页说明安装 Zotero。'; else open_setup_url 'https://www.zotero.org/download'; fi
+        if command -v brew >/dev/null 2>&1; then brew install --cask zotero || warn '请按网页说明安装 Zotero。'; else open_url 'https://www.zotero.org/download'; fi
       fi
       open -a Zotero || true
-    elif [[ "$WINDOWS" == 1 ]]; then
-      powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$SKILL_DIR/scripts/windows-zotero.ps1")" || warn '请从开始菜单打开 Zotero，或重跑安装。'
     else
-      open_setup_url 'https://www.zotero.org/download'
+      open_url 'https://www.zotero.org/download'
     fi
   else
     local kimi_bin installer
     kimi_bin="$(command -v kimi-webbridge || true)"
     kimi_bin="${kimi_bin:-$HOME/.kimi-webbridge/bin/kimi-webbridge}"
-    if [[ "$WINDOWS" == 1 ]]; then
-      if [[ -x "$HOME/.kimi-webbridge/bin/kimi-webbridge.exe" ]]; then kimi_bin="$HOME/.kimi-webbridge/bin/kimi-webbridge.exe"; fi
-    elif [[ ! -x "$kimi_bin" ]]; then
+    if [[ ! -x "$kimi_bin" ]]; then
       installer="$(mktemp)"
       if curl -fsSL https://cdn.kimi.com/webbridge/install.sh -o "$installer"; then bash "$installer" || warn '连接服务安装未完成，请按网页说明继续。'; fi
       rm -f "$installer"
     fi
     if [[ -x "$kimi_bin" ]]; then "$kimi_bin" start || warn '连接服务尚未启动。'; fi
-    open_setup_url 'https://www.kimi.com/products/kimi-webbridge'
+    open_url 'https://www.kimi.com/products/kimi-webbridge'
   fi
   pause '按网页说明完成安装、登录或扩展授权后，回车检查'
-}
-
-open_setup_url() {
-  if [[ "$WINDOWS" == 1 && -n "${PYTHON_BIN:-}" ]]; then
-    note "打开网页：$1"
-    "$PYTHON_BIN" -c 'import os, sys; os.startfile(sys.argv[1])' "$1" 2>/dev/null || warn "浏览器未能打开，请复制这个网址到浏览器：$1"
-  else
-    open_url "$1"
-  fi
 }
 
 _clear
@@ -213,7 +199,6 @@ pause '按回车开始'
 stage "准备工具和 AI 助手"
 bash "$SKILL_DIR/scripts/bootstrap.sh" --runtime-only
 IFS= read -r PYTHON_BIN < "$HOME/.config/literature-to-zotero/python-path"
-if [[ "$WINDOWS" == 1 ]]; then PYTHON_BIN="$(cygpath -u "$PYTHON_BIN")"; fi
 export PYTHON_BIN
 if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/install.py" --detect; then
   say '你要在哪个 AI 助手中使用？1 = Codex，2 = Claude Code，3 = Pi'
@@ -245,7 +230,7 @@ fi
 if [[ "$GROUP_LIBRARY" == 1 ]]; then
 stage "连接 Zotero Web API"
 say '群组文库需要 Web API 授权码。个人文库写入走本机 Desktop，不在这一步手填个人文库 ID。'
-open_setup_url 'https://www.zotero.org/settings/keys'
+open_url 'https://www.zotero.org/settings/keys'
 step '1. 登录 Zotero。还没有账号，可先在网页上注册。'
 step '2. 新建授权码，勾选 Allow library access、Allow notes access、Allow write access。'
 step '3. 允许目标群组的读取和写入。'

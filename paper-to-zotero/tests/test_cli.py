@@ -234,40 +234,6 @@ def test_candidate_table_rejects_unscreened_candidates(tmp_path: Path) -> None:
     assert "candidate screening is incomplete" in result.stderr
 
 
-def test_markdown_attachment_dry_run_uses_zotero_account_without_leaking_key(tmp_path: Path) -> None:
-    config = tmp_path / "config.toml"
-    config.write_text(
-        '[mcp_servers.zotero]\ncommand = "/opt/zotero-mcp"\n'
-        '[mcp_servers.zotero.env]\nZOTERO_LOCAL = "true"\n'
-        'ZOTERO_API_KEY = "super-secret"\nZOTERO_LIBRARY_ID = "123"\n'
-        'ZOTERO_LIBRARY_TYPE = "user"\n'
-    )
-    markdown = tmp_path / "paper.md"
-    markdown.write_text("# Derived paper\n")
-    # Credential discovery is env-first; pin env so the host dotenv can never
-    # shadow the deterministic account this test expects.
-    env = dict(os.environ)
-    env.pop("ZOTERO_LIBRARY_TYPE", None)
-    env["ZOTERO_API_KEY"] = "super-secret"
-    env["ZOTERO_LIBRARY_ID"] = "123"
-    result = subprocess.run(
-        [sys.executable, str(SCRIPTS / "zotero_markdown.py"), "--item-key", "ABCD1234",
-         "--file", str(markdown), "--codex-config", str(config), "--dry-run"],
-        text=True, capture_output=True, check=False, env=env,
-    )
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
-    assert payload == {
-        "status": "ready",
-        "item_key": "ABCD1234",
-        "filename": "paper.md",
-        "library_type": "user",
-        "library_id": "123",
-    }
-    assert "super-secret" not in result.stdout
-    assert "super-secret" not in result.stderr
-
-
 def test_preflight_treats_absent_storage_sync_pref_as_default_on(tmp_path: Path) -> None:
     config = tmp_path / "config.toml"
     config.write_text(

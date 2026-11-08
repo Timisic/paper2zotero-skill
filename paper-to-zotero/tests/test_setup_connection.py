@@ -56,7 +56,7 @@ def test_setup_requires_openalex_even_when_other_search_sources_work(tmp_path, m
     monkeypatch.setattr(sources.Sources, 'search', lambda *a, **k: pytest.fail('missing key must not use anonymous/fallback search'))
     assert configure.check(as_json=True) == 1
     result = json.loads(capsys.readouterr().out)
-    missing = [row for row in result['items'] if not row['ok']]
+    missing = [row for row in result['items'] if not row['ok'] and not row['optional']]
     assert len(missing) == 1
     assert missing[0]['name'] == '论文检索（OpenAlex）'
     assert missing[0]['sources'] == {'OpenAlex': 'not_configured'}
@@ -277,7 +277,7 @@ def _stub_check_surroundings(monkeypatch, *, write=True, read=False, search='htt
     if conversion:
         import mineru_parse
         monkeypatch.setattr(mineru_parse, 'converter_plan', lambda live=True: {
-            'selected': 'markitdown', 'api_base': None,
+            'selected': 'markitdown', 'available': ['markitdown'], 'api_base': None,
             'markitdown_install': "pip install 'markitdown[pdf]'"})
     if search == 'scansci':
         import scansci_retrieval
@@ -313,13 +313,15 @@ def test_product_default_check_passes_without_openalex_or_a_cloud_token(tmp_path
     assert report['ready'] is True
     assert [item['name'] for item in report['items']] == [
         '运行工具', '连接 AI 助手', '论文检索（ScanSci）', '全文转换',
-        'Zotero Desktop · 本机附件']
+        'Zotero 本地 API', 'Kimi WebBridge（浏览器备用下载）']
+    assert report['items'][-1]['optional'] is True
     assert report['items'][2]['detail'] == 'scansci-pdf 1.19.0'
     assert report['items'][2]['action'] == ''
-    assert 'selected=markitdown' in report['items'][3]['detail']
+    assert report['items'][3]['detail'] == '本机 markitdown 可用'
     assert report['items'][3]['action'] == ''
     assert report['items'][4] == {
-        'name': 'Zotero Desktop · 本机附件', 'ok': True, 'detail': '127.0.0.1:23119', 'action': ''}
+        'name': 'Zotero 本地 API', 'ok': True, 'detail': '127.0.0.1:23119 可写入，写作 skill 也从这里读取',
+        'action': '', 'optional': False}
     assert all('OpenAlex' not in item['name'] for item in report['items'])
     assert seen == []
     assert 'MINERU_API_BASE' not in os.environ
@@ -333,15 +335,15 @@ def test_closed_desktop_fails_even_with_a_saved_web_api_key(tmp_path, monkeypatc
     _stub_check_surroundings(monkeypatch, write=False, read=False, search='scansci')
     assert configure.check(as_json=True) == 1
     report = json.loads(capsys.readouterr().out)
-    missing = [row for row in report['items'] if not row['ok']]
-    assert [row['name'] for row in missing] == ['Zotero Desktop · 本机附件']
+    missing = [row for row in report['items'] if not row['ok'] and not row['optional']]
+    assert [row['name'] for row in missing] == ['Zotero 本地 API']
     assert missing[0]['detail'] == configure.capability.zotero_local(False)['detail']
     assert missing[0]['action'] == configure.capability.GUIDE['zotero_local']['do']
     assert all(row['name'] != '保存到 Zotero' for row in report['items'])
     assert env.read_bytes() == before
     assert configure.check(as_json=False) == 1
     text = capsys.readouterr().out
-    assert '待完成 Zotero Desktop · 本机附件' in text
+    assert '待完成 Zotero 本地 API' in text
     assert '下一步：' + configure.capability.GUIDE['zotero_local']['do'] in text
 
 
@@ -351,7 +353,7 @@ def test_readable_desktop_without_a_server_id_is_not_a_write_target(tmp_path, mo
     _stub_check_surroundings(monkeypatch, write=False, read=True, search='scansci')
     assert configure.check(as_json=True) == 1
     report = json.loads(capsys.readouterr().out)
-    missing = [row for row in report['items'] if not row['ok']]
+    missing = [row for row in report['items'] if not row['ok'] and not row['optional']]
     assert len(missing) == 1
     assert missing[0]['detail'] == '本地 API 没有返回 Zotero-Server-ID，不能作为写入目标。'
     assert missing[0]['action'] == configure.capability.GUIDE['zotero_local']['do']
@@ -362,13 +364,13 @@ def test_group_check_still_requires_the_web_api_row(tmp_path, monkeypatch, capsy
     _stub_check_surroundings(monkeypatch, search='scansci')
     assert configure.check(as_json=True, group=True) == 1
     report = json.loads(capsys.readouterr().out)
-    missing = [row['name'] for row in report['items'] if not row['ok']]
+    missing = [row['name'] for row in report['items'] if not row['ok'] and not row['optional']]
     assert missing == ['保存到 Zotero']
     capsys.readouterr()
     env.write_text('ZOTERO_LIBRARY_TYPE=group\n', encoding='utf-8')
     assert configure.check(as_json=True) == 1
     report = json.loads(capsys.readouterr().out)
-    assert [row['name'] for row in report['items'] if not row['ok']] == ['保存到 Zotero']
+    assert [row['name'] for row in report['items'] if not row['ok'] and not row['optional']] == ['保存到 Zotero']
 
 
 def test_unknown_basic_service_has_no_check_row(monkeypatch):
@@ -525,17 +527,7 @@ def test_custom_index_skips_the_mirror_and_failure_is_actionable(runtime, tmp_pa
     assert not (tmp_path / 'home/.config/literature-to-zotero/python-path').exists()
 
 
-@pytest.mark.parametrize('has_pdftotext', [True, False])
-def test_prepare_installs_without_requiring_pdftotext(monkeypatch, tmp_path, has_pdftotext):
-    tools_dir = tmp_path / 'tools'
-    tools_dir.mkdir()
-    tool = tools_dir / 'pdftotext'
-    if has_pdftotext:
-        tool.write_text('#!/bin/sh\n', encoding='utf-8')
-    monkeypatch.delenv('PAPER2ZOTERO_PDF_BIN', raising=False)
-    monkeypatch.setattr(connection.Path, 'home', classmethod(lambda cls: tmp_path))
-    monkeypatch.setattr(connection.shutil, 'which',
-                        lambda name: str(tool) if name == 'pdftotext' and has_pdftotext else None)
+def test_prepare_installs_the_runtime_then_the_skills(monkeypatch):
     seen = []
 
     def import_module(name):
@@ -546,6 +538,3 @@ def test_prepare_installs_without_requiring_pdftotext(monkeypatch, tmp_path, has
     monkeypatch.setattr(connection.importlib, 'import_module', import_module)
     connection.prepare('codex')
     assert seen == ['ensure_default_tools', 'install', ('skill', 'codex')]
-    config = tmp_path / '.config/literature-to-zotero'
-    pdf_bin = config / 'pdf-bin'
-    assert (pdf_bin.read_text(encoding='utf-8').strip() == str(tools_dir)) if has_pdftotext else not pdf_bin.exists()

@@ -53,17 +53,6 @@ def test_private_upload_urls_can_be_saved_on_windows(tmp_path):
     assert json.loads(path.read_text(encoding='utf-8')) == ['https://example.org/upload?fixture=1']
 
 
-def test_poppler_utf8_output_is_not_decoded_with_windows_locale(tmp_path, monkeypatch):
-    text = 'Paper with Unicode — psychology and resilience 测量结果'
-    monkeypatch.setattr(paper_artifacts.shutil, 'which', lambda _: 'pdftotext')
-    def run(args, **kw):
-        # Reproduce a Chinese Windows parent reading the extractor's UTF-8 pipe.
-        decoded = text.encode('utf-8').decode(kw.get('encoding') or 'cp936', errors=kw.get('errors', 'strict'))
-        return subprocess.CompletedProcess(args, 0, decoded, '')
-    monkeypatch.setattr(paper_artifacts.subprocess, 'run', run)
-    assert paper_artifacts.poppler_text(tmp_path / 'paper.pdf') == text
-
-
 def test_utf8_summary_validation_ignores_machine_locale(tmp_path, monkeypatch):
     pdf, summary = tmp_path / 'source.pdf', tmp_path / 'summary.md'
     pdf.write_bytes(b'%PDF-fixture')
@@ -112,10 +101,10 @@ def test_setup_does_not_claim_search_ready_when_all_sources_fail(tmp_path, monke
     monkeypatch.setenv('OPENALEX_API_KEY', 'fixture-openalex-key')
     monkeypatch.setattr(configure.agent_installation, 'installation_ok', lambda _: True)
     monkeypatch.setattr(configure.agent_installation, 'installed_paths', lambda **_: ['/fixture'])
-    monkeypatch.setattr(configure.subprocess, 'run', lambda *a, **kw: subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(configure.subprocess, 'run', lambda *a, **kw: subprocess.CompletedProcess([], 0, '{"ok": false}', ''))
     monkeypatch.setattr(configure.capability, 'probe_zotero_local_write', lambda *a, **k: True)
     monkeypatch.setattr(mineru_parse, 'converter_plan', lambda live=True: {
-        'selected': 'markitdown', 'api_base': None, 'markitdown_install': "pip install 'markitdown[pdf]'"})
+        'selected': 'markitdown', 'available': ['markitdown'], 'api_base': None, 'markitdown_install': "pip install 'markitdown[pdf]'"})
     class ClosedSources:
         def __init__(self, **kw): pass
         def search(self, source, query, **kw):
@@ -123,7 +112,7 @@ def test_setup_does_not_claim_search_ready_when_all_sources_fail(tmp_path, monke
     monkeypatch.setattr(sources, 'Sources', ClosedSources)
     assert configure.check(as_json=True) == 1
     result = json.loads(capsys.readouterr().out)
-    missing = [row for row in result['items'] if not row['ok']]
+    missing = [row for row in result['items'] if not row['ok'] and not row['optional']]
     assert len(missing) == 1 and missing[0]['name'] == '论文检索（OpenAlex）'
     assert 'OpenAlex' in missing[0]['action']
 

@@ -53,6 +53,26 @@ os.environ["LITERATURE_BROWSER_DISABLED"] = "1"
 # An installed markitdown would rescue every failed MinerU hop. Tests opt in.
 os.environ["LITERATURE_MARKITDOWN_DISABLED"] = "1"
 
+# The wizard opens pages with open/xdg-open/wslview and the GUI with webbrowser.
+# Shadow them all, so no test can open a page in the developer's browser.
+BROWSER_LOG = profile / "browser-opened.log"
+fake_browser = profile / "fake-browser-bin"
+fake_browser.mkdir()
+for opener in ("open", "xdg-open", "wslview"):
+    (fake_browser / opener).write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{BROWSER_LOG}"\n')
+    (fake_browser / opener).chmod(0o755)
+os.environ["PATH"] = str(fake_browser) + os.pathsep + os.environ.get("PATH", "")
+os.environ["BROWSER"] = str(fake_browser / "open") + " %s"
+
+
+@pytest.fixture(autouse=True)
+def no_browser_opened():
+    yield
+    if BROWSER_LOG.exists():
+        opened = BROWSER_LOG.read_text(encoding="utf-8")
+        BROWSER_LOG.unlink()
+        pytest.fail("test opened a page in the browser: " + opened)
+
 
 @pytest.fixture(autouse=True)
 def scansci_fetch_not_addressable(monkeypatch):
