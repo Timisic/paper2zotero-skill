@@ -10,7 +10,7 @@ Import a selected source PDF, validate identity, and resume without replacing ex
 
 ## How to get to it (user POV)
 
-Provide existing PDFs to the agent. The fast path is `paper-to-zotero/scripts/local_pdf.py`. It extracts a DOI or title, completes the record, appends a candidate when that id is new, approves those ids, then calls `workflow.import_pdf_mapping`, the same function `workflow.py import-pdfs` runs. Default `--backend cloud` calls `process_run.stage_convert` after recorded MinerU consent. The order is self-hosted MinerU when `MINERU_API_BASE` is set and `GET /v1/health` succeeds, then MinerU cloud when `MINERU_TOKEN` is set, then markitdown. `--backend local` writes on-machine text and does not record consent. This starter map still drives only the `import-pdfs` verifier (`tests/test_import_pdfs.py`). Those checks do not run the converter chain. The fast-path cases live in `paper-to-zotero/tests/test_local_pdf.py` and are not part of these checks.
+Provide existing PDFs to the agent. The fast path is `paper-to-zotero/scripts/local_pdf.py`. It extracts a DOI or title, completes the record, appends a candidate when that id is new, approves those ids, then calls `workflow.import_pdf_mapping`, the same function `workflow.py import-pdfs` runs. Default `--backend cloud` calls `process_run.stage_convert` after recorded MinerU consent. The converter order is in [lab-defaults.md](lab-defaults.md). `--backend local` writes on-machine text and does not record consent. This starter map still drives only the `import-pdfs` verifier (`tests/test_import_pdfs.py`). Those checks do not run the converter chain. The fast-path cases live in `paper-to-zotero/tests/test_local_pdf.py` and are not part of these checks.
 
 ## Driving it with verify_runner
 
@@ -22,7 +22,7 @@ Preconditions: run Doctor from the parent SKILL.md; Python/pytest/Poppler are av
 
 Both cases in `test_import_pdfs.py` call the public import CLI. `test_relative_mapping_import_and_resume_preserve_later_artifacts` checks byte equality on import, `action: reused` on repeat, unchanged manifest/mtime, then `partial` on changed input without overwriting the first copy. `test_selection_checked_before_any_copy_and_bad_pdf_stays_unrecorded` checks exit 2 for an unselected ID and `rejected` for HTML, with no recorded PDF artifact.
 
-Inspect `commands.jsonl` for the action and return value, `results.xml` for each assertion outcome, and `state/` for persisted artifacts. Run cleanup is automatic and must leave evidence intact.
+Inspect `commands.jsonl` for `command` and `exit_code`, `results.xml` for each assertion outcome, and `state/` for persisted artifacts. Run cleanup is automatic and must leave evidence intact.
 
 ## Gotchas
 

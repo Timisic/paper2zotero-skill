@@ -20,9 +20,9 @@ Preconditions: run Doctor from the parent SKILL.md; Python/pytest/Poppler are av
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature selection
 ```
 
-`test_single_gate_flow.py::test_clear_intent_reaches_candidates_without_a_plan_gate` invokes init/import/approve/status and expects `candidate_selection: approved`. The two refusal cases in `test_process_run.py` invoke processing and require exit 2 with the exact missing-selection/unselected reason. `test_conversion_without_consent_is_recorded_and_never_blocks_the_pdf` runs `process_run.py --stages convert,ingest` against the fixture library. The suite clears `MINERU_API_BASE` and sets `LITERATURE_MARKITDOWN_DISABLED=1`, so the MinerU upload is skipped and the PDF remains delivered with `markdown_unavailable: no upload consent`. With markitdown available, `stage_convert` converts that paper on this machine and writes no skip.
+`test_cli.py::test_processing_waits_only_for_the_selection_confirmation` runs init and import, then `record-paper` before approval. That call exits 2 and its stderr contains `candidate selection is not approved`. After `approve-candidates`, status gates are `{"candidate_selection": "approved"}` and one paper is `metadata_verified`. The two refusal cases in `test_process_run.py` invoke processing and require exit 2 with the exact missing-selection/unselected reason. `test_conversion_without_consent_is_recorded_and_never_blocks_the_pdf` runs `process_run.py --stages convert,ingest` against the fixture library. The suite clears `MINERU_API_BASE` and sets `LITERATURE_MARKITDOWN_DISABLED=1`, so the MinerU upload is skipped and the PDF remains delivered with `markdown_unavailable: no upload consent`. With markitdown available, `stage_convert` converts that paper on this machine and writes no skip.
 
-Inspect `commands.jsonl` for the action and return value, `results.xml` for each assertion outcome, and `state/` for persisted artifacts. Run cleanup is automatic and must leave evidence intact.
+Inspect `commands.jsonl` for `command` and `exit_code`, `results.xml` for each assertion outcome, and `state/` for persisted artifacts. Run cleanup is automatic and must leave evidence intact.
 
 ## Gotchas
 
