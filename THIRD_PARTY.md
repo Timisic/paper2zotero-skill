@@ -1,6 +1,6 @@
 # Third-party skills
 
-The installer puts six skills into the selected agent. Two belong to this repository: `paper-to-zotero` saves papers to Zotero, and `discussion-drafter` writes a discussion from a Zotero collection. Both are under the repository's MIT License (`LICENSE`). The other four are vendored writing skills, described below: `academic-paper` (literature review), `academic-paper-reviewer` (the checklist `academic-paper` reads), `nature-writing` (introduction) and `nature-shared` (shared guidance for `nature-writing`).
+The installer puts six skills into the selected agent. Two belong to this repository: `paper-to-zotero` saves papers to Zotero, and `discussion-drafter` writes a discussion from a Zotero collection. Both are under the repository's MIT License (`LICENSE`). `discussion-drafter` and the vendored skills sit together in `writing/`. The other four are vendored writing skills, described below: `academic-paper` (literature review), `academic-paper-reviewer` (the checklist `academic-paper` reads), `nature-writing` (introduction) and `nature-shared` (shared guidance for `nature-writing`).
 
 These folders are copied unmodified from their upstream repositories. Only a `LICENSE` file, the upstream repository's root license, was added to each. Report problems with their content upstream. To update one, copy the folder again from a newer commit and change the commit below.
 
@@ -9,7 +9,7 @@ These folders are copied unmodified from their upstream repositories. Only a `LI
 - Upstream: https://github.com/Imbad0202/academic-research-skills
 - Path: `academic-paper/`
 - Commit: `a1687d54d35f30953c2dd06065d46a89ec7e9a49`
-- License: CC BY-NC 4.0, copyright Cheng-I Wu. See `academic-paper/LICENSE`. **Non-commercial use only.**
+- License: CC BY-NC 4.0, copyright Cheng-I Wu. See `writing/academic-paper/LICENSE`. **Non-commercial use only.**
 - Copied unmodified.
 - Used here for literature review writing, through its `lit-review` mode.
 
@@ -30,7 +30,7 @@ The rules that matter at run time are written out in the agent files themselves.
 - Upstream: https://github.com/Imbad0202/academic-research-skills
 - Path: `academic-paper-reviewer/`
 - Commit: `a1687d54d35f30953c2dd06065d46a89ec7e9a49`
-- License: CC BY-NC 4.0, copyright Cheng-I Wu. See `academic-paper-reviewer/LICENSE`. **Non-commercial use only.**
+- License: CC BY-NC 4.0, copyright Cheng-I Wu. See `writing/academic-paper-reviewer/LICENSE`. **Non-commercial use only.**
 - Copied unmodified.
 - Used here as the source of the method-weakness checklist that `academic-paper`'s `lit-review` mode reads, `references/review_criteria_framework.md` §2. That file is self-contained.
 
@@ -41,7 +41,7 @@ Known limits. Run on its own as a manuscript reviewer, this skill links the upst
 - Upstream: https://github.com/yuan1z0825/nature-skills
 - Path: `skills/nature-writing/`
 - Commit: `d774add241c65e89ed17a4da573b472b0972fd42`
-- License: Apache-2.0. See `nature-writing/LICENSE`.
+- License: Apache-2.0. See `writing/nature-writing/LICENSE`.
 - Copied unmodified.
 - Used here for introduction writing, through its `intro` section.
 
@@ -52,7 +52,7 @@ Known limits. It reads shared guidance from the sibling folder `../nature-shared
 - Upstream: https://github.com/yuan1z0825/nature-skills
 - Path: `skills/nature-shared/`
 - Commit: `d774add241c65e89ed17a4da573b472b0972fd42`
-- License: Apache-2.0. See `nature-shared/LICENSE`.
+- License: Apache-2.0. See `writing/nature-shared/LICENSE`.
 - Copied unmodified.
 - A reference package for `nature-writing`. It is not a workflow to call on its own.
 

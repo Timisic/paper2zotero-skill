@@ -262,7 +262,7 @@ class Wizard:
             self.results.tag_configure('ok', foreground='#197247')
             self.results.tag_configure('missing', foreground='#9b6515')
             for record in report['items']:
-                line = ('✓ ' if record['ok'] else '○ ') + record['name']
+                line = ('✓ ' if record['ok'] else '○ ') + record['name'] + ('（可选）' if record.get('optional') else '')
                 if not record['ok'] and record.get('action'):
                     line += '：' + record['action']
                 self.results.insert('end', line + '\n', 'ok' if record['ok'] else 'missing')

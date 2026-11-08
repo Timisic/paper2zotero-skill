@@ -15,6 +15,11 @@ SKILL_NAME = "paper-to-zotero"
 SKILL_NAMES = (SKILL_NAME, "discussion-drafter", "academic-paper", "academic-paper-reviewer", "nature-writing", "nature-shared")
 
 
+def source_dir(repository: Path, name: str) -> Path:
+    """Where a skill lives in the repository: the writing skills sit together under writing/."""
+    return repository / (name if name == SKILL_NAME else f"writing/{name}")
+
+
 def shared_path(name: str, home: Path | None = None) -> Path:
     return (home or Path.home()) / '.local/share/paper-to-zotero' / ('skill' if name == SKILL_NAME else name)
 

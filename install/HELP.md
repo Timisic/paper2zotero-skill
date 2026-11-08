@@ -49,7 +49,7 @@
 
 账号配置保存在 `~/.config/literature-to-zotero/`，重装或更新后继续使用，无需重填密钥。
 
-写作 skill 通过 Zotero Desktop 的本地 API 只读读取集合，和入库用的是同一个开关，不需要 Zotero MCP。写作前打开 Zotero，先让助手只读查看指定集合，再开始写作。已连接 Zotero MCP 的助手也可以继续用它，但不是必需的。
+写作 skill 通过 Zotero Desktop 的本地 API 只读读取集合，和入库用的是同一个开关。写作前打开 Zotero，先让助手只读查看指定集合，再开始写作。
 
 ## 论文和数据会发送到哪里
 

@@ -17,7 +17,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'paper-to-zotero/scripts'))
-from agent_installation import SKILL_NAMES
+from agent_installation import SKILL_NAMES, source_dir
 from install import _files
 from scansci_retrieval import PIN
 
@@ -42,10 +42,10 @@ def stage(destination: Path) -> None:
         shutil.copy2(ROOT / name, destination / name)
     shutil.copytree(ROOT / 'install', destination / 'install')
     for skill_name in SKILL_NAMES:
-        for relative in _files(ROOT / skill_name):
-            target = destination / skill_name / relative
+        for relative in _files(source_dir(ROOT, skill_name)):
+            target = source_dir(destination, skill_name) / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ROOT / skill_name / relative, target)
+            shutil.copy2(source_dir(ROOT, skill_name) / relative, target)
     # User README is standalone; developer links stay in the repository only.
     readme = destination / 'README.md'
     readme.write_text(readme.read_text(encoding='utf-8').split('<!-- repository-only -->')[0].rstrip() + '\n', encoding='utf-8', newline='\n')

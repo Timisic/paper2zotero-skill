@@ -10,7 +10,7 @@
 
 它会准备需要的工具，再打开配置向导。你只需按向导提示，打开对应的网页获取 API Key，粘贴回向导中。
 
-文献流程分三段：**ScanSci 检索与下载 PDF（失败时改用 Kimi WebBridge）→ 写入本机 Zotero → 写作 skill 读取 Zotero**。灰色来源默认开启；只要合法来源时，告诉助手“只用合法来源”，或设置 `SCANSCI_LEGAL_ONLY=1`。
+文献流程分三段：**ScanSci 检索与下载 PDF（失败时改用 Kimi WebBridge）→ 写入本机 Zotero → 写作 skill 读取 Zotero**。
 
 ## 装好后怎么用
 
@@ -28,7 +28,7 @@
 
 ## 用库内文献写作
 
-本仓库一起安装六个 skill。入库后，写作只引用 Zotero 集合里的文献：文献综述用 `academic-paper` 的 lit-review 模式，引言用 `nature-writing`，讨论用 [`discussion-drafter`](discussion-drafter/SKILL.md)。`academic-paper` 和 `academic-paper-reviewer` 仅限非商业使用；来源、许可和已知限制见 [THIRD_PARTY.md](THIRD_PARTY.md)。本仓库自有代码采用 [MIT 许可](LICENSE)。写作 skill 通过 Zotero Desktop 的本地 API 读取集合，不需要 Zotero MCP；写作时保持 Zotero 打开即可。
+本仓库一起安装六个 skill。入库后，写作只引用 Zotero 集合里的文献：文献综述用 `academic-paper` 的 lit-review 模式，引言用 `nature-writing`，讨论用 [`discussion-drafter`](writing/discussion-drafter/SKILL.md)。写作时保持 Zotero 打开即可。
 
 > 使用 discussion-drafter。研究背景是……，核心发现是……；只使用 Zotero 中“AI 与学习”集合及子集合的文献，撰写中文讨论。
 

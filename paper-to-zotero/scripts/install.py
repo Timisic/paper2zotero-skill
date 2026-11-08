@@ -10,7 +10,7 @@ import shutil
 import tempfile
 import uuid
 
-from agent_installation import CHOICES, SKILL_NAMES, selected_roots, agent_roots, shared_path
+from agent_installation import CHOICES, SKILL_NAMES, selected_roots, agent_roots, shared_path, source_dir
 from runtime_io import file_lock
 
 WINDOWS = os.name == 'nt'
@@ -224,7 +224,10 @@ def install(agent: str = 'auto') -> None:
     roots = list(dict.fromkeys(selected_roots(agent)))
     if not roots:
         raise SystemExit('未找到已使用的 AI 助手。请运行 setup 并选择 Codex、Claude Code 或 Pi；Agent 可传 --agent。')
-    sources = {name: SOURCE if name == SKILL_NAMES[0] else SOURCE.parent / name for name in SKILL_NAMES}
+    # A repository or bundle keeps writing skills under writing/; the installed runtime keeps them flat.
+    nested = (SOURCE.parent / 'writing').is_dir()
+    sources = {name: SOURCE if name == SKILL_NAMES[0]
+               else (source_dir(SOURCE.parent, name) if nested else SOURCE.parent / name) for name in SKILL_NAMES}
     # Other managed installations update together; independent ones stay the user's.
     existing_roots = [*agent_roots().values(), Path.home() / '.agents/skills', Path.home() / '.hermes/skills']
     for root in existing_roots:

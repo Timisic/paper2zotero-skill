@@ -21,15 +21,16 @@ def runtime(tmp_path, monkeypatch):
     (source / 'SKILL.md').write_text('fixture')
     (source / 'scripts/runtime.py').write_text('version = 1')
     for name in agent_installation.SKILL_NAMES[1:]:
-        (source.parent / name).mkdir()
-        (source.parent / name / 'SKILL.md').write_text(name)
+        skill = agent_installation.source_dir(source.parent, name)
+        skill.mkdir(parents=True)
+        (skill / 'SKILL.md').write_text(name)
     monkeypatch.setattr(install, 'SOURCE', source)
     return source
 
 
 @pytest.mark.parametrize('name', ['paper-to-zotero', 'discussion-drafter'])
 def test_runtime_file_set_is_unchanged_by_the_whole_folder_rule(name):
-    root = install.SOURCE.parent / name
+    root = agent_installation.source_dir(install.SOURCE.parent, name)
     allowlisted = {'SKILL.md', *(path.relative_to(root).as_posix()
                                  for folder in ('scripts', 'references', 'agents', 'assets')
                                  for path in (root / folder).rglob('*') if path.is_file()

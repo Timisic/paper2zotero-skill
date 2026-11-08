@@ -10,7 +10,7 @@ from http_fixture import server
 from pdf_fixture import pdf_with_text
 from test_cli import ROOT
 
-READER = ROOT.parent / "discussion-drafter" / "scripts" / "zotero_read.py"
+READER = ROOT.parent / "writing" / "discussion-drafter" / "scripts" / "zotero_read.py"
 
 
 def item(key, item_type="journalArticle", **data):

@@ -179,18 +179,18 @@ def test_service_timeout_is_actionable_and_other_checks_continue(tmp_path, monke
     monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', tmp_path / 'absent')
     monkeypatch.setattr(agent_installation, 'installation_ok', lambda _: False)
     monkeypatch.setattr(agent_installation, 'installed_paths', lambda **_: [])
-    monkeypatch.setattr(configure.subprocess, 'run', lambda *a, **k: subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(configure.subprocess, 'run', lambda *a, **k: subprocess.CompletedProcess([], 0, '{"ok": false}', ''))
     monkeypatch.setattr(configure.capability, 'probe_discovery_search',
                         lambda: {'ok': True, 'detail': 'fixture', 'sources': {}})
     monkeypatch.setattr(configure.capability, 'probe_zotero_local_write', lambda *a, **k: True)
     monkeypatch.setattr(mineru_parse, 'converter_plan', lambda live=True: {
-        'selected': 'markitdown', 'api_base': None, 'markitdown_install': "pip install 'markitdown[pdf]'"})
+        'selected': 'markitdown', 'available': ['markitdown'], 'api_base': None, 'markitdown_install': "pip install 'markitdown[pdf]'"})
     assert configure.check(as_json=True) == 1
     report = json.loads(capsys.readouterr().out)
     assert not report['ready']
-    missing = [row for row in report['items'] if not row['ok']]
+    missing = [row for row in report['items'] if not row['ok'] and not row['optional']]
     assert len(missing) == 1
     assert missing[0]['name'] == '连接 AI 助手'
     assert missing[0]['action']
     names = [row['name'] for row in report['items']]
-    assert names.index('连接 AI 助手') < names.index('Zotero Desktop · 本机附件')
+    assert names.index('连接 AI 助手') < names.index('Zotero 本地 API')

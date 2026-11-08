@@ -46,7 +46,7 @@ Agent 命令工具没有用户可操作的终端时，先下载上述安装器�
 
 ## 4. 检查并交付
 
-用户完成后，在同一目标上运行只读检查；自定义仓库目录用实际路径替换：
+用户完成第一次配置后，必须在同一目标上运行一次只读检查，并把结果发给用户；自定义仓库目录用实际路径替换：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\paper2zotero-source\install\setup.ps1" -Agent claude-code -Check
@@ -58,9 +58,11 @@ bash "$HOME/.local/share/paper2zotero-source/install/setup.sh" --agent claude-co
 
 需要结构化结果时，通过安装好的 `scripts/run-python.sh` 或 `scripts/run-python.ps1` 运行 `scripts/configure.py --check --json`，并把 `PAPER2ZOTERO_AGENT` 设为已选目标。
 
-完成条件按检查顺序：运行工具、连接 AI 助手、当前检索后端（未设置 `SEARCH_BACKEND` 时是 scansci-pdf 1.19.0）、全文转换（任一路可用：设置了 `MINERU_API_BASE` 的自建 MinerU、MinerU 云端 Token 或本机 markitdown）、Zotero Desktop 本机写入。群组文库再加 Zotero Web API 行。此前启用的可选功能，例如 `SETUP_BROWSER=1` 的 Kimi，仍按实际探测。云端 Token 和 OpenAlex 不是完成条件。报告缺失项及一个继续配置入口。终端就绪或文件安装成功不等于账号配置完成；总检也不证明论文已处理或桌面附件已下载。
+检查逐行报告：`✓` 表示已就绪并附说明（例如 scansci-pdf 版本、可用的转换方式、Zotero 本地 API 可写入、Kimi 已连接浏览器扩展）；`待完成` 后面跟一行 `下一步`；`○` 是可选项，未就绪不影响使用。回复用户时逐行转述，不只说“已完成”：列出每项状态，待完成项给出下一步，最后说明是否显示了“环境已就绪”。
 
-最后请当前助手确认可以发现 `paper-to-zotero`、`academic-paper`、`nature-writing` 和 `discussion-drafter`（Claude Code 用 `/名称`，Codex 用 `$名称`）；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。写作 skill 通过本地 API 读取 Zotero，不需要 Zotero MCP，也不要替用户注册 MCP。用 `discussion-drafter/scripts/zotero_read.py collections` 只读验证一次（解释器同 `python-path`），能列出集合即为可写作。
+必需项按顺序是：运行工具、连接 AI 助手、当前检索后端（未设置 `SEARCH_BACKEND` 时是 scansci-pdf 1.19.0）、全文转换（自建 MinerU、MinerU 云端 Token 或本机 markitdown 任一可用）、Zotero 本地 API。群组文库再加 Zotero Web API 行。Kimi WebBridge 默认可选；`SETUP_BROWSER=1` 时为必需。云端 Token 和 OpenAlex 不是完成条件。终端就绪或文件安装成功不等于账号配置完成；总检也不证明论文已处理或桌面附件已下载。
+
+最后请当前助手确认可以发现 `paper-to-zotero`、`academic-paper`、`nature-writing` 和 `discussion-drafter`（Claude Code 用 `/名称`，Codex 用 `$名称`）；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。写作 skill 读取的就是检查中的 Zotero 本地 API，不要替用户注册 MCP。
 
 交付时简短询问用户是否想换用自己的总结提示词；向导已问过则复用该选择。需要时通过 `agent_installation.installed_paths(agent=已选目标)` 给出生效的 `references/paper-summary.md` 绝对路径，修改方法见 [HELP.md](HELP.md#更换总结提示词)。不打开编辑器，不修改提示词。
 
@@ -84,10 +86,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<安装包>\install\set
 
 ## 通过其他 skill 分发工具安装
 
-本仓库保留六个标准 skill 目录。已有 Node.js 的用户可对每个 skill 运行一次下面的命令；`nature-writing` 必须与 `nature-shared` 一起安装，`academic-paper` 应与 `academic-paper-reviewer` 一起安装：
+本仓库有六个标准 skill 目录：`paper-to-zotero/` 在根目录，五个写作 skill 在 `writing/` 下，所以要加 `--full-depth`。已有 Node.js 的用户可对每个 skill 运行一次下面的命令；`nature-writing` 必须与 `nature-shared` 一起安装，`academic-paper` 应与 `academic-paper-reviewer` 一起安装：
 
 ```bash
-npx skills add Timisic/paper2zotero-skill --skill <skill 名称> --agent claude-code --global
+npx skills add Timisic/paper2zotero-skill --full-depth --skill <skill 名称> --agent claude-code --global
 ```
 
 这类工具只安装 skill 文件，不安装运行依赖或连接服务。继续按本文启动 setup。外部管理器已占用同名目录时，本安装器会保留它并报冲突，由用户选择保留外部管理或先移走该目录。Claude Code 读取标准 `SKILL.md`；`agents/openai.yaml` 只保存 Codex 的界面元数据。
