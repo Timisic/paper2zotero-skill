@@ -53,17 +53,6 @@ def test_private_upload_urls_can_be_saved_on_windows(tmp_path):
     assert json.loads(path.read_text(encoding='utf-8')) == ['https://example.org/upload?fixture=1']
 
 
-def test_poppler_utf8_output_is_not_decoded_with_windows_locale(tmp_path, monkeypatch):
-    text = 'Paper with Unicode — psychology and resilience 测量结果'
-    monkeypatch.setattr(paper_artifacts.shutil, 'which', lambda _: 'pdftotext')
-    def run(args, **kw):
-        # Reproduce a Chinese Windows parent reading the extractor's UTF-8 pipe.
-        decoded = text.encode('utf-8').decode(kw.get('encoding') or 'cp936', errors=kw.get('errors', 'strict'))
-        return subprocess.CompletedProcess(args, 0, decoded, '')
-    monkeypatch.setattr(paper_artifacts.subprocess, 'run', run)
-    assert paper_artifacts.poppler_text(tmp_path / 'paper.pdf') == text
-
-
 def test_utf8_summary_validation_ignores_machine_locale(tmp_path, monkeypatch):
     pdf, summary = tmp_path / 'source.pdf', tmp_path / 'summary.md'
     pdf.write_bytes(b'%PDF-fixture')

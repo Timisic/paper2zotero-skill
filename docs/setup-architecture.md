@@ -8,7 +8,7 @@ Paths below are relative to the repository root.
 
 | Owner | Responsibility |
 | --- | --- |
-| `install/setup.ps1`, `paper-to-zotero/scripts/bootstrap.sh` | Prepare native tools and save their verified paths |
+| `install/setup.ps1`, `paper-to-zotero/scripts/bootstrap.sh` | Prepare a base Python |
 | `setup_connection.ensure_default_tools` | Own the private Python runtime and record its interpreter in `python-path` |
 | `scripts/build-distribution.py` | Build the release zip and, with `--platform`, offline zips |
 | `paper-to-zotero/scripts/agent_installation.py`, `install.py` in the same directory | Select agent destinations, install runtime files and preserve conflicts |
@@ -35,25 +35,25 @@ scansci-pdf and markitdown never go into a system Python; Homebrew and Debian/Ub
 1. An offline bundle, recognized by `runtime/python` and `runtime/wheels` at the bundle root. The bundled Python is copied into the runtime directory and installs from the wheels with `--no-index`.
 2. A venv from the base Python, installing from the configured index, then once from the Tsinghua mirror unless `PIP_INDEX_URL` is set.
 
-In a bundle, `bootstrap.sh` and `setup.ps1` use `runtime/python` as the base interpreter and run no package manager. Poppler is optional in every mode. `--platform` builds bundle the zip's lite content plus `runtime/`, `VERSION` and `开始.md`. `.github/workflows/release.yml` publishes them per tag, and the runtime workflow installs each OS's bundle with the index unreachable.
+In a bundle, `bootstrap.sh` and `setup.ps1` use `runtime/python` as the base interpreter and run no package manager. PDF text comes from PyMuPDF inside the runtime, so no system PDF tool is installed. `--platform` builds bundle the zip's lite content plus `runtime/`, `VERSION` and `开始.md`. `.github/workflows/release.yml` publishes them per tag, and the runtime workflow installs each OS's bundle with the index unreachable.
 
 ## Windows constraints
 
-PowerShell prepares native Python and, when it can, Poppler; Git Bash only for `-Terminal`. Basic interactive setup launches a Tk window through pythonw.exe; its completion page links to optional settings. `-Advanced` opens those settings directly in the same GUI. Check and dependency-only modes run Python directly, without Git Bash, and stay with the caller; `-Terminal` retains mintty, including `-Terminal -Advanced`. A temporary marker confirms that the selected UI is ready, not that account setup is complete. Both paths are tested with Chinese and spaced download paths.
+PowerShell prepares native Python; Git Bash is not needed. Interactive setup launches a Tk window through pythonw.exe; its completion page links to optional settings. `-Advanced` opens those settings directly in the same GUI. Check and dependency-only modes run Python directly and stay with the caller. A temporary marker confirms that the selected UI is ready, not that account setup is complete. It is tested with Chinese and spaced download paths.
 
-`setup_connection.SERVICES` supplies service instructions to both frontends. `BASIC_SERVICES` is `('desktop',)`. Optional cards come from `wizard_extras()`. Optional source credentials are privately saved with an explicit unverified status, then exercised by real discovery. Kimi is enabled only after its connection check. Skipping does not write flags or change existing credentials. The GUI shows all optional cards in a scrollable page. The terminal visits the same optional services in sequence and preserves its platform installation helpers. macOS/Linux keep the Bash entry and do not import Tk; Unix private writes do not call PowerShell.
+`setup_connection.SERVICES` supplies service instructions to both frontends. `BASIC_SERVICES` is `('desktop',)`. Optional cards come from `wizard_extras()`. Optional source credentials are privately saved with an explicit unverified status, then exercised by real discovery. Kimi is enabled only after its connection check. Skipping does not write flags or change existing credentials. The GUI shows all optional cards in a scrollable page. The macOS/Linux terminal wizard visits the same optional services in sequence. macOS/Linux keep the Bash entry and do not import Tk; Unix private writes do not call PowerShell.
 
 Native entry fields use the OS clipboard shortcuts and an explicit Paste button. Keys remain in memory until remote validation succeeds. `capability.py` owns the key-info request and permission interpretation used by setup, self-id and runtime checks. `setup_connection.connect` returns verified account settings; `save_account` commits the accepted result using the private atomic writer and clears stale inherited account overrides. Only the live UI accepts a background result. Closing during a request cannot save a late result. Bash passes a key on stdin to `configure.py --connect`; it uses the same validation and accepted save, never persists a new key separately from its verified library ID, and clears its transient account variables after the attempt. Windows ACL protection uses .NET Framework directly, avoiding a PS7-inherited module path breaking PS5 Set-Acl. Browser launch uses Windows URL association rather than Explorer's process exit code.
 
 UI smoke tests use only dummy keys. Updating GitHub does not update installed copies: setup.cmd runs its current source, while install.ps1 updates a clean canonical cache. Dirty caches must be preserved and repaired explicitly.
 
-Bash and native Python use the same user profile. Both the Python executable and verified PDF-tool directory are saved; Bash and PowerShell launchers restore them on later runs. This prevents Git's bundled PDF tool from taking precedence in a new Claude Code session. Preserve quoted paths, UTF-8 handling and the LF/CRLF rules in `.gitattributes`.
+The Python executable is saved to `python-path`; Bash and PowerShell launchers run it on later runs. Preserve quoted paths, UTF-8 handling and the LF/CRLF rules in `.gitattributes`.
 
 - `runtime_io.file_lock` excludes competing writers on Windows with byte-range locks and on POSIX with flock. Workflow locks fail promptly; shared request pacing waits for its short critical section. Closing the process releases the lock.
 - `runtime_io.private_text` creates a private temporary file, applies the Windows user-only ACL before writing, closes it before replacement, and cleans up after failure. POSIX files keep mode 0600. Account saves and signed conversion URLs share this implementation.
 
-The wizard's mintty process maps only Ctrl+V to paste, using `ShootFoot=yes` and `KeyFunctions=C+v:paste`; `CtrlExchangeShift=no` preserves Ctrl+C interruption. These command-line options never modify global mintty preferences. Authorization input shows a fixed mask on receipt, handles backspace, rejects control characters before persistence, and pauses on EOF. The writer also rejects controls for non-wizard callers. Personal library discovery reports safe errors on stderr and offers a retry; manual IDs are only requested for group libraries.
+In the terminal wizard, authorization input shows a fixed mask on receipt, handles backspace, rejects control characters before persistence, and pauses on EOF. The writer also rejects controls for non-wizard callers. Personal library discovery reports safe errors on stderr and offers a retry; manual IDs are only requested for group libraries.
 
-`tests/test_setup_input.py` exercises the real Bash input helper and retry stages with synthetic input and mocks Zotero identity responses. The native Windows launcher tests additionally check that mintty starts with the new options and that echo is disabled during entry and restored after success or interruption on a real TTY.
+`tests/test_setup_input.py` exercises the real Bash input helper and retry stages with synthetic input and mocks Zotero identity responses.
 
 Workflow verification is [verify-paper2zotero](../.agents/skills/verify-paper2zotero/SKILL.md).

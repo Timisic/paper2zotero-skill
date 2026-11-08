@@ -14,7 +14,7 @@ User confirms candidate IDs, collection and upload choice. Public CLI paths are 
 
 ## Driving it with verify_runner
 
-Preconditions: run Doctor from the parent SKILL.md; Python/pytest/Poppler are available, and only disposable fixture state is used.
+Preconditions: run Doctor from the parent SKILL.md; Python/pytest/pymupdf are available, and only disposable fixture state is used.
 
 ```bash
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature selection

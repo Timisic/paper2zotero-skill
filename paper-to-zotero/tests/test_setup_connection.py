@@ -525,17 +525,7 @@ def test_custom_index_skips_the_mirror_and_failure_is_actionable(runtime, tmp_pa
     assert not (tmp_path / 'home/.config/literature-to-zotero/python-path').exists()
 
 
-@pytest.mark.parametrize('has_pdftotext', [True, False])
-def test_prepare_installs_without_requiring_pdftotext(monkeypatch, tmp_path, has_pdftotext):
-    tools_dir = tmp_path / 'tools'
-    tools_dir.mkdir()
-    tool = tools_dir / 'pdftotext'
-    if has_pdftotext:
-        tool.write_text('#!/bin/sh\n', encoding='utf-8')
-    monkeypatch.delenv('PAPER2ZOTERO_PDF_BIN', raising=False)
-    monkeypatch.setattr(connection.Path, 'home', classmethod(lambda cls: tmp_path))
-    monkeypatch.setattr(connection.shutil, 'which',
-                        lambda name: str(tool) if name == 'pdftotext' and has_pdftotext else None)
+def test_prepare_installs_the_runtime_then_the_skills(monkeypatch):
     seen = []
 
     def import_module(name):
@@ -546,6 +536,3 @@ def test_prepare_installs_without_requiring_pdftotext(monkeypatch, tmp_path, has
     monkeypatch.setattr(connection.importlib, 'import_module', import_module)
     connection.prepare('codex')
     assert seen == ['ensure_default_tools', 'install', ('skill', 'codex')]
-    config = tmp_path / '.config/literature-to-zotero'
-    pdf_bin = config / 'pdf-bin'
-    assert (pdf_bin.read_text(encoding='utf-8').strip() == str(tools_dir)) if has_pdftotext else not pdf_bin.exists()

@@ -14,7 +14,7 @@
 
 ### Windows 原生环境
 
-下载官方安装器并运行。它会准备原生 Python 和 PDF 工具，然后打开 Windows 图形配置窗口；Git Bash 只在 `-Terminal` 时需要。不要自行拼接 mintty 启动命令，也不用 WSL。
+下载官方安装器并运行。它会准备原生 Python，然后打开 Windows 图形配置窗口。不需要 Git Bash，也不用 WSL。
 
 ```powershell
 $installer = Join-Path $env:TEMP 'paper2zotero-install.ps1'
@@ -24,7 +24,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Agent claude
 
 已有仓库时，把最后一行的 `$installer` 换成 `'<仓库绝对路径>\install\setup.ps1'`，避免重新下载旧的公开版本。
 
-`-LaunchWizard` 等待图形窗口就绪后返回；`-DependenciesOnly` 只准备依赖和 skill。窗口标题必须包含 `Windows 图形向导 v2`。“验证并保存”检查授权和读写权限，成功才原子保存整个账号。`-Terminal` 打开备用终端向导，与 `-Advanced` 合用时打开终端更多配置。WinGet 缺失时按安装器打开的 Microsoft Store 页面补齐“应用安装程序”。
+`-LaunchWizard` 等待图形窗口就绪后返回；`-DependenciesOnly` 只准备依赖和 skill。窗口标题必须包含 `Windows 图形向导 v2`。“验证并保存”检查授权和读写权限，成功才原子保存整个账号。WinGet 缺失时按安装器打开的 Microsoft Store 页面补齐“应用安装程序”。
 
 发布 GitHub 不会自动更新本机已有下载或助手目录。用户报告旧文案时，检查实际启动文件、安装缓存及目标助手副本；`setup.cmd` 不负责拉取更新。更新官方干净缓存应运行 `install.ps1`；缓存有本地改动时先保留备份，不要 reset/clean 覆盖。依赖安装后确认目标助手里的 `scripts/setup_gui.py` 存在且与当前来源一致，再报告本机已更新。
 
@@ -80,7 +80,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<安装包>\install\set
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<安装包>\install\setup.ps1' -Agent claude-code -Check
 ```
 
-依赖装进用户目录下的独立运行环境，之后删除解压文件夹不影响使用。`开始.md` 列出只有用户能做的事：安装 Zotero 7 并开启本地 API、可选的 Kimi WebBridge 和 MinerU 云端 Token。逐项询问是否已完成，不代为操作。然后按第 3 节打开向导：Windows 用 `-LaunchWizard`，macOS 请用户在自己的终端运行 `bash '<安装包>/install/setup.sh' --agent claude-code`。最后按第 4 节交付，检查命令用上面的 `--check` / `-Check`。缺少 Poppler 不影响安装。
+依赖装进用户目录下的独立运行环境，之后删除解压文件夹不影响使用。`开始.md` 列出只有用户能做的事：安装 Zotero 7 并开启本地 API、可选的 Kimi WebBridge 和 MinerU 云端 Token。逐项询问是否已完成，不代为操作。然后按第 3 节打开向导：Windows 用 `-LaunchWizard`，macOS 请用户在自己的终端运行 `bash '<安装包>/install/setup.sh' --agent claude-code`。最后按第 4 节交付，检查命令用上面的 `--check` / `-Check`。
 
 ## 通过其他 skill 分发工具安装
 

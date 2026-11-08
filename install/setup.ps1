@@ -1,8 +1,8 @@
 ﻿[CmdletBinding()]
-param([switch]$DependenciesOnly, [switch]$Check, [switch]$Group, [switch]$LaunchWizard, [switch]$Advanced, [switch]$Terminal,
+param([switch]$DependenciesOnly, [switch]$Check, [switch]$Group, [switch]$LaunchWizard, [switch]$Advanced,
       [ValidateSet('auto','codex','claude-code','pi','all')][string]$Agent = 'auto')
 $ErrorActionPreference = 'Stop'
-# Prepare Windows tools, then open the native GUI (Bash remains a fallback).
+# Prepare Windows tools, then open the native GUI.
 if ($env:OS -ne 'Windows_NT') { throw 'Use bash setup.sh on macOS or Linux.' }
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
 $env:PYTHONUTF8 = '1'
@@ -12,13 +12,6 @@ Write-Host 'System: Windows - checking installed tools first.' -ForegroundColor 
 function Refresh-ToolPath {
     $env:PATH = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
         [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:PATH
-}
-function Find-GitBash {
-    $paths = @("$env:ProgramFiles\Git\bin\bash.exe", "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe")
-    $git = Get-Command git.exe -ErrorAction SilentlyContinue
-    if ($git) { $paths += Join-Path (Split-Path (Split-Path $git.Source)) 'bin\bash.exe' }
-    foreach ($path in $paths) { if (Test-Path -LiteralPath $path) { return $path } }
-    return $null
 }
 function Find-Python {
     $candidates = @()
@@ -35,81 +28,34 @@ function Find-Python {
     }
     return $null
 }
-function Test-Poppler {
-    $tool = Get-Command pdftotext.exe -ErrorAction SilentlyContinue
-    if (-not $tool) { return $false }
-    # Native tools write version information to stderr; avoid PS5 treating it as an exception.
-    try { $process = Start-Process -FilePath $tool.Source -ArgumentList '-v' -Wait -PassThru -NoNewWindow } catch { return $false }
-    return $process.ExitCode -eq 0
-}
-function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
-    $entry = Join-Path $PSScriptRoot 'windows-wizard.sh'
-    if (-not (Test-Path -LiteralPath $entry)) { throw "Wizard launcher missing: $entry" }
-    if (-not $Terminal) {
-        $gui = Join-Path $PSScriptRoot '..\paper-to-zotero\scripts\setup_gui.py'
-        $pythonw = Join-Path (Split-Path $pythonPath) 'pythonw.exe'
-        if (-not (Test-Path -LiteralPath $pythonw)) { $pythonw = $pythonPath }
-        $guiArgs = @(('"' + $gui + '"'), '--agent', $Agent)
-        if ($Group) { $guiArgs += '--group' }
-        if ($Advanced) { $guiArgs += '--advanced' }
-        Write-Host '正在打开 Windows 图形向导。先打开 Zotero Desktop。可选授权码在后面的页面粘贴，Ctrl+V。' -ForegroundColor Cyan
-        if ($LaunchWizard) {
-            $startup = Join-Path ([IO.Path]::GetTempPath()) ('paper2zotero-gui-' + [guid]::NewGuid().ToString('N'))
-            $guiArgs += @('--ready-file', ('"' + $startup + '"'))
-            try {
-                $process = Start-Process -FilePath $pythonw -ArgumentList $guiArgs -PassThru
-                $deadline = [DateTime]::UtcNow.AddSeconds(15)
-                while ([DateTime]::UtcNow -lt $deadline) {
-                    if (Test-Path -LiteralPath $startup) {
-                        Write-Host 'Native setup window is ready (Windows GUI v2).' -ForegroundColor Green
-                        return 0
-                    }
-                    if ($process.HasExited) { throw '图形向导未能启动。可加 -Terminal 使用备用终端向导。' }
-                    Start-Sleep -Milliseconds 100
-                }
-                throw '图形向导启动未获确认。可加 -Terminal 使用备用终端向导。'
-            } finally {
-                Remove-Item -LiteralPath $startup -ErrorAction SilentlyContinue
-            }
-        }
-        $process = Start-Process -FilePath $pythonw -ArgumentList $guiArgs -PassThru -Wait
-        return $process.ExitCode
-    }
-    $gitRoot = Split-Path (Split-Path $BashPath)
-    $terminal = Join-Path $gitRoot 'usr\bin\mintty.exe'
-    if (-not (Test-Path -LiteralPath $terminal)) { throw "Git terminal missing: $terminal. Repair Git for Windows and retry." }
-    # Start-Process joins its argument array into one Windows command line.
-    # Quote each path explicitly; use a one-word title so it cannot become a command.
-    # Only this wizard maps Ctrl+V to paste. Keep Ctrl+C as interrupt and leave
-    # the user's global mintty settings untouched.
-    $arguments = @('--hold', 'error', '--title', 'paper-to-zotero',
-        '-o', 'ShootFoot=yes', '-o', 'KeyFunctions=C+v:paste',
-        '-o', 'CtrlExchangeShift=no', '-o', 'ClipShortcuts=yes',
-        '-e', '/usr/bin/bash', ('"' + $entry.Replace('\', '/') + '"')) + $WizardArgs
-    Write-Host '正在打开配置向导。在新窗口按 Ctrl+V 粘贴授权码，看到星号后按回车继续。' -ForegroundColor Cyan
+function Start-Wizard {
+    $gui = Join-Path $PSScriptRoot '..\paper-to-zotero\scripts\setup_gui.py'
+    $pythonw = Join-Path (Split-Path $pythonPath) 'pythonw.exe'
+    if (-not (Test-Path -LiteralPath $pythonw)) { $pythonw = $pythonPath }
+    $guiArgs = @(('"' + $gui + '"'), '--agent', $Agent)
+    if ($Group) { $guiArgs += '--group' }
+    if ($Advanced) { $guiArgs += '--advanced' }
+    Write-Host '正在打开 Windows 图形向导。先打开 Zotero Desktop。可选授权码在后面的页面粘贴，Ctrl+V。' -ForegroundColor Cyan
     if ($LaunchWizard) {
-        # Agent tool calls must be able to return while the human enters keys.
-        $startup = Join-Path ([IO.Path]::GetTempPath()) ('paper2zotero-start-' + [guid]::NewGuid().ToString('N'))
-        $env:PAPER2ZOTERO_STARTUP_FILE = $startup
+        $startup = Join-Path ([IO.Path]::GetTempPath()) ('paper2zotero-gui-' + [guid]::NewGuid().ToString('N'))
+        $guiArgs += @('--ready-file', ('"' + $startup + '"'))
         try {
-            $process = Start-Process -FilePath $terminal -ArgumentList $arguments -PassThru
+            $process = Start-Process -FilePath $pythonw -ArgumentList $guiArgs -PassThru
             $deadline = [DateTime]::UtcNow.AddSeconds(15)
             while ([DateTime]::UtcNow -lt $deadline) {
                 if (Test-Path -LiteralPath $startup) {
-                    Write-Host 'Wizard terminal is ready. Ask the user to complete it, then run setup.ps1 -Check.' -ForegroundColor Green
+                    Write-Host 'Native setup window is ready (Windows GUI v2).' -ForegroundColor Green
                     return 0
                 }
-                # mintty may hand off to another process before Bash starts;
-                # its initial process exiting is not a startup failure.
+                if ($process.HasExited) { throw '图形向导未能启动。请重跑 setup.cmd。' }
                 Start-Sleep -Milliseconds 100
             }
-            throw 'Wizard startup was not confirmed. Check the terminal error; do not report setup complete.'
+            throw '图形向导启动未获确认。请重跑 setup.cmd。'
         } finally {
-            Remove-Item Env:PAPER2ZOTERO_STARTUP_FILE -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $startup -ErrorAction SilentlyContinue
         }
     }
-    $process = Start-Process -FilePath $terminal -ArgumentList $arguments -PassThru -Wait
+    $process = Start-Process -FilePath $pythonw -ArgumentList $guiArgs -PassThru -Wait
     return $process.ExitCode
 }
 function Install-Tool([string]$Package) {
@@ -125,39 +71,22 @@ function Install-Tool([string]$Package) {
 }
 try {
     Refresh-ToolPath
-    $bashPath = Find-GitBash
-    # An offline bundle ships Python next to install\; never download Python or Git for it.
+    # An offline bundle ships Python next to install\; never download Python for it.
     $bundledPython = Join-Path $PSScriptRoot '..\runtime\python\python.exe'
-    $offline = Test-Path -LiteralPath $bundledPython
-    if ($offline) {
+    if (Test-Path -LiteralPath $bundledPython) {
         Write-Host 'Offline bundle: using its bundled Python.' -ForegroundColor Cyan
         $pythonPath = (Resolve-Path -LiteralPath $bundledPython).Path
     } else {
         $pythonPath = Find-Python
     }
-    $popplerReady = Test-Poppler
     if ($pythonPath) { Write-Host 'Python 3.11+: OK, skipping installation.' -ForegroundColor Green }
-    if ($popplerReady) { Write-Host 'Poppler: OK, skipping installation.' -ForegroundColor Green }
-    if ($bashPath) { Write-Host 'Wizard shell: OK, skipping installation.' -ForegroundColor Green }
     if ($Check) {
         if (-not $pythonPath) { throw 'Python 3.11+ is missing; run setup.cmd to install it.' }
     } else {
         if (-not $pythonPath) { Install-Tool 'Python.Python.3.13'; $pythonPath = Find-Python }
-        # Poppler is optional: PDF text falls back to a built-in extractor.
-        if (-not $popplerReady -and -not $offline -and (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
-            try { Install-Tool 'oschwartz10612.Poppler'; $popplerReady = Test-Poppler } catch { Write-Host 'Poppler skipped (optional).' -ForegroundColor Yellow }
-        }
-        # Only the fallback terminal wizard needs Git Bash.
-        if ($Terminal -and -not $bashPath -and -not $offline) { Install-Tool 'Git.Git'; $bashPath = Find-GitBash }
         if (-not $pythonPath) { throw 'Tool verification failed. Close this window and re-run setup.cmd.' }
-        if ($Terminal -and -not $bashPath) { throw 'The terminal wizard needs Git for Windows. Install Git, or run setup without -Terminal.' }
     }
     if ($pythonPath) { $env:PYTHON_BIN = $pythonPath }
-    if ($popplerReady) {
-        # Git prepends its own bin directory on startup. Its bundled Xpdf
-        # pdftotext returns 99 for -v, so carry the verified native tool to Bash.
-        $env:PAPER2ZOTERO_PDF_BIN = Split-Path (Get-Command pdftotext.exe).Source
-    }
     $scripts = Join-Path $PSScriptRoot '..\paper-to-zotero\scripts'
     if ($DependenciesOnly) {
         & $pythonPath (Join-Path $scripts 'setup_connection.py') $Agent | Out-Host
@@ -172,10 +101,7 @@ try {
         & $runtime @checkArgs | Out-Host
         exit $LASTEXITCODE
     }
-    $wizardArgs = @()
-    if ($Group) { $wizardArgs += '--group' }
-    if ($Advanced) { $wizardArgs += '--advanced' }
-    $result = Start-Wizard $bashPath $wizardArgs
+    $result = Start-Wizard
     exit $result
 } catch {
     Write-Host $_.Exception.Message -ForegroundColor Red

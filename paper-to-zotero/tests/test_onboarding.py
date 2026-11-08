@@ -115,18 +115,12 @@ def test_bootstrap_check_forwards_group(tmp_path):
         assert ('--group' in lines) is forwarded
 
 
-def test_bootstrap_prepares_the_runtime_and_records_the_verified_pdf_tool(tmp_path):
-    bad = tmp_path / 'bad-pdf'
-    good = tmp_path / 'good-pdf'
+def test_bootstrap_with_a_ready_python_prepares_the_runtime_without_package_managers(tmp_path):
     blocker = tmp_path / 'no-install'
-    for directory in (bad, good, blocker):
-        directory.mkdir()
-    (bad / 'pdftotext').write_text('#!/bin/sh\nexit 99\n', encoding='utf-8')
-    (good / 'pdftotext').write_text('#!/bin/sh\nexit 0\n', encoding='utf-8')
+    blocker.mkdir()
     for name in ('apt-get', 'brew', 'sudo'):
-        (blocker / name).write_text('#!/bin/sh\nexit 1\n', encoding='utf-8')
-    for path in (bad / 'pdftotext', good / 'pdftotext', *((blocker / name) for name in ('apt-get', 'brew', 'sudo'))):
-        path.chmod(0o755)
+        (blocker / name).write_text('#!/bin/sh\necho "$0" >> "$OUT"\nexit 1\n', encoding='utf-8')
+        (blocker / name).chmod(0o755)
     fake = tmp_path / 'python'
     fake.write_text('''#!/bin/sh
 if [ "$1" = -c ]; then
@@ -143,14 +137,14 @@ printf '%s\\n' "$@" >> "$OUT"
     env = environment(home)
     env['PYTHON_BIN'] = str(fake)
     env['OUT'] = str(recorded)
-    env['PATH'] = os.pathsep.join((str(bad), str(good), str(blocker), env['PATH']))
+    env['PATH'] = os.pathsep.join((str(blocker), env['PATH']))
     bash = shutil.which('bash') or 'bash'
     result = subprocess.run([bash, str(SCRIPTS / 'bootstrap.sh'), '--runtime-only'],
                             env=env, capture_output=True, text=True, encoding='utf-8', timeout=20)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert 'tools' in recorded.read_text(encoding='utf-8')
-    assert 'good-pdf' in result.stdout
-    assert (home / '.config/literature-to-zotero/pdf-bin').read_text(encoding='utf-8').rstrip().endswith('good-pdf')
+    log = recorded.read_text(encoding='utf-8')
+    assert 'tools' in log
+    assert not [line for line in log.split() if line.endswith(('apt-get', 'brew', 'sudo'))]
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='Windows bundles run through setup.ps1')
@@ -163,7 +157,7 @@ def test_offline_bundle_uses_its_python_and_never_calls_package_managers(tmp_pat
     bundled.write_text('#!/bin/sh\ncase "$2" in *ensure_default_tools*) echo bundled >> "$OUT" ;; esac\nexit 0\n')
     blocker = tmp_path / 'blocker'
     blocker.mkdir()
-    for name in ('apt-get', 'brew', 'sudo', 'pdftotext'):
+    for name in ('apt-get', 'brew', 'sudo'):
         (blocker / name).write_text('#!/bin/sh\necho "$0" >> "$OUT"\nexit 1\n')
         (blocker / name).chmod(0o755)
     env = environment(tmp_path / 'home')
@@ -176,24 +170,6 @@ def test_offline_bundle_uses_its_python_and_never_calls_package_managers(tmp_pat
     log = (tmp_path / 'log').read_text(encoding='utf-8').split()
     assert 'bundled' in log
     assert not [line for line in log if line.endswith(('apt-get', 'brew', 'sudo'))]
-
-
-def test_runtime_launcher_restores_verified_pdf_tool(tmp_path):
-    env = environment(tmp_path)
-    tools = tmp_path / '工具 with spaces'
-    tools.mkdir()
-    pdf = tools / ('pdftotext.exe' if os.name == 'nt' else 'pdftotext')
-    pdf.write_text('#!/bin/sh\nexit 0\n')
-    pdf.chmod(0o755)
-    config = tmp_path / '.config/literature-to-zotero'
-    config.mkdir(parents=True)
-    (config / 'python-path').write_text(sys.executable + '\n')
-    (config / 'pdf-bin').write_text(str(tools) + '\n')
-    result = subprocess.run([shutil.which('bash') or 'bash', str(SCRIPTS / 'run-python.sh'), '-c',
-                             'import shutil; print(shutil.which("pdftotext"))'],
-                            env=env, text=True, encoding='utf-8', capture_output=True)
-    assert result.returncode == 0, result.stderr
-    assert Path(result.stdout.strip()) == pdf
 
 
 def test_service_timeout_is_actionable_and_other_checks_continue(tmp_path, monkeypatch, capsys):

@@ -1,4 +1,4 @@
-"""Native Windows regressions: exercise the distributed launcher and real Git Bash."""
+"""Native Windows regressions: exercise the distributed PowerShell launcher."""
 import os
 from pathlib import Path
 import shutil
@@ -32,7 +32,7 @@ def release(tmp_path):
 
 def run_setup(package, env, *modes):
     return subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-                           '-File', str(package / 'install/setup.ps1'), '-Agent', 'all', '-Terminal', *modes],
+                           '-File', str(package / 'install/setup.ps1'), '-Agent', 'all', *modes],
                           env=env, capture_output=True, text=True, encoding='utf-8',
                           errors='replace', timeout=600)
 
@@ -59,25 +59,6 @@ def check_native_repeat_install_and_removed_download(tmp_path):
                              str(skill_root / 'paper-to-zotero/scripts/workflow.py'),
                              '--help'], env=env, capture_output=True, timeout=15)
     assert result.returncode == 0, result.stderr
-
-
-def check_native_terminal_has_tty_and_verified_poppler(tmp_path):
-    package = release(tmp_path)
-    env = environment(tmp_path / '用户 home')
-    marker = tmp_path / 'terminal-result.txt'
-    env['PAPER2ZOTERO_TEST_RESULT'] = str(marker)
-    # Replace only the test package's account wizard; never prompt for or access keys.
-    # The production PowerShell -> mintty -> Bash launcher remains unchanged.
-    (package / 'paper-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
-set -euo pipefail
-[[ -t 0 && -t 1 ]]
-(( $# == 0 ))
-pdftotext -v >/dev/null 2>&1
-printf 'tty-and-poppler-ok' > "$PAPER2ZOTERO_TEST_RESULT"
-''', encoding='utf-8', newline='\n')
-    result = run_setup(package, env)
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert marker.read_text() == 'tty-and-poppler-ok'
 
 
 @unittest.skipUnless(os.name == 'nt', 'native Windows launcher')
@@ -123,74 +104,6 @@ Path(os.environ['PAPER2ZOTERO_TEST_RESULT']).write_text('native-ok')
     def test_repeat_install(self):
         with tempfile.TemporaryDirectory() as folder:
             check_native_repeat_install_and_removed_download(Path(folder))
-
-    def test_terminal(self):
-        with tempfile.TemporaryDirectory() as folder:
-            check_native_terminal_has_tty_and_verified_poppler(Path(folder))
-
-    def test_masked_input_restores_real_terminal_after_success_and_interrupt(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder)
-            package = release(path)
-            env = environment(path / '用户 home')
-            marker = path / 'input-result.txt'
-            env['PAPER2ZOTERO_TEST_RESULT'] = str(marker)
-            # Use a real mintty TTY and production reader. Only the keystrokes
-            # are synthetic; no clipboard or user credentials are accessed.
-            (package / 'paper-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
-set -euo pipefail
-source "$(dirname "$0")/setup-input.sh"
-before=$(stty -g)
-count=0
-read() {
-  [[ "$(stty -g)" != "$before" ]] || return 1
-  count=$((count + 1))
-  if [[ "$count" == 1 ]]; then printf -v char '%s' 'fixture-key'; else char=''; fi
-}
-value=$(read_authorization_line)
-[[ "$value" == fixture-key ]]
-[[ "$(stty -g)" == "$before" ]]
-read() { kill -s TERM "$BASHPID"; }
-status=0
-value=$(read_authorization_line) || status=$?
-[[ "$status" == 130 ]]
-[[ "$(stty -g)" == "$before" ]]
-read() { printf 'unexpected read' > "$PAPER2ZOTERO_TEST_RESULT"; return 1; }
-stty() { [[ "$1" != "$failure" ]] || return 1; command stty "$@"; }
-for failure in -g -echo; do
-  status=0
-  value=$(read_authorization_line) || status=$?
-  [[ "$status" == 1 ]]
-  [[ ! -f "$PAPER2ZOTERO_TEST_RESULT" ]]
-  [[ "$(command stty -g)" == "$before" ]]
-done
-printf 'masked-input-restored' > "$PAPER2ZOTERO_TEST_RESULT"
-''', encoding='utf-8', newline='\n')
-            result = run_setup(package, env)
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(marker.read_text(), 'masked-input-restored')
-
-    def test_agent_launch_returns_with_terminal_ready(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder)
-            package = release(path)
-            env = environment(path / '用户 home')
-            marker = path / 'completed.txt'
-            env['PAPER2ZOTERO_TEST_RESULT'] = str(marker)
-            (package / 'paper-to-zotero/scripts/setup-wizard.sh').write_text('''#!/usr/bin/env bash
-set -eu
-test -t 0
-sleep 3
-printf 'finished' > "$PAPER2ZOTERO_TEST_RESULT"
-''', encoding='utf-8', newline='\n')
-            result = run_setup(package, env, '-LaunchWizard')
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn('Wizard terminal is ready', result.stdout)
-            self.assertFalse(marker.exists(), 'Agent waited for the entire wizard to finish')
-            deadline = time.monotonic() + 10
-            while not marker.exists() and time.monotonic() < deadline:
-                time.sleep(0.1)
-            self.assertEqual(marker.read_text(), 'finished')
 
     def test_online_entry_forwards_modes_and_preserves_dirty_cache(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -5,18 +5,17 @@ import hashlib
 import json
 from pathlib import Path
 import sys
-import zlib
 
 import pytest
 
 from http_fixture import server
+from pdf_fixture import pdf_with_text
 from test_cli import run_script
 from test_sources import OPENALEX_WORK, sources_at
 from test_workflow_resume import selected_run
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import local_pdf  # noqa: E402
-import paper_artifacts  # noqa: E402
 
 
 PROSE = (
@@ -28,12 +27,6 @@ PROSE = (
 KNOWN_TITLE = "Large Language Models for Mental State Detection"
 
 
-def pdf_with_text(body: str) -> bytes:
-    escaped = body.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
-    stream = zlib.compress(f"BT ({escaped}) Tj ET".encode("latin-1"))
-    return b"%PDF-1.7\n1 0 obj\n<< >>\nstream\n" + stream + b"\nendstream\nendobj\n%%EOF\n"
-
-
 def document(head: str) -> bytes:
     return pdf_with_text(head.rstrip() + "\n" + PROSE)
 
@@ -42,13 +35,6 @@ def write_pdf(directory: Path, name: str, body: bytes) -> Path:
     path = directory / name
     path.write_bytes(body)
     return path
-
-
-@pytest.fixture()
-def builtin_extractor(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Poppler is installed in CI; these fixtures are for the builtin reader."""
-    monkeypatch.setattr(local_pdf, "full_text", lambda _pdf: "")
-    monkeypatch.setattr(paper_artifacts, "poppler_text", lambda _pdf: "")
 
 
 def fresh_run(tmp_path: Path) -> Path:
@@ -99,7 +85,7 @@ def test_unreadable_pdf_does_not_invent_a_candidate(tmp_path: Path) -> None:
     assert not list((run / "papers").rglob("paper.md"))
 
 
-def test_missing_doi_does_not_adopt_a_weak_bibliographic_hit(tmp_path: Path, builtin_extractor: None) -> None:
+def test_missing_doi_does_not_adopt_a_weak_bibliographic_hit(tmp_path: Path) -> None:
     run = fresh_run(tmp_path)
     pdf = write_pdf(tmp_path, "local.pdf", document("Evaluating Local Pdf Metadata Recovery"))
     unrelated = {
@@ -133,7 +119,7 @@ def test_missing_doi_does_not_adopt_a_weak_bibliographic_hit(tmp_path: Path, bui
     assert not json.loads((run / "manifest.json").read_text()).get("consents")
 
 
-def test_missing_doi_adopts_a_confident_title_match(tmp_path: Path, builtin_extractor: None) -> None:
+def test_missing_doi_adopts_a_confident_title_match(tmp_path: Path) -> None:
     run = fresh_run(tmp_path)
     pdf = write_pdf(tmp_path, "known.pdf", document(KNOWN_TITLE))
     crossref_seen: list[str] = []
@@ -173,7 +159,7 @@ def test_missing_doi_adopts_a_confident_title_match(tmp_path: Path, builtin_extr
     assert not json.loads((run / "manifest.json").read_text()).get("consents")
 
 
-def test_existing_candidate_is_not_overwritten(tmp_path: Path, builtin_extractor: None) -> None:
+def test_existing_candidate_is_not_overwritten(tmp_path: Path) -> None:
     run = selected_run(tmp_path)
     before = (run / "candidates.json").read_bytes()
     original = json.loads(before)
@@ -206,7 +192,7 @@ def test_existing_candidate_is_not_overwritten(tmp_path: Path, builtin_extractor
     assert not manifest.get("consents")
 
 
-def test_default_does_not_upload_without_consent(tmp_path: Path, builtin_extractor: None,
+def test_default_does_not_upload_without_consent(tmp_path: Path,
                                                  monkeypatch: pytest.MonkeyPatch) -> None:
     run = fresh_run(tmp_path)
     pdf = write_pdf(tmp_path, "cloud.pdf", document(f"{KNOWN_TITLE}\ndoi:10.1145/3643540"))
@@ -230,7 +216,7 @@ def test_default_does_not_upload_without_consent(tmp_path: Path, builtin_extract
     assert CLOUD_WARNING in manifest["papers"]["doi:10.1145/3643540"]["warnings"]
 
 
-def test_default_chains_mineru_after_consent(tmp_path: Path, builtin_extractor: None,
+def test_default_chains_mineru_after_consent(tmp_path: Path,
                                              monkeypatch: pytest.MonkeyPatch) -> None:
     run = fresh_run(tmp_path)
     pdf = write_pdf(tmp_path, "cloud.pdf", document(f"{KNOWN_TITLE}\ndoi:10.1145/3643540"))
@@ -273,18 +259,17 @@ def test_default_chains_mineru_after_consent(tmp_path: Path, builtin_extractor: 
     assert identity in manifest["consents"]["mineru"]["ids"]
 
 
-def test_local_conversion_keeps_text_beyond_the_identity_front_matter(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_local_conversion_keeps_text_beyond_the_identity_front_matter(tmp_path: Path) -> None:
     run = fresh_run(tmp_path)
-    pdf = write_pdf(tmp_path, "full.pdf", document("Evaluating Local Pdf Metadata Recovery"))
-    later = "later page body " * 40
-    monkeypatch.setattr(local_pdf, "full_text", lambda _pdf: "Evaluating Local Pdf Metadata Recovery\n" + PROSE + later)
+    later = "later page body beyond the identity pages"
+    pdf = write_pdf(tmp_path, "full.pdf", pdf_with_text(
+        "Evaluating Local Pdf Metadata Recovery\n" + PROSE, PROSE, PROSE, later))
     result = local_pdf.run_local_pdfs(run, [pdf], backend="local", client=EmptyLookup())
     assert result["backend"] == "local"
     assert result["status"] == "awaiting_summaries"
     assert result["papers"][0]["status"] == "converted"
     assert "local-text" in result["papers"][0]["markdown"]
-    assert later.strip() in Path(result["papers"][0]["markdown"]).read_text()
+    assert later in Path(result["papers"][0]["markdown"]).read_text()
     assert "not a MinerU layout parse" in Path(result["papers"][0]["markdown"]).read_text()
     assert not json.loads((run / "manifest.json").read_text()).get("consents")
 

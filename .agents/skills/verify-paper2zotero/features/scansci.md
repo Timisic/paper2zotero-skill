@@ -15,7 +15,7 @@ Leave `SEARCH_BACKEND` unset and ask for papers. `discovery.discover` calls `sca
 
 ## Driving it with verify_runner
 
-Preconditions: run Doctor from the parent SKILL.md. Python, pytest, and Poppler are available. Only disposable fixture state is used.
+Preconditions: run Doctor from the parent SKILL.md. Python, pytest, and pymupdf are available. Only disposable fixture state is used.
 
 ```bash
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature scansci

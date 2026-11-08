@@ -22,7 +22,7 @@ command -v "$VERIFY_PYTHON"
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py doctor
 ```
 
-Require Python >=3.11, `pytest`, `pdfinfo` and `pdftotext`. Doctor reports their presence, the actual interpreter and source hashes; missing dependencies produce `ok: false` and exit 2. It installs nothing and makes no service calls. To use an existing environment, set `VERIFY_PYTHON` to its Python executable before running the commands. There is no dependency lock or project-managed test environment in the current repository: [docs/README.md](../../../docs/README.md) uses `python3 -m pytest`, and `.github/workflows/runtime.yml` installs pytest plus Poppler.
+Require Python >=3.11, `pytest` and `pymupdf`. Doctor reports their presence, the actual interpreter and source hashes; missing dependencies produce `ok: false` and exit 2. It installs nothing and makes no service calls. To use an existing environment, set `VERIFY_PYTHON` to its Python executable before running the commands. There is no dependency lock or project-managed test environment in the current repository: [docs/README.md](../../../docs/README.md) uses `python3 -m pytest`, and `.github/workflows/runtime.yml` installs pytest and pymupdf.
 
 If no suitable existing environment is available, this optional preparation creates an isolated environment in the repository's already ignored `literature-runs/` directory. Run it only when dependency preparation is authorized; it does not modify global Python. Use an existing Python >=3.11 and installed `uv`; do not overwrite an existing environment:
 
@@ -32,13 +32,13 @@ if [ -e "$VERIFY_ENV" ]; then
   echo "Environment already exists; inspect it and run doctor before reuse."
 else
   uv venv --offline --python "$VERIFY_PYTHON" "$VERIFY_ENV" &&
-    uv pip install --offline --python "$VERIFY_ENV/bin/python" 'pytest==9.1.1'
+    uv pip install --offline --python "$VERIFY_ENV/bin/python" 'pytest==9.1.1' 'pymupdf>=1.24'
 fi
 VERIFY_PYTHON="$VERIFY_ENV/bin/python"
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py doctor
 ```
 
-`--offline` requires pytest and its dependencies in the local uv cache. If Python, uv or cache entries are absent, report the exact missing dependency; do not silently download them or fall back to a deleted task directory. Authorized online preparation can follow the repository CI's pytest installation in a virtual environment. Poppler is a separate prerequisite; on macOS the repository CI uses `brew install poppler`, and on Linux `poppler-utils`. Report its absence rather than running a system install automatically. This helper's child PATH searches the interpreter directory, system defaults, `/opt/homebrew/bin` and `/usr/local/bin`; custom Poppler locations need separate review and are not automatically inherited.
+`--offline` requires pytest and its dependencies in the local uv cache. If Python, uv or cache entries are absent, report the exact missing dependency; do not silently download them or fall back to a deleted task directory. Authorized online preparation can follow the repository CI's pytest installation in a virtual environment.
 
 Once doctor passes:
 
@@ -48,11 +48,11 @@ Once doctor passes:
 
 The ordinary project `run-python.sh` reads the real user's runtime configuration, so this harness deliberately runs the chosen interpreter directly. The environment is reusable and is not part of per-run scratch cleanup.
 
-`run` snapshots current scripts, tests, references, and `paper-to-zotero/SKILL.md` into a unique temporary directory, drives the fixture tests whose modules are present, and tears down that snapshot. It collects `lab-defaults` from `tests/test_lab_defaults.py` and `scansci` from `tests/test_scansci_retrieval.py`. The scansci install-line test reads the copied skill file. Source edits must be finished before launching. No build is required. Test peers bind only `127.0.0.1:0` and are ready when their fixture context returns. Never point the helper at an existing service or a real Zotero data directory. A sandbox that refuses local bind needs narrowly scoped host approval for these fixture peers; do not disable the network guard.
+`run` snapshots current scripts, tests, references, and `paper-to-zotero/SKILL.md` into a unique temporary directory, drives the fixture tests whose modules are present, and tears down that snapshot. It collects `backend-defaults` from `tests/test_backend_defaults.py` and `scansci` from `tests/test_scansci_retrieval.py`. The scansci install-line test reads the copied skill file. Source edits must be finished before launching. No build is required. Test peers bind only `127.0.0.1:0` and are ready when their fixture context returns. Never point the helper at an existing service or a real Zotero data directory. A sandbox that refuses local bind needs narrowly scoped host approval for these fixture peers; do not disable the network guard.
 
 ## Doctor
 
-The read-only `doctor` command above checks interpreter version, pytest, `pdfinfo`, `pdftotext`, required CLI sources and source hashes. On this branch the required sources are `workflow.py`, `process_run.py`, `discovery.py`, `summary_artifact.py`, `zotero_ingest.py`, `local_pdf.py`, and `scansci_retrieval.py`. Exit 0 / `ok: true` means the local runner is worth driving, not that production credentials or services are healthy. During `run`, `guard.json` additionally proves that real Zotero's local port 23119 is blocked before any application code executes. Fixture ports are owned by this run, allocated dynamically and recorded in `ports.txt`.
+The read-only `doctor` command above checks interpreter version, pytest, pymupdf, required CLI sources and source hashes. On this branch the required sources are `workflow.py`, `process_run.py`, `discovery.py`, `summary_artifact.py`, `zotero_ingest.py`, `local_pdf.py`, and `scansci_retrieval.py`. Exit 0 / `ok: true` means the local runner is worth driving, not that production credentials or services are healthy. During `run`, `guard.json` additionally proves that real Zotero's local port 23119 is blocked before any application code executes. Fixture ports are owned by this run, allocated dynamically and recorded in `ports.txt`.
 
 ## Drive
 
@@ -65,7 +65,7 @@ Run all features as above, or append one of:
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature local-pdf
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature acquisition
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature delivery
-"$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature lab-defaults
+"$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature backend-defaults
 ```
 
 Use `--evidence /absolute/new/directory` to select a new evidence destination. Existing destinations are refused, preserving earlier proof. Default evidence goes to ignored `literature-runs/verification-YYYYMMDD-HHMMSS/`. The actual public CLI commands, arguments and results are captured in `commands.jsonl`; don't reconstruct production commands with live credentials from a fixture example.
@@ -92,7 +92,7 @@ Failure diagnosis: doctor failures mean missing interpreter/dependencies/source 
 
 ## Limits and maintenance
 
-No real integration runs are authorized by this skill. Unset `SEARCH_BACKEND` selects scansci. Backend selection, the grey default and the legal-only values are in [scansci.md](features/scansci.md). Conversion tries self-hosted MinerU only when `MINERU_API_BASE` is set, then MinerU cloud when `MINERU_TOKEN` is set, then markitdown. Each paper falls through those hops in order. Unset `ZOTERO_WRITE_BACKEND` prefers the local API at `http://127.0.0.1:23119/api` and falls back to the Web API. `run --feature lab-defaults` drives `tests/test_lab_defaults.py` on loopback peers. That pass does not open a MinerU host, the Kimi daemon, or Zotero Desktop. The saved-backend rule is in [lab-defaults.md](features/lab-defaults.md).
+No real integration runs are authorized by this skill. Unset `SEARCH_BACKEND` selects scansci. Backend selection, the grey default and the legal-only values are in [scansci.md](features/scansci.md). Conversion tries self-hosted MinerU only when `MINERU_API_BASE` is set, then MinerU cloud when `MINERU_TOKEN` is set, then markitdown. Each paper falls through those hops in order. Unset `ZOTERO_WRITE_BACKEND` prefers the local API at `http://127.0.0.1:23119/api` and falls back to the Web API. `run --feature backend-defaults` drives `tests/test_backend_defaults.py` on loopback peers. That pass does not open a MinerU host, the Kimi daemon, or Zotero Desktop. The saved-backend rule is in [backend-defaults.md](features/backend-defaults.md).
 
 Live Kimi needs the `kimi-webbridge` binary and `kimi-webbridge status`. Live MinerU needs a host at `MINERU_API_BASE` that answers `GET /v1/health`, then `POST /v1/tasks`. Leaving `--mineru-api-base` at `https://mineru.net` health-checks `credentials.mineru_api_base()` and uses Tasks when that check passes. A failed check uses MinerU cloud when `MINERU_TOKEN` is set, otherwise markitdown when markitdown is installed. MinerU hops take only papers with upload consent. A hop that fails a paper is recorded in `convert.attempts`. With neither, `stage_convert` records `no MinerU token` and skips the v4 client. A paper without MinerU consent records `no upload consent`. An explicit base other than `https://mineru.net` that answers `GET /v1/health` is that Tasks host. An explicit base that fails the check is planned as cloud v4 against that same base, and `stage_convert` calls v4 only when a token is set. Offline fixtures pass that explicit base. Desktop reachability is `scripts/verify.py zotero-local`: it calls `capability.probe_zotero_local` and `capability.zotero_local`, and that probe is HTTP 200 on `GET http://127.0.0.1:23119/api/users/0/items?limit=1`. `capability.probe_zotero_local_write` needs that HTTP 200 and a `Zotero-Server-ID` header, and does not call `/local/authorize`. A writable session is `zotero_ingest.open_local_session`: the same header, then `POST /api/local/authorize` unless `ZOTERO_LOCAL_API_KEY` is already stored.
 

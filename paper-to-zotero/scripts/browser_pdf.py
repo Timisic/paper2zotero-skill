@@ -1044,9 +1044,9 @@ def _store_capture(
         # A valid PDF is not the same as the *right* PDF: MDPI's article page
         # links its journal's marketing flyer, which downloads perfectly. When
         # the caller knows what it asked for, check before writing. Text the
-        # builtin reader cannot decode means "unknown", never "mismatch", so
+        # PDF does not yield means "unknown", never "mismatch", so
         # the file is still written and left for identity verification.
-        text, extractor = paper_artifacts.extract_text_from_bytes(raw)
+        text, extractor = paper_artifacts.extract_text(raw)
         evidence = paper_artifacts.identity_evidence(text, title, doi)
         if extractor != "none" and not paper_artifacts.matches(evidence):
             report["kind"] = "wrong_document"

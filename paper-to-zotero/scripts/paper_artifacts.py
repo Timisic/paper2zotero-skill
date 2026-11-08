@@ -1,21 +1,10 @@
 #!/usr/bin/env python3
 """Verify that a downloaded PDF really is the paper it claims to be.
 
-Identity checking needs the PDF's text, and getting text out of a PDF is the
-part that varies by machine. `pdftotext` (poppler) is the good extractor and
-is installed on almost nobody's machine by default, so a skill that requires
-it fails everywhere it is distributed. The fallback here is a small
-stdlib-only reader: inflate the content streams, pull the strings out of the
-text operators, and keep the ones that decode to real text.
-
-The fallback cannot read every PDF — a producer that embeds subset fonts with
-custom (CID) encodings hands out glyph indices, not characters, and Elsevier
-does exactly that. That case is the reason `readable()` exists: unreadable
-output must never be fed to the matcher, because "I could not read the file"
-and "this is the wrong paper" are different answers and only one of them
-means the download failed.
-
-So verification has three outcomes, not two:
+Text comes from PyMuPDF, which scansci-pdf already installs in the private
+runtime. A scanned or image-only PDF yields no words, and "I could not read
+the file" and "this is the wrong paper" are different answers, so
+verification has three outcomes, not two:
   verified   - the text names this paper's DOI or title
   rejected   - the text is readable and names a *different* paper
   unverified - no readable text; the PDF is kept for a human to look at
@@ -30,23 +19,13 @@ import argparse
 import hashlib
 import json
 import re
-import shutil
-import subprocess
 import sys
-import zlib
 from pathlib import Path
 
 
 STOPWORDS = {"a", "an", "and", "for", "in", "of", "on", "the", "to", "with"}
-PDF_STRING = re.compile(rb"\((?:\\.|[^\\()])*\)", re.S)
-PDF_STREAM = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.S)
-ESCAPES = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b", b"f": b"\f",
-           b"(": b"(", b")": b")", b"\\": b"\\"}
-MAX_STREAMS = 60
-MAX_STREAM_SCAN = 400
-# Words this common appearing this often is what separates real prose from a
-# glyph-index dump that merely looks like characters.
-COMMON_WORDS = (" the ", " and ", " of ", " for ", " with ", " in ")
+# A paper names itself in its opening pages; identity checks read no further.
+FRONT_PAGES = 3
 
 
 def title_tokens(value: str) -> set[str]:
@@ -64,133 +43,26 @@ def despace(value: str) -> str:
 
 # ── Text extraction ────────────────────────────────────────────────────────
 
-def _unescape(raw: bytes) -> bytes:
-    out, index = bytearray(), 0
-    while index < len(raw):
-        char = raw[index : index + 1]
-        if char != b"\\":
-            out += char
-            index += 1
-            continue
-        following = raw[index + 1 : index + 2]
-        if following in ESCAPES:
-            out += ESCAPES[following]
-            index += 2
-        elif following in b"01234567":
-            end = index + 1
-            while end < len(raw) and end < index + 4 and raw[end : end + 1] in b"01234567":
-                end += 1
-            out += bytes([int(raw[index + 1 : end], 8) & 0xFF])
-            index = end
-        else:
-            out += following
-            index += 2
-    return bytes(out)
-
-
-def pdf_strings(raw: bytes) -> list[str]:
-    """The literal strings of a PDF's text-drawing operators. Pure.
-
-    Only Flate-compressed streams that actually draw text are considered;
-    fonts, images and metadata are skipped rather than decoded into noise.
-    """
-    chunks: list[bytes] = []
-    for index, match in enumerate(PDF_STREAM.finditer(raw)):
-        if index > MAX_STREAM_SCAN or len(chunks) >= MAX_STREAMS:
-            break
-        try:
-            data = zlib.decompress(match.group(1))
-        except zlib.error:
-            continue
-        if b"Tj" not in data and b"TJ" not in data:
-            continue
-        chunks.append(data)
-    pieces: list[str] = []
-    for chunk in chunks:
-        for found in PDF_STRING.finditer(chunk):
-            pieces.append(_unescape(found.group(0)[1:-1]).decode("latin-1"))
-    return pieces
-
-
-def printable_ratio(value: str) -> float:
-    if not value:
-        return 0.0
-    return sum(32 <= ord(c) <= 126 for c in value) / len(value)
-
-
-def join_readable(pieces: list[str]) -> str:
-    """Keep only the pieces that decoded to text, drop the glyph-index noise."""
-    return " ".join(piece for piece in pieces if piece and printable_ratio(piece) >= 0.8)
-
-
-def readable(text: str) -> bool:
-    """Is this text worth showing the matcher?
-
-    A CID-encoded PDF yields plenty of bytes that survive a printable check
-    but contain no words, so the test is for actual English prose.
-    """
-    if len(text) < 200 or printable_ratio(text) < 0.85:
-        return False
-    lowered = text.lower()
-    return sum(word in lowered for word in COMMON_WORDS) >= 3
-
-
-def builtin_text(pdf: Path) -> str:
+def pdf_text(source: Path | bytes, pages: int | None = FRONT_PAGES) -> str:
+    """The text of the first `pages` pages, or of every page when None."""
     try:
-        return join_readable(pdf_strings(pdf.read_bytes()))
-    except (OSError, ValueError):
+        import pymupdf
+        opened = pymupdf.open(source) if isinstance(source, Path) else pymupdf.open(stream=source, filetype="pdf")
+        with opened as document:
+            last = document.page_count if pages is None else min(pages, document.page_count)
+            return "\n".join(page.get_text() for page in document.pages(0, last))
+    except (ImportError, RuntimeError, ValueError, OSError):
         return ""
-
-
-def extract_text_from_bytes(raw: bytes) -> tuple[str, str]:
-    """(text, extractor) for a PDF still in memory.
-
-    Only the builtin reader applies here — poppler needs a file — so a caller
-    checking bytes before writing them gets `none` on a PDF this reader
-    cannot decode, and must treat that as "unknown", not as a mismatch.
-    """
-    text = join_readable(pdf_strings(raw))
-    return (text, "builtin") if readable(text) else ("", "none")
-
-
-def poppler_text(pdf: Path) -> str:
-    executable = shutil.which("pdftotext")
-    if not executable:
-        return ""
-    try:
-        completed = subprocess.run(
-            [executable, "-enc", "UTF-8", "-f", "1", "-l", "3", str(pdf), "-"],
-            text=True, encoding='utf-8', errors='replace',
-            capture_output=True,
-            timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return (completed.stdout or '') if completed.returncode == 0 else ""
 
 
 def has_words(text: str) -> bool:
-    """Any real words at all — the bar for trusting a proper extractor."""
     return len(re.findall(r"[A-Za-z]{3,}", text)) >= 5
 
 
-def extract_text(pdf: Path) -> tuple[str, str]:
-    """(text, extractor) — extractor is `pdftotext`, `builtin`, or `none`.
-
-    poppler's output is trusted whenever it contains words: a short document
-    is legitimately short, and gating it on prose volume would turn a valid
-    one-page PDF into `unverified`. The prose gate belongs to the builtin
-    reader alone, whose failure mode is confident-looking noise. A scanned
-    PDF gives poppler nothing, so it falls through to the builtin reader and
-    then, honestly, to no evidence at all.
-    """
-    text = poppler_text(pdf)
-    if has_words(text):
-        return text, "pdftotext"
-    text = builtin_text(pdf)
-    if readable(text):
-        return text, "builtin"
-    return "", "none"
+def extract_text(source: Path | bytes, pages: int | None = FRONT_PAGES) -> tuple[str, str]:
+    """(text, extractor); extractor is `pymupdf`, or `none` for a PDF with no words."""
+    text = pdf_text(source, pages)
+    return (text, "pymupdf") if has_words(text) else ("", "none")
 
 
 # ── Identity ───────────────────────────────────────────────────────────────
@@ -291,8 +163,7 @@ def verify(pdf: Path, expected_title: str, expected_doi: str | None) -> tuple[di
             "status": "unverified",
             "reason": "no readable text could be extracted from this PDF",
             "extractor": extractor,
-            "remediation": "安装 poppler（macOS: brew install poppler；Debian/Ubuntu: apt install poppler-utils；"
-            "Windows: choco install poppler）以启用自动身份校验；或人工确认该 PDF 与条目一致。",
+            "remediation": "该 PDF 没有可读文字（可能是扫描件）；请人工确认它与条目一致。",
             **digest,
         }, 3
     evidence = identity_evidence(text, expected_title, expected_doi)

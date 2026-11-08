@@ -95,13 +95,7 @@ The verifier has three outcomes, and the difference between the last two matters
 - `rejected` (exit 2) — not a PDF, or readable text that names a *different* paper. Do not keep it as a source PDF.
 - `unverified` (exit 3) — no readable text could be extracted, so identity is unknown. **Keep the file** and flag it for human inspection; "could not read" is not evidence against the download.
 
-Text extraction prefers `pdftotext` (poppler) and falls back to a built-in stdlib reader, so verification works on a machine with no extra tools installed. The built-in reader cannot decode PDFs whose fonts use custom CID encodings (Elsevier's typically do) — those come back `unverified` until poppler is installed. Installing it is the single cheapest way to raise the automatic-verification rate:
-
-```bash
-brew install poppler          # macOS
-sudo apt install poppler-utils # Debian/Ubuntu
-choco install poppler          # Windows
-```
+Text comes from PyMuPDF, which the private runtime always has because scansci-pdf depends on it. Identity checks read the first three pages. A scanned PDF with no text layer comes back `unverified`.
 
 ## Markdown
 

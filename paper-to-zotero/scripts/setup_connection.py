@@ -257,15 +257,9 @@ def ensure_default_tools() -> Path:
 
 
 def prepare(agent: str) -> None:
-    directory = Path.home() / '.config/literature-to-zotero'
-    pdf = os.environ.get('PAPER2ZOTERO_PDF_BIN', '')
-    tool = Path(pdf) / 'pdftotext.exe' if pdf else Path(shutil.which('pdftotext') or '')
     ensure_default_tools()
     with contextlib.redirect_stdout(io.StringIO()):
         importlib.import_module('install').install(agent)
-    directory.mkdir(parents=True, exist_ok=True)
-    if tool.is_file():
-        (directory / 'pdf-bin').write_text(str(tool.parent) + '\n', encoding='utf-8')
 
 
 def check(agent: str, *, group: bool = False) -> dict:

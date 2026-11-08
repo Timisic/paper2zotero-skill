@@ -10,6 +10,6 @@ Use the parent SKILL.md's doctor and run commands from the repository root. Ever
 | [Import local PDF](local-pdf.md) | `run --feature local-pdf` | Real CLI and fixture PDF. These nodes do not run the converter chain |
 | [Acquire verified PDF](acquisition.md) | `run --feature acquisition` | HTTP fallback. The suite disables scansci |
 | [Deliver and recover](delivery.md) | `run --feature delivery` | Fixture Zotero and MinerU v4 peers. Not the self-hosted Tasks API or a Desktop file attach |
-| [Lab defaults](lab-defaults.md) | `run --feature lab-defaults` | Loopback only, including one-page Kimi fixture failures. Does not dial a MinerU host, Kimi, or Desktop, and does not prove file attach |
+| [Backend defaults](backend-defaults.md) | `run --feature backend-defaults` | Loopback only, including one-page Kimi fixture failures. Does not dial a MinerU host, Kimi, or Desktop, and does not prove file attach |
 
 The runnable starter map is the tests whose modules are in this branch. A missing dependency, skipped test or failed assertion among them is not a pass. Every assertion's node ID is in `invocation.json` and `results.xml`; commands are in `commands.jsonl`. Inspect action plus resulting files/peer assertions. Real-agent interpretation, production services and Windows remain separate unverified entry points. This is not full-suite coverage.
