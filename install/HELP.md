@@ -47,7 +47,7 @@
 
 新开一个助手会话再试。仍找不到时，让助手“检查六个文献 skill 是否安装到了当前助手”。安装器支持 Claude Code、Codex 和 Pi，所选助手会同时安装全部 skill；需要全部助手时选择 `all`。各 skill 的用途和许可见仓库根目录的 `THIRD_PARTY.md`。
 
-从旧版升级时，安装器会迁移它管理的 `literature-to-zotero` 安装，旧入口保留在备份文件夹。账号配置继续读取 `~/.config/literature-to-zotero/`，无需重填密钥。
+账号配置保存在 `~/.config/literature-to-zotero/`，重装或更新后继续使用，无需重填密钥。
 
 写作 skill 需要当前助手已连接 Zotero MCP。安装成功或 Zotero Web API 检查通过，都不能证明 MCP 已连接。打开 Zotero 后，先让助手只读查看指定集合，再开始写作。
 
