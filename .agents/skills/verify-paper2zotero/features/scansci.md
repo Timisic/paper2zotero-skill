@@ -23,7 +23,7 @@ Preconditions: run Doctor from the parent SKILL.md. Python, pytest, and pymupdf 
 
 The runner collects `tests/test_scansci_retrieval.py`. The tests install a fake `scansci_pdf` module at version `1.19.0`. `test_the_skill_names_the_install_line` reads `paper-to-zotero/SKILL.md`, which the runner copies into the snapshot. `test_discover_asks_scansci_when_the_backend_is_unset` clears the suite's `SEARCH_BACKEND=http` and checks that `discover()` asks scansci. The other features keep the autouse stub that sets `LITERATURE_SCANSCI_DISABLED=1`.
 
-Inspect `results.xml` for each assertion. These tests call the adapter in process, so `commands.jsonl` may stay empty. Run cleanup is automatic and must leave evidence intact.
+Inspect `results.xml` for each assertion. These tests call the adapter in process, so `commands.jsonl` is absent. Run cleanup is automatic and must leave evidence intact.
 
 ## Gotchas
 
