@@ -45,11 +45,6 @@ function Test-Poppler {
 function Start-Wizard([string]$BashPath, [string[]]$WizardArgs) {
     $entry = Join-Path $PSScriptRoot 'windows-wizard.sh'
     if (-not (Test-Path -LiteralPath $entry)) { throw "Wizard launcher missing: $entry" }
-    # Check/dependency modes do not need a terminal or prompt for credentials.
-    if ($Check -or $DependenciesOnly) {
-        & $BashPath $entry.Replace('\', '/') @WizardArgs | Out-Host
-        return $LASTEXITCODE
-    }
     if (-not $Terminal) {
         $gui = Join-Path $PSScriptRoot '..\paper-to-zotero\scripts\setup_gui.py'
         $pythonw = Join-Path (Split-Path $pythonPath) 'pythonw.exe'
@@ -131,19 +126,31 @@ function Install-Tool([string]$Package) {
 try {
     Refresh-ToolPath
     $bashPath = Find-GitBash
-    $pythonPath = Find-Python
+    # An offline bundle ships Python next to install\; never download Python or Git for it.
+    $bundledPython = Join-Path $PSScriptRoot '..\runtime\python\python.exe'
+    $offline = Test-Path -LiteralPath $bundledPython
+    if ($offline) {
+        Write-Host 'Offline bundle: using its bundled Python.' -ForegroundColor Cyan
+        $pythonPath = (Resolve-Path -LiteralPath $bundledPython).Path
+    } else {
+        $pythonPath = Find-Python
+    }
     $popplerReady = Test-Poppler
     if ($pythonPath) { Write-Host 'Python 3.11+: OK, skipping installation.' -ForegroundColor Green }
     if ($popplerReady) { Write-Host 'Poppler: OK, skipping installation.' -ForegroundColor Green }
     if ($bashPath) { Write-Host 'Wizard shell: OK, skipping installation.' -ForegroundColor Green }
     if ($Check) {
-        if (-not $bashPath) { throw 'Git Bash is needed to display the Wizard. Run setup.cmd once first; this check installed nothing.' }
         if (-not $pythonPath) { throw 'Python 3.11+ is missing; run setup.cmd to install it.' }
     } else {
         if (-not $pythonPath) { Install-Tool 'Python.Python.3.13'; $pythonPath = Find-Python }
-        if (-not $popplerReady) { Install-Tool 'oschwartz10612.Poppler'; $popplerReady = Test-Poppler }
-        if (-not $bashPath) { Install-Tool 'Git.Git'; $bashPath = Find-GitBash }
-        if (-not $pythonPath -or -not $popplerReady -or -not $bashPath) { throw 'Tool verification failed. Close this window and re-run setup.cmd.' }
+        # Poppler is optional: PDF text falls back to a built-in extractor.
+        if (-not $popplerReady -and -not $offline -and (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
+            try { Install-Tool 'oschwartz10612.Poppler'; $popplerReady = Test-Poppler } catch { Write-Host 'Poppler skipped (optional).' -ForegroundColor Yellow }
+        }
+        # Only the fallback terminal wizard needs Git Bash.
+        if ($Terminal -and -not $bashPath -and -not $offline) { Install-Tool 'Git.Git'; $bashPath = Find-GitBash }
+        if (-not $pythonPath) { throw 'Tool verification failed. Close this window and re-run setup.cmd.' }
+        if ($Terminal -and -not $bashPath) { throw 'The terminal wizard needs Git for Windows. Install Git, or run setup without -Terminal.' }
     }
     if ($pythonPath) { $env:PYTHON_BIN = $pythonPath }
     if ($popplerReady) {
@@ -151,9 +158,21 @@ try {
         # pdftotext returns 99 for -v, so carry the verified native tool to Bash.
         $env:PAPER2ZOTERO_PDF_BIN = Split-Path (Get-Command pdftotext.exe).Source
     }
+    $scripts = Join-Path $PSScriptRoot '..\paper-to-zotero\scripts'
+    if ($DependenciesOnly) {
+        & $pythonPath (Join-Path $scripts 'setup_connection.py') $Agent | Out-Host
+        exit $LASTEXITCODE
+    }
+    if ($Check) {
+        $config = Join-Path $env:USERPROFILE '.config\literature-to-zotero\python-path'
+        $runtime = $pythonPath
+        if (Test-Path -LiteralPath $config) { $runtime = (Get-Content -LiteralPath $config -Raw -Encoding UTF8).Trim() }
+        $checkArgs = @((Join-Path $scripts 'configure.py'), '--check')
+        if ($Group) { $checkArgs += '--group' }
+        & $runtime @checkArgs | Out-Host
+        exit $LASTEXITCODE
+    }
     $wizardArgs = @()
-    if ($Check) { $wizardArgs += '--check' }
-    elseif ($DependenciesOnly) { $wizardArgs += '--dependencies-only' }
     if ($Group) { $wizardArgs += '--group' }
     if ($Advanced) { $wizardArgs += '--advanced' }
     $result = Start-Wizard $bashPath $wizardArgs

@@ -33,3 +33,52 @@ jobs:
           $pdfTool.DirectoryName >> $env:GITHUB_PATH
       - name: Test suite
         run: python -m pytest -q paper-to-zotero/tests
+  offline-bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x64
+          - os: macos-latest
+            platform: macos-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: '1'
+      BUNDLE: paper2zotero-ci-${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python scripts/build-distribution.py --output "${{ runner.temp }}/dist" --platform ${{ matrix.platform }} --version ci
+      - name: Install the bundle offline in a fresh home (macOS)
+        if: runner.os != 'Windows'
+        env:
+          PIP_NO_INDEX: '1'
+          PIP_INDEX_URL: http://127.0.0.1:9/
+        run: |
+          cd "$RUNNER_TEMP" && unzip -q "dist/$BUNDLE.zip" && rm -r dist
+          export HOME="$RUNNER_TEMP/home" && mkdir "$HOME"
+          bash "$BUNDLE/install/setup.sh" --dependencies-only --agent claude-code
+          python_path="$(cat "$HOME/.config/literature-to-zotero/python-path")"
+          case "$python_path" in "$HOME/.local/share/paper-to-zotero/runtime/"*) ;; *) echo "python-path outside the runtime: $python_path"; exit 1 ;; esac
+          "$python_path" -c 'import scansci_pdf, markitdown'
+      - name: Install the bundle offline in a fresh home (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PIP_NO_INDEX: '1'
+          PIP_INDEX_URL: http://127.0.0.1:9/
+        run: |
+          Expand-Archive "$env:RUNNER_TEMP\dist\$env:BUNDLE.zip" -DestinationPath $env:RUNNER_TEMP
+          Remove-Item -Recurse "$env:RUNNER_TEMP\dist"
+          $env:USERPROFILE = Join-Path $env:RUNNER_TEMP 'home'
+          New-Item -ItemType Directory $env:USERPROFILE | Out-Null
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:RUNNER_TEMP\$env:BUNDLE\install\setup.ps1" -Agent claude-code -DependenciesOnly
+          if ($LASTEXITCODE) { exit 1 }
+          $python = (Get-Content (Join-Path $env:USERPROFILE '.config\literature-to-zotero\python-path') -Raw).Trim()
+          if (-not $python.StartsWith((Join-Path $env:USERPROFILE '.local\share\paper-to-zotero\runtime'))) { throw "python-path outside the runtime: $python" }
+          & $python -c 'import scansci_pdf, markitdown'
+          if ($LASTEXITCODE) { exit 1 }

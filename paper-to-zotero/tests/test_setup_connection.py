@@ -3,6 +3,7 @@ from io import StringIO
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
@@ -452,59 +453,76 @@ def test_kimi_status_uses_platform_executable_and_parses_connection(tmp_path, mo
     assert state['running'] and state['extension_connected']
 
 
-def test_ensure_default_tools_skips_pip_when_both_are_present(monkeypatch, tmp_path):
-    import mineru_parse
-    import scansci_retrieval
-    env = tmp_path / 'env'
-    env.write_bytes(b'KEEP=1\n')
-    monkeypatch.setattr(connection.credentials, 'SKILL_ENV_FILE', env)
-    monkeypatch.setattr(scansci_retrieval, 'library_ready',
-                        lambda: scansci_retrieval.LibraryStatus(True, 'scansci-pdf', scansci_retrieval.INSTALL_LINE))
-    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: True)
-    monkeypatch.setattr(connection.subprocess, 'run', lambda *a, **k: pytest.fail('pip'))
-    connection.ensure_default_tools()
-    connection.ensure_default_tools()
-    assert env.read_bytes() == b'KEEP=1\n'
-
-
-def test_ensure_default_tools_installs_the_pinned_packages(monkeypatch, tmp_path):
-    import mineru_parse
-    import scansci_retrieval
-    env = tmp_path / 'env'
-    env.write_bytes(b'KEEP=1\n')
-    monkeypatch.setattr(connection.credentials, 'SKILL_ENV_FILE', env)
-    monkeypatch.setattr(scansci_retrieval, 'library_ready',
-                        lambda: scansci_retrieval.LibraryStatus(False, 'missing', scansci_retrieval.INSTALL_LINE))
-    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: True)
-    seen = []
+@pytest.fixture
+def runtime(monkeypatch, tmp_path):
+    """A private runtime under a fresh home; `pip` and `probe` decide what the fake interpreter does."""
+    monkeypatch.setattr(connection.Path, 'home', classmethod(lambda cls: tmp_path / 'home'))
+    monkeypatch.setattr(connection, 'RUNTIME', tmp_path / 'home/runtime')
+    monkeypatch.setattr(connection, 'BUNDLE', tmp_path / 'bundle/runtime')
+    monkeypatch.delenv('PIP_INDEX_URL', raising=False)
+    state = {'commands': [], 'pip': [0], 'probe': 0}
 
     def run(command, **kwargs):
-        seen.append((command, kwargs))
-        return subprocess.CompletedProcess(command, 0)
+        state['commands'].append(command)
+        if command[1:3] == ['-m', 'venv']:
+            python = connection.runtime_python(Path(command[3]))
+            python.parent.mkdir(parents=True)
+            python.touch()
+            return subprocess.CompletedProcess(command, 0)
+        if command[1:3] == ['-m', 'pip']:
+            return subprocess.CompletedProcess(command, state['pip'].pop(0))
+        return subprocess.CompletedProcess(command, state['probe'])
 
     monkeypatch.setattr(connection.subprocess, 'run', run)
+    return state
+
+
+def recorded_python(tmp_path):
+    return Path((tmp_path / 'home/.config/literature-to-zotero/python-path').read_text(encoding='utf-8').strip())
+
+
+def test_ready_runtime_is_left_alone(runtime, tmp_path):
+    python = connection.runtime_python(connection.RUNTIME)
+    python.parent.mkdir(parents=True)
+    python.touch()
     connection.ensure_default_tools()
-    assert seen[0][0] == [sys.executable, '-m', 'pip', 'install',
-                          f'scansci-pdf=={scansci_retrieval.PIN}', 'markitdown[pdf]']
-    assert seen[0][1]['capture_output'] is True
-    assert env.read_bytes() == b'KEEP=1\n'
+    connection.ensure_default_tools()
+    assert all(command[1] == '-c' for command in runtime['commands'])
+    assert recorded_python(tmp_path) == python
 
 
-def test_ensure_default_tools_failure_includes_the_install_line(monkeypatch):
-    import mineru_parse
+def test_offline_bundle_is_copied_and_installed_without_an_index(runtime, tmp_path):
     import scansci_retrieval
-    monkeypatch.setattr(scansci_retrieval, 'library_ready',
-                        lambda: scansci_retrieval.LibraryStatus(False, 'missing', scansci_retrieval.INSTALL_LINE))
-    monkeypatch.setattr(mineru_parse, 'markitdown_available', lambda: False)
-    monkeypatch.setattr(connection.subprocess, 'run',
-                        lambda *a, **k: subprocess.CompletedProcess(a[0], 1))
-    with pytest.raises(ValueError) as caught:
+    for name in ('bin/python3', 'python.exe'):
+        (connection.BUNDLE / 'python' / name).parent.mkdir(parents=True, exist_ok=True)
+        (connection.BUNDLE / 'python' / name).touch()
+    (connection.BUNDLE / 'wheels').mkdir()
+    connection.ensure_default_tools()
+    python = connection.runtime_python(connection.RUNTIME)
+    assert python.is_file() and recorded_python(tmp_path) == python
+    pip = [command for command in runtime['commands'] if command[1:3] == ['-m', 'pip']]
+    assert pip == [[str(python), '-m', 'pip', 'install', '--no-index', '--find-links', str(connection.BUNDLE / 'wheels'),
+                    f'scansci-pdf=={scansci_retrieval.PIN}', 'markitdown[pdf]']]
+    shutil.rmtree(tmp_path / 'bundle')
+    assert python.is_file(), 'the runtime survives deleting the unzipped bundle'
+
+
+def test_online_runtime_is_a_venv_with_a_mirror_retry(runtime, tmp_path):
+    runtime['pip'] = [1, 0]
+    connection.ensure_default_tools()
+    python = connection.runtime_python(connection.RUNTIME)
+    assert runtime['commands'][0] == [sys.executable, '-m', 'venv', str(connection.RUNTIME)]
+    pip = [command for command in runtime['commands'] if command[1:3] == ['-m', 'pip']]
+    assert '-i' not in pip[0] and pip[1] == [*pip[0], '-i', connection.MIRROR]
+    assert recorded_python(tmp_path) == python
+
+
+def test_custom_index_skips_the_mirror_and_failure_is_actionable(runtime, tmp_path, monkeypatch):
+    monkeypatch.setenv('PIP_INDEX_URL', 'http://127.0.0.1:9/')
+    runtime['pip'] = [1]
+    with pytest.raises(ValueError, match='离线安装包'):
         connection.ensure_default_tools()
-    assert scansci_retrieval.INSTALL_LINE in str(caught.value)
-    monkeypatch.setattr(connection.subprocess, 'run', lambda *a, **k: (_ for _ in ()).throw(OSError('missing')))
-    with pytest.raises(ValueError) as caught:
-        connection.ensure_default_tools()
-    assert scansci_retrieval.INSTALL_LINE in str(caught.value)
+    assert not (tmp_path / 'home/.config/literature-to-zotero/python-path').exists()
 
 
 @pytest.mark.parametrize('has_pdftotext', [True, False])
@@ -529,6 +547,5 @@ def test_prepare_installs_without_requiring_pdftotext(monkeypatch, tmp_path, has
     connection.prepare('codex')
     assert seen == ['ensure_default_tools', 'install', ('skill', 'codex')]
     config = tmp_path / '.config/literature-to-zotero'
-    assert (config / 'python-path').is_file()
     pdf_bin = config / 'pdf-bin'
     assert (pdf_bin.read_text(encoding='utf-8').strip() == str(tools_dir)) if has_pdftotext else not pdf_bin.exists()

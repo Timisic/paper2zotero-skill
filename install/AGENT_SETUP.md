@@ -14,7 +14,7 @@
 
 ### Windows 原生环境
 
-下载官方安装器并运行。它会准备原生 Python、PDF 工具和 Git Bash，然后打开 Windows 图形配置窗口。不要自行拼接 mintty 启动命令，也不用 WSL。
+下载官方安装器并运行。它会准备原生 Python 和 PDF 工具，然后打开 Windows 图形配置窗口；Git Bash 只在 `-Terminal` 时需要。不要自行拼接 mintty 启动命令，也不用 WSL。
 
 ```powershell
 $installer = Join-Path $env:TEMP 'paper2zotero-install.ps1'
@@ -63,6 +63,24 @@ bash "$HOME/.local/share/paper2zotero-source/install/setup.sh" --agent claude-co
 最后请当前助手确认可以发现 `paper-to-zotero`、`academic-paper`、`nature-writing` 和 `discussion-drafter`（Claude Code 用 `/名称`，Codex 用 `$名称`）；必要时新开会话。报告文件安装、服务检查和实际发现这三个状态，未验证的如实说明。写作 skill 另需当前助手连接 Zotero MCP：发现实际工具并只读验证目标集合。缺少连接时列为写作的未完成项。
 
 交付时简短询问用户是否想换用自己的总结提示词；向导已问过则复用该选择。需要时通过 `agent_installation.installed_paths(agent=已选目标)` 给出生效的 `references/paper-summary.md` 绝对路径，修改方法见 [HELP.md](HELP.md#更换总结提示词)。不打开编辑器，不修改提示词。
+
+## 离线安装包
+
+解压后的文件夹根目录同时有 `runtime/` 和 `VERSION` 时，它是离线安装包：随附 Python 3.12 和全部 Python 依赖，安装不联网，不需要 Git、Homebrew 或 WinGet。离线安装包只有 Windows 和 macOS 版；Linux 按第 2 节在线安装。只有 `开始.md`、没有 `runtime/` 时，按第 2 节“已有仓库时”的命令在线安装，仓库路径就是这个文件夹。
+
+`<安装包>` 是解压后文件夹的绝对路径，助手参数同第 1 节。先准备依赖和 skill，再只读检查：
+
+```bash
+bash '<安装包>/install/setup.sh' --dependencies-only --agent claude-code
+bash '<安装包>/install/setup.sh' --agent claude-code --check
+```
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<安装包>\install\setup.ps1' -Agent claude-code -DependenciesOnly
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<安装包>\install\setup.ps1' -Agent claude-code -Check
+```
+
+依赖装进用户目录下的独立运行环境，之后删除解压文件夹不影响使用。`开始.md` 列出只有用户能做的事：安装 Zotero 7 并开启本地 API、可选的 Kimi WebBridge 和 MinerU 云端 Token。逐项询问是否已完成，不代为操作。然后按第 3 节打开向导：Windows 用 `-LaunchWizard`，macOS 请用户在自己的终端运行 `bash '<安装包>/install/setup.sh' --agent claude-code`。最后按第 4 节交付，检查命令用上面的 `--check` / `-Check`。缺少 Poppler 不影响安装。
 
 ## 通过其他 skill 分发工具安装
 
