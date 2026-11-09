@@ -8,7 +8,7 @@
 
 > 请按照 https://github.com/Timisic/paper2zotero-skill/blob/main/install/AGENT_SETUP.md ，帮我安装并配置这个文献工具，安装到我当前使用的助手中。
 
-它会准备需要的工具，再打开配置向导。你只需按向导提示，打开对应的网页获取 API Key，粘贴回向导中。
+它会准备需要的工具，再打开配置向导。第一次使用，按[快速上手](install/QUICKSTART.md)的三步和完整示例操作即可。
 
 文献流程分三段：**ScanSci 检索与下载 PDF（失败时改用 Kimi WebBridge）→ 写入本机 Zotero → 写作 skill 读取 Zotero**。
 
