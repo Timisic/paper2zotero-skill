@@ -1,38 +1,77 @@
 # 快速上手
 
-开始前请确认三件事：已安装 Zotero，已配好 Kimi WebBridge，正在用 Claude Code / Codex / Psyclaw 中的一个助手。
+开始前请确认两件事：已安装 Zotero 7，正在用 Claude Code / Codex / Psyclaw 中的一个助手。
 
-## 三步用起来
+安装分模块进行。每个模块装完立刻检查，确认成功后再装下一个。
 
-### 1. 打开 Zotero 的本地接口
+## 模块清单
 
-打开 Zotero，进入 **设置 → 高级**，勾选 **允许此计算机上的其他应用程序与 Zotero 通讯**。
+| 模块 | 作用 | 是否必需 | 成功时显示 |
+| --- | --- | --- | --- |
+| ① 运行环境 | Python、scansci-pdf（检索和下载 PDF）、markitdown（PDF 转 Markdown） | 必需 | ✓ 运行工具、✓ 论文检索（ScanSci）、✓ 全文转换 |
+| ② 文献 skill | 把 6 个 skill 装进你的助手 | 必需 | ✓ 连接 AI 助手：6 个 skill |
+| ③ Zotero 本地 API | 让助手写入 Zotero，写作 skill 也从这里读取 | 必需 | ✓ Zotero 本地 API：127.0.0.1:23119 可写入 |
+| ④ MinerU | 更好的 PDF 转换，不配置就用本机 markitdown | 可选 | 全文转换一行出现“MinerU” |
+| ⑤ Kimi WebBridge | 用学校或机构的浏览器登录下载全文，是下载失败时的备用通道 | 可选 | ✓ Kimi WebBridge |
 
-以后找论文、写作时都保持 Zotero 打开。
+## 四步装好
+
+### 1. 拿到安装包
+
+- **能上 GitHub：** 在 https://github.com/Timisic/paper2zotero-skill 点 **Code → Download ZIP**，或运行 `git clone https://github.com/Timisic/paper2zotero-skill.git`。
+- **不能上网（离线安装）：** 用别人拷给你的离线安装包 `paper2zotero-<版本>-macos-arm64.zip`（Apple 芯片）、`-macos-x64.zip`（Intel 芯片）或 `-windows-x64.zip`。包里自带 Python 和全部依赖，安装时不联网。
+
+解压到一个固定位置，路径可以有中文和空格。
+
+### 2. 逐个安装模块
+
+在解压后的文件夹里运行：
+
+- **macOS / Linux：** 打开终端，进入这个文件夹，运行
+
+  ```bash
+  bash install/setup.sh --modules
+  ```
+
+- **Windows：** 双击 `install\setup-modules.cmd`。
+
+脚本按 ① 到 ⑤ 的顺序处理，每个模块后面打印检查结果：
+
+- `✓` 已就绪，自动进入下一个模块。
+- `待完成` 必需模块没通过，下面一行“下一步”写明怎么做。做完输入 `r` 重试。
+- `○` 可选模块没配，不影响使用，直接回车跳过。
+
+到 ③ 时，打开 Zotero，进入 **设置 → 高级**，勾选 **允许此计算机上的其他应用程序与 Zotero 通讯**，回到终端按回车。以后找论文、写作时都保持 Zotero 打开。
 
 <img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20261109092032294.png" alt="image-20261109092032294" style="zoom:30%;" />
 
 <!-- 图 1：Zotero 设置 → 高级，勾选本地接口 -->
 
-### 2. 让助手安装
+到 ④ 时，输入 `1` 粘贴 MinerU 云端 Token（在 https://mineru.net/apiManage/token 创建），或输入 `2` 填自建 MinerU 服务的地址，例如 `192.168.1.20:8000`。
 
-把这句话发给助手：
+⑤ 需要你先按 https://www.kimi.com/products/kimi-webbridge 安装本地服务和浏览器扩展，脚本只检查。
 
-> 请按照 https://github.com/Timisic/paper2zotero-skill/blob/main/install/AGENT_SETUP.md ，帮我安装并配置这个文献工具，安装到你自己（当前助手）中。
+最后看到“必需模块全部就绪”，就装好了。
 
-若网络无法进入github，则使用压缩包中的路径：
+### 3. 验证
 
-> 请按照 paper2zotero-skill/install/AGENT_SETUP.md ，帮我安装并配置这个文献工具，安装到当前助手中。
+随时可以重新检查整套环境：
 
-配置窗口打开后，按提示一路继续即可。macOS 和 Linux 在终端里按回车，Windows 在图形窗口里点按钮。如果助手请你在终端粘贴一行命令，照做即可。
+```bash
+bash install/setup.sh --check
+```
 
-最后助手会发回检查结果。每项前面都是 ✓，并且看到“环境已就绪”，就装好了。
+Windows 运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File install\setup.ps1 -Check`。
+
+必需项前面都是 ✓，并且看到“环境已就绪”，就可以用了。
+
+<img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20261109100926469.png" alt="image-20261109100926469" style="zoom:50%;" />
 
 <!-- 图 2：检查结果，全部 ✓ 和“环境已就绪” -->
 
-某项显示“待完成”时，按它下面那行“下一步”操作，再对助手说“重新检查文献工具”。
+装好后可以删除解压的文件夹，运行环境和 skill 已经复制到用户目录。离线指的是安装过程，实际检索论文、下载 PDF 和 MinerU 云端转换仍然要联网。
 
-### 3. 新开一个会话，说出你要找什么
+### 4. 新开一个会话，说出你要找什么
 
 新开会话是为了让助手加载刚装好的技能。然后直接用自然语言提需求，下面的示例就是一次完整的使用过程。
 
@@ -71,7 +110,7 @@
 
 <img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20261109092343454.png" alt="image-20261109092343454" style="zoom:20%;" />
 
-<!-- 图 6：Zotero 集合里的条目、附件和笔记 -->
+<!-- 图 3：Zotero 集合里的条目、附件和笔记 -->
 
 ### ⑤ 用这些文献写作
 
@@ -80,13 +119,3 @@
 > 使用 discussion-drafter。研究背景是……，核心发现是……；只使用 Zotero 中“AI 与学习”集合的文献。
 
 写文献综述用 `academic-paper` 的 lit-review 模式，写引言用 `nature-writing`，提法相同。
-
-## 中途出了问题
-
-| 情况 | 怎么做 |
-| --- | --- |
-| 任务中断，只处理了一部分 | 说“继续上次的任务”。 |
-| 助手找不到这个技能 | 新开一个会话再试。 |
-| 结果表显示某篇没下载到 | 已有 PDF 时直接发给助手，说“把这个 PDF 加到‘AI 与学习’”。 |
-
-其他问题见[安装与使用帮助](HELP.md)。
