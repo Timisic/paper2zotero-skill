@@ -6,7 +6,6 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-import time
 import urllib.error
 import urllib.parse
 from http_fixture import server
@@ -16,35 +15,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import configure
 import setup_connection as connection
-
-
-@pytest.mark.parametrize('status,hint', [(200, ''), (401, '未接受'), (429, '额度'), (503, '网络')])
-def test_openalex_connection_checks_candidate_key_before_replacing_saved_key(tmp_path, monkeypatch, capsys, status, hint):
-    path = tmp_path / 'env'
-    path.write_text('OPENALEX_API_KEY=old-key\nUNRELATED=keep\n')
-    monkeypatch.setattr(configure.credentials, 'SKILL_ENV_FILE', path)
-    monkeypatch.setenv('OPENALEX_API_KEY', 'inherited-old-key')
-    calls = []
-    def reply(method, url, body, headers):
-        calls.append(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query))
-        return status, {'results': []} if status == 200 else {'error': 'fixture-secret'}, {}
-    before = path.read_bytes()
-    with server(reply) as base:
-        monkeypatch.setenv('LITERATURE_SOURCE_BASES', json.dumps({'openalex': base}))
-        monkeypatch.setattr(sys, 'argv', ['configure.py', '--connect', 'openalex'])
-        monkeypatch.setattr(sys, 'stdin', StringIO('fixture-secret'))
-        if status == 200:
-            assert configure.main() == 0
-            assert configure.credentials.source_setting('openalex') == 'fixture-secret'
-            assert configure.credentials._skill_env()['UNRELATED'] == 'keep'
-        else:
-            with pytest.raises(ValueError, match=hint) as caught:
-                configure.main()
-            assert 'fixture-secret' not in str(caught.value)
-            assert path.read_bytes() == before
-    assert len(calls) == 1 and calls[0]['api_key'] == ['fixture-secret']
-    output = capsys.readouterr()
-    assert 'fixture-secret' not in output.out + output.err
 
 
 def test_setup_requires_openalex_even_when_other_search_sources_work(tmp_path, monkeypatch, capsys):
@@ -61,16 +31,7 @@ def test_setup_requires_openalex_even_when_other_search_sources_work(tmp_path, m
     assert missing[0]['name'] == '论文检索（OpenAlex）'
     assert missing[0]['sources'] == {'OpenAlex': 'not_configured'}
     assert missing[0]['action'] == (
-        '当前检索后端需要 OpenAlex 授权码。在更多配置里连接 OpenAlex，或删除 SEARCH_BACKEND 恢复 scansci。')
-
-
-def test_openalex_setup_allows_a_slow_successful_response(monkeypatch):
-    def reply(*args):
-        time.sleep(3.2)  # A normal cross-region response exceeded the old 3s socket timeout.
-        return 200, {'results': []}, {}
-    with server(reply) as base:
-        monkeypatch.setenv('LITERATURE_SOURCE_BASES', json.dumps({'openalex': base}))
-        assert connection.connect('openalex', 'fixture-key') == {'OPENALEX_API_KEY': 'fixture-key'}
+        '当前检索后端需要 OpenAlex 授权码。在 ~/.config/literature-to-zotero/env 写入 OPENALEX_API_KEY=<Key>，或删除 SEARCH_BACKEND 恢复 scansci。')
 
 
 def test_terminal_connection_failure_preserves_account_then_saves_verified_identity(tmp_path, monkeypatch, capsys):
@@ -188,35 +149,39 @@ def test_browser_uses_windows_url_association(monkeypatch):
         connection.open_page('file:///arbitrary')
 
 
-@pytest.mark.parametrize('service,value,setting', [
-    ('semantic_scholar', 'fixture-key', 'SEMANTIC_SCHOLAR_API_KEY'),
-    ('crossref', 'name@example.org', 'CROSSREF_MAILTO'),
-    ('unpaywall', 'name@example.org', 'UNPAYWALL_EMAIL'),
+@pytest.mark.parametrize('typed,saved', [
+    ('192.168.1.20:8000', 'http://192.168.1.20:8000'),
+    ('mineru.example.org/', 'http://mineru.example.org'),
+    ('https://mineru.example.org/api', 'https://mineru.example.org/api'),
 ])
-def test_optional_settings_use_runtime_credential_names(service, value, setting):
-    assert connection.extra_settings(service, value) == {setting: value}
+def test_self_hosted_mineru_address_accepts_ip_or_domain_after_health(monkeypatch, typed, saved):
+    import mineru_parse
+    seen = []
+    monkeypatch.setattr(mineru_parse, 'tasks_health', lambda base, timeout=3: seen.append(base) or {'ok': True})
+    assert connection.accept('mineru_api', typed) == {'MINERU_API_BASE': saved}
+    assert seen == [saved]
 
 
-@pytest.mark.parametrize('service,value', [('kimi', 'key'), ('crossref', 'no-email'),
-                                          ('unpaywall', 'a@b c.org'), ('openalex', '\x16'),
-                                          ('semantic_scholar', 'bad\nkey')])
-def test_optional_bad_input_rejected(service, value):
-    with pytest.raises(ValueError):
-        connection.extra_settings(service, value)
+@pytest.mark.parametrize('typed', ['', 'ftp://host', 'http://', 'host:notaport', 'http://h?x=1'])
+def test_self_hosted_mineru_address_rejects_malformed_input(monkeypatch, typed):
+    import mineru_parse
+    monkeypatch.setattr(mineru_parse, 'tasks_health', lambda *a, **k: pytest.fail('probed a malformed address'))
+    with pytest.raises(ValueError, match='IP 或域名'):
+        connection.accept('mineru_api', typed)
 
 
-def test_kimi_not_enabled_until_extension_is_connected(tmp_path, monkeypatch):
-    binary = tmp_path / 'kimi-webbridge.exe'
-    binary.touch()
-    monkeypatch.setattr(connection.capability, 'KIMI_BINARY', binary)
-    monkeypatch.setattr(connection.capability, 'probe_kimi', lambda *a: {'running': True, 'extension_connected': False})
-    with pytest.raises(ValueError, match='扩展尚未连接'):
-        connection.enable_kimi()
-    monkeypatch.setattr(connection.capability, 'probe_kimi', lambda *a: {'running': True, 'extension_connected': True})
-    assert connection.enable_kimi() == {'SETUP_BROWSER': '1'}
+def test_self_hosted_mineru_address_is_not_saved_when_health_fails(monkeypatch):
+    with server(lambda *a: (503, {'ok': False}, {})) as base:
+        with pytest.raises(ValueError, match='/v1/health'):
+            connection.accept('mineru_api', base)
 
 
-def test_kimi_accepts_existing_path_install_for_setup_and_preflight(tmp_path, monkeypatch):
+def test_more_settings_offer_only_mineru():
+    assert connection.EXTRA_SERVICES == ('mineru', 'mineru_api')
+    assert set(connection.SERVICES) == {'zotero', 'mineru', 'mineru_api', 'desktop'}
+
+
+def test_kimi_accepts_existing_path_install_for_preflight(tmp_path, monkeypatch):
     binary = tmp_path / 'kimi-webbridge'
     binary.touch()
     monkeypatch.setattr(connection.capability, 'KIMI_BINARY', tmp_path / 'missing')
@@ -226,26 +191,9 @@ def test_kimi_accepts_existing_path_install_for_setup_and_preflight(tmp_path, mo
         calls.append(args)
         return subprocess.CompletedProcess(args, 0, '{"running": true, "extension_connected": true}', '')
     monkeypatch.setattr(connection.capability.subprocess, 'run', run)
-    assert connection.enable_kimi() == {'SETUP_BROWSER': '1'}
     assert connection.capability.probe_kimi()['installed']
-    assert calls == [[str(binary), 'status'], [str(binary), 'status']]
+    assert calls == [[str(binary), 'status']]
 
-
-def test_kimi_starts_only_installed_service_and_rechecks(tmp_path, monkeypatch):
-    binary = tmp_path / 'kimi-webbridge.exe'
-    monkeypatch.setattr(connection.capability, 'KIMI_BINARY', binary)
-    with pytest.raises(ValueError, match='尚未找到'):
-        connection.enable_kimi()
-    binary.touch()
-    states = iter([{'running': False}, {'running': True, 'extension_connected': True}])
-    monkeypatch.setattr(connection.capability, 'probe_kimi', lambda *a: next(states))
-    calls = []
-    def run(args, **kw):
-        calls.append(args)
-        return subprocess.CompletedProcess(args, 0)
-    monkeypatch.setattr(connection.subprocess, 'run', run)
-    assert connection.enable_kimi() == {'SETUP_BROWSER': '1'}
-    assert calls == [[str(binary), 'start']]
 
 
 def test_unix_private_save_never_calls_powershell(tmp_path, monkeypatch):
@@ -380,35 +328,10 @@ def test_unknown_basic_service_has_no_check_row(monkeypatch):
         configure.check(as_json=True)
 
 
-def test_wizard_extras_hide_openalex_until_that_backend_is_selected(monkeypatch):
-    assert set(connection.BASIC_SERVICES).isdisjoint(connection.CONNECT_SERVICES)
-    monkeypatch.setattr(connection.credentials, 'search_backend', lambda: 'scansci')
-    assert connection.wizard_extras() == (
-        'zotero', 'mineru', 'kimi', 'semantic_scholar', 'crossref', 'unpaywall')
-    monkeypatch.setattr(connection.credentials, 'search_backend', lambda: 'http')
-    assert connection.wizard_extras()[:2] == ('zotero', 'openalex')
-    assert 'desktop' not in connection.wizard_extras()
-
-
-def test_accept_openalex_probes_and_extra_settings_rejects_it(monkeypatch):
-    with pytest.raises(ValueError):
-        connection.extra_settings('openalex', 'fixture-key')
-    seen = []
-
-    def probe(key=None):
-        seen.append(key)
-        return {'ok': True, 'detail': 'ok', 'sources': {'OpenAlex': 'ok'}}
-
-    monkeypatch.setattr(connection.capability, 'probe_discovery_search', probe)
-    assert connection.accept('openalex', 'fixture-key') == {'OPENALEX_API_KEY': 'fixture-key'}
-    assert seen == ['fixture-key']
-
-
-def test_existing_key_is_empty_for_any_service_other_than_the_three_accounts(monkeypatch):
+def test_existing_key_is_empty_for_any_service_other_than_the_two_accounts(monkeypatch):
     monkeypatch.setattr(connection.credentials, 'mineru_token', lambda: 'secret-token')
     assert connection.existing_key('desktop') == ''
-    assert connection.existing_key('kimi') == ''
-    assert connection.existing_key('semantic_scholar') == ''
+    assert connection.existing_key('mineru_api') == ''
 
 
 def test_enable_desktop_returns_the_flag_without_reading_sync_prefs(monkeypatch):

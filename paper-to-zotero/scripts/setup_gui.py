@@ -94,10 +94,10 @@ class Wizard:
         titles = self.page_titles()
         basic = self.basic_services()
         self.step.configure(text='  →  '.join(f'{i + 1}. {name}' for i, name in enumerate(titles)))
-        self.heading.configure(text='更多配置 · 可选功能' if self.page == len(titles) - 1 else f'{self.page + 1}/{len(titles)}  {titles[self.page]}')
+        self.heading.configure(text='更多配置 · MinerU（可选）' if self.page == len(titles) - 1 else f'{self.page + 1}/{len(titles)}  {titles[self.page]}')
         if self.page == 0:
             self.label('配置一次，以后直接让 AI 帮你找论文、整理阅读笔记。')
-            self.label('选择你使用的 AI 助手。接下来只需要复制网页上的授权码，无需输入命令或查找个人文库 ID。', style='Muted.TLabel')
+            self.label('选择你使用的 AI 助手。接下来只需检查本机 Zotero，无需输入命令或授权码。', style='Muted.TLabel')
             names = dict(AGENTS)
             if self.agent == 'all':
                 names['全部助手'] = 'all'
@@ -111,7 +111,7 @@ class Wizard:
             self.agent_choice.set(selected)
             self.agent_choice.pack(anchor='w', pady=(5, 20))
             self.controls.append(self.agent_choice)
-            self.label('授权码只保存在本机。输入默认隐藏，验证成功后才保存。你可以随时关闭窗口，之后继续。', style='Muted.TLabel')
+            self.label('你可以随时关闭窗口，之后继续。', style='Muted.TLabel')
             def prepare():
                 chosen = names.get(self.agent_choice.get())
                 if not chosen:
@@ -246,7 +246,7 @@ class Wizard:
 
     def result_page(self):
         self.label('点击检查，确认工具和账号是否已就绪。未完成的项目可以返回对应步骤继续配置。')
-        self.label('基础配置后，可继续连接 Kimi WebBridge、Semantic Scholar 等可选功能；也可以直接开始使用。', style='Muted.TLabel')
+        self.label('PDF 默认用本机 markitdown 转换。有 MinerU Token 或自建 MinerU 服务时，可在更多配置里填写；也可以直接开始使用。', style='Muted.TLabel')
         self.button(self.body, '更多配置（可选）', lambda: self.goto(len(self.page_titles()) - 1)).pack(anchor='w', pady=(0, 10))
         result_frame = ttk.Frame(self.body)
         result_frame.pack(fill='both', expand=True)
@@ -278,7 +278,7 @@ class Wizard:
                        '\n保留 “## Save and continue” 及其后的保存说明。', style='Muted.TLabel')
 
     def advanced_page(self):
-        self.label('所有可选功能已展开。填写需要的项目即可；留空保留已有设置。向下滚动可查看其他项目。', style='Muted.TLabel')
+        self.label('二选一即可：MinerU 云端 Token，或自建 MinerU 地址。留空保留已有设置。', style='Muted.TLabel')
         canvas = tk.Canvas(self.body, highlightthickness=0, bg='#f4f6fa')
         scrollbar = ttk.Scrollbar(self.body, command=canvas.yview)
         scrollbar.pack(side='right', fill='y')
@@ -294,8 +294,8 @@ class Wizard:
         self.root.bind('<MouseWheel>', scroll)
         self.extra_inputs = {}
         self.extra_actions = {}
-        for service in connection.wizard_extras():
-            title, url, setting, instructions = connection.SERVICES[service]
+        for service in connection.EXTRA_SERVICES:
+            title, url, _, instructions = connection.SERVICES[service]
             card = ttk.LabelFrame(cards, text=title, padding=12)
             card.pack(fill='x', pady=(0, 14), padx=(0, 8))
             ttk.Label(card, text=instructions, wraplength=690).pack(anchor='w', pady=(0, 8))
@@ -306,54 +306,39 @@ class Wizard:
             link.insert(0, url)
             link.configure(state='readonly')
             link.pack(side='left', fill='x', expand=True, padx=(10, 0))
-            if setting:
-                value = tk.StringVar()
-                self.extra_inputs[service] = value
-                row = ttk.Frame(card)
-                row.pack(fill='x', pady=(0, 8))
-                entry = ttk.Entry(row, textvariable=value, show='' if service in ('crossref', 'unpaywall') else '●')
-                entry.pack(side='left', fill='x', expand=True)
-                self.controls.append(entry)
-                def paste(value=value):
-                    try:
-                        value.set(self.root.clipboard_get().strip())
-                    except tk.TclError:
-                        self.status.set('剪贴板没有文字，请先复制授权码或邮箱。')
-                self.button(row, '粘贴', paste).pack(side='left', padx=(10, 0))
-                note = tk.StringVar(value='留空保留已有设置。')
-                value.trace_add('write', lambda *_, value=value, note=note: note.set(
-                    '已收到输入，点击本项“保存设置”。' if value.get() else '留空保留已有设置。'))
-                if connection.extra_value(service):
-                    note.set('已有设置；留空保留，粘贴新内容可替换。')
-                ttk.Label(card, textvariable=note, style='Muted.TLabel').pack(anchor='w')
-                if service == 'semantic_scholar':
-                    ttk.Label(card, text='此处保存授权码；服务可用性将在实际检索时报告。', style='Muted.TLabel').pack(anchor='w')
-                def save(service=service, value=value):
-                    if not value.get().strip():
-                        self.status.set('没有填写新内容，已有设置未改变。')
-                        return
-                    try:
-                        connection.save_account(connection.accept(service, value.get()))
-                    except ValueError as error:
-                        self.status.set(str(error))
-                        return
-                    except Exception:
-                        self.status.set('保存未完成，请重试；原有设置已保留。')
-                        return
-                    value.set('')
-                    self.status.set(connection.SERVICES[service][0] + '：已保存。')
-                button = self.button(card, '保存设置', save, True)
-            else:
-                def complete(values, service=service):
+            value = tk.StringVar()
+            self.extra_inputs[service] = value
+            row = ttk.Frame(card)
+            row.pack(fill='x', pady=(0, 8))
+            entry = ttk.Entry(row, textvariable=value, show='' if service == 'mineru_api' else '●')
+            entry.pack(side='left', fill='x', expand=True)
+            self.controls.append(entry)
+            def paste(value=value):
+                try:
+                    value.set(self.root.clipboard_get().strip())
+                except tk.TclError:
+                    self.status.set('剪贴板没有文字，请先复制 Token 或服务地址。')
+            self.button(row, '粘贴', paste).pack(side='left', padx=(10, 0))
+            note = tk.StringVar(value='留空保留已有设置。')
+            value.trace_add('write', lambda *_, value=value, note=note: note.set(
+                '已收到输入，点击本项“验证并保存”。' if value.get() else '留空保留已有设置。'))
+            if connection.extra_value(service):
+                note.set('已有设置；留空保留，粘贴新内容可替换。')
+            ttk.Label(card, textvariable=note, style='Muted.TLabel').pack(anchor='w')
+            def save(service=service, value=value):
+                if not value.get().strip():
+                    self.status.set('没有填写新内容，已有设置未改变。')
+                    return
+                def complete(values):
                     try:
                         connection.save_account(values)
                     except Exception:
-                        self.status.set('检查通过，但保存未完成，请重试。')
+                        self.status.set('验证通过，但保存未完成，请重试；原有设置已保留。')
                         return
-                    self.status.set(connection.SERVICES[service][0] + '：连接检查通过，已启用。')
-                def check(service=service, complete=complete):
-                    self.run(lambda: connection.accept(service), complete, '正在检查连接，请稍候……')
-                button = self.button(card, '启动并检查' if service == 'kimi' else '检查本机 Zotero', check, True)
+                    value.set('')
+                    self.status.set(connection.SERVICES[service][0] + '：已验证并保存。')
+                self.run(lambda: connection.accept(service, value.get()), complete, '正在验证，请稍候……')
+            button = self.button(card, '验证并保存', save, True)
             button.pack(anchor='e', pady=(8, 0))
             self.extra_actions[service] = button
         self.button(self.footer, '完成并关闭', self.root.destroy).pack(side='right', padx=10)

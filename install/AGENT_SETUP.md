@@ -8,7 +8,7 @@
 
 安装与验证共用 `paper-to-zotero/scripts/agent_installation.py`。Codex 使用 `~/.codex/skills`（尊重 `CODEX_HOME`）；Claude Code 使用 `~/.claude/skills`（尊重 `CLAUDE_CONFIG_DIR`）；Pi 使用 `~/.pi/agent/skills`。所选助手同时获得全部六个 skill 目录。已有本安装器管理的其他助手副本也会更新。独立安装保留，不自动覆盖。
 
-普通配置依次为：准备工具、Zotero Desktop 本机写入、检查结果、更多配置。首次使用走这条路径。用户要求更多设置时加 `--advanced` / `-Advanced`，它直接打开更多配置，不重复基础账号；群组文库加 `--group` / `-Group`（使用本地 setup 入口）。更多配置的项目见 [HELP.md](HELP.md#更多配置)。
+普通配置依次为：准备工具、Zotero 本地 API、检查结果。首次使用走这条路径，不需要任何授权码。结束时向导问一次是否配置 MinerU（云端 Token 或自建服务地址），默认跳过。用户要求更多设置时加 `--advanced` / `-Advanced`，它直接打开 MinerU 配置，不重复基础步骤；群组文库加 `--group` / `-Group`（使用本地 setup 入口）。详见 [HELP.md](HELP.md#更多配置)。
 
 ## 2. 准备依赖并打开向导
 

@@ -12,15 +12,14 @@
 
 ## 更多配置
 
-默认配置完成后即可使用。下面的项目可以等需要时再设置，每项都可跳过，跳过会保留之前的配置。打开方式：Windows 完成页的 **更多配置（可选）** 按钮或双击 `install/setup-more.cmd`；macOS/Linux 运行 `bash install/setup.sh --advanced`；也可以请助手“打开文献工具的更多设置”。
+默认配置完成后即可使用，PDF 用本机 markitdown 转成 Markdown。更多配置只有一项 MinerU，可二选一，也可跳过，跳过会保留之前的配置：
 
-- **Zotero Web API**：群组文库，或电脑上的 Zotero 没开时的备用写入。
-- **MinerU 云端 Token**：把 PDF 转成 Markdown 的云端服务。没有它时用本机 markitdown 转换。
-- **Kimi WebBridge**：从学校或机构的已登录浏览器检索和获取全文。按官网“搭配本地 Agent”安装连接服务和扩展，然后点击“启动并检查”。
-- **Semantic Scholar**、**Crossref**、**Unpaywall**：补充题录和开放全文。Crossref 和 Unpaywall 只需联系邮箱，不需要邮箱密码。Semantic Scholar 的“已保存”不代表已验证，实际检索时才报告是否可用。
-- **OpenAlex**：只在你改用 OpenAlex 检索时出现。
+- **MinerU 云端 Token**：在 [MinerU API 管理页](https://mineru.net/apiManage/token) 创建，粘贴后验证。
+- **自建 MinerU 地址**：本机或内网部署了 MinerU 服务时，填写 IP 或域名，例如 `192.168.1.20:8000` 或 `https://mineru.example.org`。保存前会检查服务的 `/v1/health`。
 
-自建或实验室的 MinerU 服务不在向导里：在 `~/.config/literature-to-zotero/env` 写一行 `MINERU_API_BASE=<服务地址>`。
+打开方式：macOS/Linux 在基础配置结束时回答 `y`，或运行 `bash install/setup.sh --advanced`；Windows 点完成页的 **更多配置（可选）** 按钮，或双击 `install/setup-more.cmd`；也可以请助手“打开文献工具的更多设置”。
+
+群组文库要用 Zotero Web API 授权码，运行 `bash install/setup.sh --group`（Windows 用 `-Group`）。
 
 写入本机 Zotero 时保持 Zotero 桌面应用打开。第一次写入时 Zotero 会弹出授权框，选“始终允许”，以后就不再询问。
 

@@ -46,7 +46,7 @@ CHECKS = {
     'mineru': ('全文转换', capability.GUIDE['mineru']['do']),
     'openalex': (
         '论文检索（OpenAlex）',
-        '当前检索后端需要 OpenAlex 授权码。在更多配置里连接 OpenAlex，或删除 SEARCH_BACKEND 恢复 scansci。',
+        '当前检索后端需要 OpenAlex 授权码。在 ~/.config/literature-to-zotero/env 写入 OPENALEX_API_KEY=<Key>，或删除 SEARCH_BACKEND 恢复 scansci。',
     ),
     'zotero-local': ('连接电脑上的 Zotero', '打开 Zotero，在设置的高级选项中开启本地接口。'),
     'zotero-sync': ('下载 Zotero 附件', '在 Zotero 的同步设置中开启附件同步和自动下载。'),
@@ -106,7 +106,7 @@ def search_row(backend: str) -> dict[str, object]:
                 'detail': '当前检索后端是 Kimi WebBridge', 'action': ''}
     if backend == 'semantic_scholar':
         return {'name': '论文检索（Semantic Scholar）', 'ok': True,
-                'detail': '当前检索后端是 Semantic Scholar。授权码在更多配置，缺了这一项仍通过。',
+                'detail': '当前检索后端是 Semantic Scholar。SEMANTIC_SCHOLAR_API_KEY 可选，缺了这一项仍通过。',
                 'action': ''}
     if backend in ('http', 'openalex'):
         discovery = capability.probe_discovery_search()
@@ -188,7 +188,7 @@ def main() -> int:
         print(f'{title}\n{instructions}\n{url}')
         return 0
     if args.extra:
-        raw = '' if args.extra in ('desktop', 'kimi') else sys.stdin.read()
+        raw = '' if args.extra == 'desktop' else sys.stdin.read()
         values = setup_connection.accept(args.extra, raw, group=args.group, group_id=args.group_id)
         setup_connection.save_account(values)
         print('设置已保存。' if setup_connection.SERVICES[args.extra][2] else '连接检查通过，已启用。')
