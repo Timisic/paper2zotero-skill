@@ -2,7 +2,7 @@
 
 ## Read the checkpoint first
 
-The manifest is the authority for selected IDs and MinerU consent. `zotero-state.json` records external write operations; `mineru-<fingerprint>.json` records a conversion batch. Keep these files with the run. Reuse the same commands after interruption instead of composing a new ingestion script or restarting the whole batch.
+The manifest is the authority for selected IDs and declined uploads. `zotero-state.json` records external write operations; `mineru-<fingerprint>.json` records a conversion batch. Keep these files with the run. Reuse the same commands after interruption instead of composing a new ingestion script or restarting the whole batch.
 
 - Everything: `process_run.py --run-dir <run_dir> --storage-root <Zotero-data-dir>` resumes the same run. It re-uses acquired PDFs, submitted conversions and written items, and only fills what is missing. `--ids` restricts it to named papers; unselected papers are refused. It never re-runs setup or retrieval.
 - Zotero only: `zotero_ingest.py --run-dir <run_dir> --storage-root <Zotero-data-dir>`.
@@ -17,7 +17,7 @@ The manifest is the authority for selected IDs and MinerU consent. `zotero-state
 | `retry_exhausted` | Shared HTTP reader exhausted its budget. Save the pending stage; continue unrelated work. Retry the same command after reachability improves. |
 | `outcome_unknown` | A write may have succeeded. Zotero reads its saved key before any replay. Never resend an unkeyed create blindly. |
 | MinerU submission outcome unknown without batch ID | Re-run the same command. The script only resubmits when no batch identity was received and no file upload started; it records that reconciliation. Any possible upload preserves the checkpoint. |
-| MinerU upload URLs unavailable | Re-run the same command. For the full previously consented batch, the script checks that every remote file is `waiting-file` and every local file is still pending before replacing the empty batch. Missing results, active uploads or completed work keep the old identity. No manual journal renaming is needed for the confirmed-empty case. |
+| MinerU upload URLs unavailable | Re-run the same command. For the full previously submitted batch, the script checks that every remote file is `waiting-file` and every local file is still pending before replacing the empty batch. Missing results, active uploads or completed work keep the old identity. No manual journal renaming is needed for the confirmed-empty case. |
 | `rate_limited` | Respect the returned wait; Zotero persists its retry time across command reruns. |
 | `invalid_request` | Fix payload/schema or input; changing proxy will not fix a 400. |
 | `authentication_required` / `permission_denied` | Check the credential, entitlement or signed-URL lifetime for this service. Request human login only when needed. |

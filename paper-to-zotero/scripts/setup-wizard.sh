@@ -160,40 +160,12 @@ shared_guide() {
   "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --guide "$1"
 }
 
-# Preserve the existing platform installers; acceptance and saving are shared
-# with the GUI through configure.py --extra after the user finishes login.
-prepare_extra() {
-  if [[ "$1" == desktop ]]; then
-    if [[ "$(uname -s)" == Darwin ]]; then
-      if [[ ! -d /Applications/Zotero.app && ! -d "$HOME/Applications/Zotero.app" ]]; then
-        if command -v brew >/dev/null 2>&1; then brew install --cask zotero || warn '请按网页说明安装 Zotero。'; else open_url 'https://www.zotero.org/download'; fi
-      fi
-      open -a Zotero || true
-    else
-      open_url 'https://www.zotero.org/download'
-    fi
-  else
-    local kimi_bin installer
-    kimi_bin="$(command -v kimi-webbridge || true)"
-    kimi_bin="${kimi_bin:-$HOME/.kimi-webbridge/bin/kimi-webbridge}"
-    if [[ ! -x "$kimi_bin" ]]; then
-      installer="$(mktemp)"
-      if curl -fsSL https://cdn.kimi.com/webbridge/install.sh -o "$installer"; then bash "$installer" || warn '连接服务安装未完成，请按网页说明继续。'; fi
-      rm -f "$installer"
-    fi
-    if [[ -x "$kimi_bin" ]]; then "$kimi_bin" start || warn '连接服务尚未启动。'; fi
-    open_url 'https://www.kimi.com/products/kimi-webbridge'
-  fi
-  pause '按网页说明完成安装、登录或扩展授权后，回车检查'
-}
-
 _clear
 printf '\n%s%s  把论文和阅读笔记放进 Zotero%s\n\n' "$BOLD" "$BLUE" "$RESET"
-say '工具由安装器准备。先打开本机 Zotero。可选授权码在后面的步骤。'
+say '工具由安装器准备，你只需要打开本机 Zotero 的本地接口。'
 say '基础配置检查三件事。scansci-pdf 1.19.0 能导入，全文转换有一条可用通路，本机 Zotero 能写入。'
-say 'scansci 下载 PDF 时默认包含灰色来源。只要合法来源，设置 SCANSCI_LEGAL_ONLY=1，或在处理时加 --legal-only。'
 note 'Ctrl-C 可退出，已保存内容会保留。'
-if [[ "$ADVANCED" == 1 ]]; then note '已打开更多设置：检索来源、电脑同步、浏览器全文。'; fi
+if [[ "$ADVANCED" == 1 ]]; then note '已打开更多配置：MinerU 云端 Token 或自建 MinerU 地址。'; fi
 pause '按回车开始'
 
 stage "准备工具和 AI 助手"
@@ -217,10 +189,16 @@ bash "$SKILL_DIR/scripts/install-skill.sh"
 if [[ "$ADVANCED" == 0 ]]; then
 pause '准备完成，回车检查本机 Zotero'
 
-stage "Zotero Desktop · 本机附件"
-say '基础配置要本机 Zotero 能写入。打开应用后，这一步检查本地接口。'
-say '授权框选「始终允许」。附件同步不在这一步。'
-prepare_extra desktop
+stage "Zotero 本地 API"
+if [[ "$(uname -s)" == Darwin ]] && { [[ -d /Applications/Zotero.app ]] || [[ -d "$HOME/Applications/Zotero.app" ]]; }; then
+  open -a Zotero || true
+elif ! command -v zotero >/dev/null 2>&1; then
+  open_url 'https://www.zotero.org/download'
+fi
+step '1. 打开 Zotero，进入 设置 → 高级。'
+step '2. 勾选「允许此计算机上的其他应用程序与 Zotero 通讯」。'
+note 'Zotero 弹出授权框时选「始终允许」。'
+pause '完成后回车检查'
 if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra desktop; then
   warn '尚未启用，已保存的配置保留；可在准备完成后回来检查。'
 fi
@@ -264,69 +242,44 @@ if "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" "${check_args[@]}"; then
   say '✓ 配置完成。回到你的 AI 助手，试着说：'
   say '“帮我找近三年 AI 心理健康干预的研究，先给我一份候选清单。”'
   note '如果暂时找不到技能，新开一个助手会话再试。'
-  note '接下来直接展示更多配置；不需要的项目可跳过。'
 else
   warn '部分配置尚未完成；已填写内容保留，重跑 setup 即可继续。'
   SETUP_RESULT=1
 fi
 fi
 
-extra_names() {
-  local py="${PYTHON_BIN:-}"
-  if [[ -n "$py" && -x "$py" ]]; then
-    "$py" -c 'import sys; sys.path.insert(0, sys.argv[1]); from setup_connection import wizard_extras
-print("\n".join(wizard_extras()))' "$SKILL_DIR/scripts"
-    return
-  fi
-  printf '%s\n' zotero mineru kimi semantic_scholar crossref unpaywall
-}
-
-stage "更多配置（可选）"
-say '可选项目已依次展开。留空或跳过会保留已有配置。'
-services=()
-if names="$(extra_names)"; then
-  while IFS= read -r name; do
-    name=${name%$'\r'}
-    [[ -n "$name" ]] && services+=("$name")
-  done <<<"$names"
-else
-  while IFS= read -r name; do
-    services+=("$name")
-  done <<'FALLBACK'
-zotero
-mineru
-kimi
-semantic_scholar
-crossref
-unpaywall
-FALLBACK
-fi
-for service in "${services[@]}"; do
+if [[ "$ADVANCED" == 1 ]] || confirm '配置 MinerU？可选，不配置就用本机 markitdown 转换 PDF'; then
+stage "更多配置（可选）· MinerU"
+say 'PDF 转 Markdown 时先用 MinerU，失败或不配置时用本机 markitdown。'
+say '1 = MinerU 云端 Token，2 = 自建 MinerU 地址（IP 或域名），回车跳过'
+while true; do
+  printf '  输入 1、2 或回车：'
+  IFS= read -r MINERU_CHOICE || MINERU_CHOICE=''
+  case "$MINERU_CHOICE" in
+    1) service=mineru; setting=MINERU_TOKEN ;;
+    2) service=mineru_api; setting=MINERU_API_BASE ;;
+    '') note '已跳过，原有设置保留。'; break ;;
+    *) warn '请输入 1、2，或直接回车跳过。'; continue ;;
+  esac
   shared_guide "$service"
-  if [[ "$service" == kimi || "$service" == desktop ]]; then
-    if confirm '现在准备并连接这项功能'; then
-      prepare_extra "$service"
-      if ! "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra "$service"; then
-        warn '尚未启用，已保存的配置保留；可在准备完成后回来检查。'
-      fi
-    fi
+  if [[ "$service" == mineru ]]; then
+    ask_authorization "$setting" '粘贴 MinerU Token（可留空）：'
   else
-    case "$service" in
-      zotero) setting=ZOTERO_API_KEY; ask_authorization "$setting" '粘贴 Zotero 授权码（可留空）：' ;;
-      openalex) setting=OPENALEX_API_KEY; ask_authorization "$setting" '粘贴 OpenAlex 授权码（可留空）：' ;;
-      mineru) setting=MINERU_TOKEN; ask_authorization "$setting" '粘贴 MinerU Token（可留空）：' ;;
-      semantic_scholar) setting=SEMANTIC_SCHOLAR_API_KEY; ask_authorization "$setting" 'Semantic Scholar API Key（可留空，申请未完成可稍后回来）：' ;;
-      crossref) setting=CROSSREF_MAILTO; ask "$setting" 'Crossref 联系邮箱（可留空）：' ;;
-      unpaywall) setting=UNPAYWALL_EMAIL; ask "$setting" 'Unpaywall 联系邮箱（可留空）：' ;;
-    esac
-    value="${!setting}"
-    if [[ -n "$value" ]] && ! printf '%s' "$value" | "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra "$service"; then
-      warn '本项未保存，原有设置保留；请按提示修正后重试。'
-    fi
-    unset "$setting" value
+    ask "$setting" 'MinerU 服务地址（可留空）：'
   fi
-  printf '\n'
+  value="${!setting}"
+  unset "$setting"
+  if [[ -z "$value" ]]; then
+    note '没有填写，原有设置保留。'
+  elif ! printf '%s' "$value" | "$PYTHON_BIN" "$SKILL_DIR/scripts/configure.py" --extra "$service"; then
+    warn '本项未保存，原有设置保留。'
+    unset value
+    if retry_connection; then continue; fi
+  fi
+  unset value
+  break
 done
+fi
 note '更多配置可随时重新打开：bash install/setup.sh --advanced。无需重填基础账号。'
 
 say '总结提示词可以换成你更熟悉的版本，保留默认也可以直接使用。'

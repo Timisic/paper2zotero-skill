@@ -31,9 +31,8 @@ from runtime_io import private_text
 class ParseRequest:
     """One conversion request, stated in types a caller can be checked against.
 
-    Consent comes from the run when `run_dir` is given, and only from an
-    explicit `consent_source` otherwise — uploading a PDF to MinerU is never
-    implied by the shape of this request.
+    In a run, upload is allowed unless the user declined that paper. Without
+    `run_dir`, only an explicit `consent_source` allows the upload.
     """
     pdfs: Sequence[Path]
     run_dir: Path | None = None
@@ -267,7 +266,7 @@ def _parse(request: ParseRequest) -> dict[str, Any]:
     elif request.consent_source:
         consent_sources = {str(pdf): request.consent_source for pdf in pdfs}
     else:
-        raise ValueError('supply --run-dir with recorded consent or --consent-source for explicit standalone upload approval')
+        raise ValueError('supply --run-dir, or --consent-source for explicit standalone upload approval')
     token = credentials.mineru_token()
     if not token:
         raise ValueError('MinerU token missing')

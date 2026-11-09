@@ -145,8 +145,10 @@ def test_an_already_acquired_pdf_is_never_fetched_again(tmp_path: Path) -> None:
     assert source.stat().st_mtime_ns == before
 
 
-def test_conversion_without_consent_is_recorded_and_never_blocks_the_pdf(tmp_path: Path) -> None:
+def test_declined_upload_is_recorded_and_never_blocks_the_pdf(tmp_path: Path) -> None:
     run, _ = run_with_pdf(tmp_path)
+    run_script("workflow.py", "consent", "--run-dir", str(run), "--service", "mineru",
+               "--decision", "denied", "--source", "user said no upload")
     storage = tmp_path / "Zotero"
     peer = ZoteroLibrary(storage=storage)
     with server(peer.respond) as base:
@@ -154,7 +156,7 @@ def test_conversion_without_consent_is_recorded_and_never_blocks_the_pdf(tmp_pat
         result = process(run, "--stages", "convert,ingest", "--api-base", base, "--storage-root", str(storage))
     body = payload(result)
     assert body["convert"] == {"converted": [], "failed": {},
-                               "skipped": {"doi:10.1000/alpha": "markdown_unavailable: no upload consent"}}
+                               "skipped": {"doi:10.1000/alpha": "markdown_unavailable: user declined upload"}}
     assert body["papers"][0]["pdf"] is True
     assert "markdown_unavailable" in " ".join(body["papers"][0]["pending"])
     assert result.returncode == 0

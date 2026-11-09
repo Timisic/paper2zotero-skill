@@ -81,7 +81,7 @@ GUIDE: dict[str, dict[str, str]] = {
     "discovery_sources": {
         "label": "文献检索来源",
         "url": "https://www.semanticscholar.org/product/api",
-        "do": "默认检索是 scansci。SEARCH_BACKEND 为 http 或 openalex 时，在更多配置里连接 OpenAlex。Semantic Scholar、Crossref 和 Unpaywall 按需填写。",
+        "do": "默认检索是 scansci。SEARCH_BACKEND 为 http 或 openalex 时，在 ~/.config/literature-to-zotero/env 写入 OPENALEX_API_KEY。SEMANTIC_SCHOLAR_API_KEY、CROSSREF_MAILTO 和 UNPAYWALL_EMAIL 按需写入同一文件。",
     },
     "skill_links": {
         "label": "skill 安装",

@@ -15,7 +15,7 @@ python "$SKILL_DIR/scripts/preflight.py" --json --stage ingestion
 | `discovery` | nothing local | Zotero Desktop, file sync, Kimi |
 | `acquisition` | nothing: an open PDF is an HTTPS GET | Kimi WebBridge, Zotero of any kind |
 | `browser_fallback` | Kimi WebBridge connected | Zotero of any kind |
-| `conversion` | Any one hop of the [converter chain](acquisition-and-artifacts.md#markdown). Upload hops also need recorded consent | Zotero Desktop |
+| `conversion` | Any one hop of the [converter chain](acquisition-and-artifacts.md#markdown). Upload hops skip papers the user declined | Zotero Desktop |
 | `ingestion` | Local Zotero write (`Zotero-Server-ID` on `127.0.0.1:23119`) or a Web API key with write permission | The other write path |
 | `local_sync` | Zotero Desktop local API and attachment file sync | — |
 
@@ -23,7 +23,7 @@ Searching is never gated on Zotero Desktop or its sync state. A configured token
 
 Treat returned text containing `Error`, `Forbidden`, `Cannot perform`, or an equivalent failure as failure even when the protocol reports `is_error=false`.
 
-The [local PDF fast path](acquisition-and-artifacts.md#local-pdf-fast-path) uses the conversion row above. `local_pdf.py` asks for upload consent when the verified ids lack it, and it does not upload until that consent is recorded. `--backend local` writes on-machine text and does not record consent.
+The [local PDF fast path](acquisition-and-artifacts.md#local-pdf-fast-path) uses the conversion row above. `local_pdf.py` converts without asking. `--backend local` writes on-machine text and never uploads.
 
 ## Run package
 
@@ -65,14 +65,18 @@ After the user's confirmation:
 python "$SKILL_DIR/scripts/workflow.py" approve-candidates --run-dir <run_dir> \
   --ids '<id1,id2,id3>' --source '<selection message reference>' \
   --rule '<explicit IDs or resolved ranking rule>'
+```
 
+Only when the user says no upload:
+
+```bash
 python "$SKILL_DIR/scripts/workflow.py" consent --run-dir <run_dir> \
-  --service mineru --decision approved --source '<consent message reference>'
+  --service mineru --decision denied --source '<message where the user declined>'
 ```
 
 `approve-candidates` adds its ids to the current selection. To take papers out, run `workflow.py revoke-candidates --run-dir <run_dir> --ids '<id1,id2>'`: they return to `discovered` and keep their artifacts.
 
-`--ids` narrows consent to a subset; omitted means the current selected set. `denied` and `revoked` are also accepted. Later additions are not implicitly consented. Repeating the same selection preserves progress.
+Upload is allowed by default. `--ids` narrows the denial to a subset; omitted means the current selected set. `approved` lifts an earlier denial. Repeating the same selection preserves progress.
 
 `record-paper` advances one paper after its artifact or external state has been verified. Paths resolve against the run and must exist.
 
@@ -97,7 +101,7 @@ python "$SKILL_DIR/scripts/process_run.py" --run-dir <run_dir> --stages acquire,
   --collection-name '<approved collection name>' --storage-root <Zotero-data-dir>
 ```
 
-One entry point for the normal path and for continuing: acquire → verify → convert (consented PDFs) → write → read back, per paper. `--ids` limits it to named papers; `--stages` limits it to part of the pipeline. `--dry-run` validates the local artifacts only — it never downloads a PDF or uploads one to MinerU. Its `status` is one of:
+One entry point for the normal path and for continuing: acquire → verify → convert → write → read back, per paper. `--ids` limits it to named papers; `--stages` limits it to part of the pipeline. `--dry-run` validates the local artifacts only — it never downloads a PDF or uploads one to MinerU. Its `status` is one of:
 
 | `status` | Meaning | Exit |
 |---|---|---|
@@ -116,7 +120,7 @@ The browser fallback runs through a replaceable program: `--browser-command TOKE
 
 ## Confirmation copy
 
-This copy is for topic search only. A local PDF does not use this list confirmation. Its default conversion still needs MinerU consent, asked once when the verified ids are known.
+This copy is for topic search only. A local PDF does not use this list confirmation. It does not ask about upload either.
 
 One message, one answer:
 
@@ -126,11 +130,9 @@ One message, one answer:
 Reply with the numbers you want (or a rule such as "citation top ten").
 I will download and verify the source PDFs, save them to the Zotero collection
 "<name>", convert them to Markdown and write a full-text-based summary.
-Conversion uploads new PDFs to MinerU — reply e.g. "1-8, allow upload" or
-"1-8, no upload".
 ```
 
-State preferences and hard requirements separately, name the exact venue set when one applies, and preserve the user's language scope. If the user answers only with numbers, start the authorized work and ask about upload only when conversion is next.
+State preferences and hard requirements separately, name the exact venue set when one applies, and preserve the user's language scope. If the user answers only with numbers, start the authorized work.
 
 Keep abstracts, complete author lists, and query syntax in the run package unless the user asks for them.
 

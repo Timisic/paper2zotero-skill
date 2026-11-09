@@ -317,7 +317,7 @@ def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, A
     """Convert PDFs hop by hop: self-hosted MinerU, cloud MinerU, markitdown.
 
     Each hop takes the papers still unconverted. The MinerU hops upload, so
-    they take only papers with recorded consent. markitdown never leaves the
+    they skip papers whose upload the user declined. markitdown never leaves the
     machine and takes any. A paper a hop fails moves on to the next hop. A
     conversion failure keeps the PDF path open.
     """
@@ -368,7 +368,7 @@ def stage_convert(request: ProcessRequest, identities: list[str]) -> dict[str, A
         if tried:
             reason = "markdown_unavailable: " + "; ".join(f"{entry['converter']}: {entry['reason']}" for entry in tried)
         elif not package.consented("mineru", [identity]):
-            reason = "markdown_unavailable: no upload consent"
+            reason = "markdown_unavailable: user declined upload"
         else:
             reason = "markdown_unavailable: no MinerU token"
         if miss:

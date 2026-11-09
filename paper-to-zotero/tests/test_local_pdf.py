@@ -43,7 +43,6 @@ def fresh_run(tmp_path: Path) -> Path:
     return Path(json.loads(result.stdout)["run_dir"])
 
 
-CLOUD_WARNING = "markdown_unavailable: cloud MinerU upload consent required"
 
 
 class QuietLookup:
@@ -105,13 +104,10 @@ def test_missing_doi_does_not_adopt_a_weak_bibliographic_hit(tmp_path: Path) -> 
     assert paper["doi"] is None
     assert str(paper["id"]).startswith("title:")
     assert "no confident bibliographic match" in paper["warning"]
-    assert paper["status"] == "consent_required"
+    assert paper["status"] == "convert_failed"
     assert paper["import_status"] == "verified"
     assert paper["markdown"] is None
-    assert result["status"] == "partial"
-    assert result["consent_required"] == [paper["id"]]
-    assert "consent" in result["next_action"]
-    assert "summary_batch_file" not in result
+    assert result["status"] == "awaiting_summaries"
     assert not list((run / "papers").rglob("paper.md"))
     stored = json.loads((run / "candidates.json").read_text())
     assert stored[0]["doi"] is None
@@ -148,11 +144,9 @@ def test_missing_doi_adopts_a_confident_title_match(tmp_path: Path) -> None:
     assert paper["metadata"] == "enriched"
     assert paper["doi"] == "10.1145/3643540"
     assert paper["id"] == "doi:10.1145/3643540"
-    assert paper["status"] == "consent_required"
+    assert paper["status"] == "convert_failed"
     assert paper["markdown"] is None
-    assert result["status"] == "partial"
-    assert "process_run.py --stages convert" in result["next_action"]
-    assert "summary_batch_file" not in result
+    assert result["status"] == "awaiting_summaries"
     assert any("query.bibliographic" in path for path in crossref_seen)
     assert any("search=" in path for path in openalex_seen)
     assert not list((run / "papers").rglob("paper.md"))
@@ -183,7 +177,7 @@ def test_existing_candidate_is_not_overwritten(tmp_path: Path) -> None:
     assert paper["metadata"] == "existing"
     assert paper["id"] == "doi:10.1000/alpha"
     assert paper["title"] == "Artificial intelligence interventions for mental health"
-    assert paper["status"] == "consent_required"
+    assert paper["status"] == "convert_failed"
     assert paper["import_status"] == "verified"
     assert not list((run / "papers").rglob("paper.md"))
     manifest = json.loads((run / "manifest.json").read_text())
@@ -192,31 +186,7 @@ def test_existing_candidate_is_not_overwritten(tmp_path: Path) -> None:
     assert not manifest.get("consents")
 
 
-def test_default_does_not_upload_without_consent(tmp_path: Path,
-                                                 monkeypatch: pytest.MonkeyPatch) -> None:
-    run = fresh_run(tmp_path)
-    pdf = write_pdf(tmp_path, "cloud.pdf", document(f"{KNOWN_TITLE}\ndoi:10.1145/3643540"))
-    calls: list[object] = []
-    monkeypatch.setattr(local_pdf.process_run.mineru_parse, "parse", lambda request: calls.append(request))
-    result = local_pdf.run_local_pdfs(run, [pdf], client=EmptyLookup())
-    paper = result["papers"][0]
-    assert result["backend"] == "cloud"
-    assert paper["status"] == "consent_required"
-    assert paper["markdown"] is None
-    assert paper["import_status"] == "verified"
-    assert paper["doi"] == "10.1145/3643540"
-    assert result["status"] == "partial"
-    assert "summary_batch_file" not in result
-    assert "Do not upload before consent" in result["next_action"]
-    assert result["consent_required"] == [paper["id"]]
-    assert calls == []
-    assert not list((run / "papers").rglob("paper.md"))
-    manifest = json.loads((run / "manifest.json").read_text())
-    assert not manifest.get("consents")
-    assert CLOUD_WARNING in manifest["papers"]["doi:10.1145/3643540"]["warnings"]
-
-
-def test_default_chains_mineru_after_consent(tmp_path: Path,
+def test_default_uploads_to_mineru_without_asking(tmp_path: Path,
                                              monkeypatch: pytest.MonkeyPatch) -> None:
     run = fresh_run(tmp_path)
     pdf = write_pdf(tmp_path, "cloud.pdf", document(f"{KNOWN_TITLE}\ndoi:10.1145/3643540"))
@@ -235,13 +205,6 @@ def test_default_chains_mineru_after_consent(tmp_path: Path,
         }]}
 
     monkeypatch.setattr(local_pdf.process_run.mineru_parse, "parse", fake_parse)
-    stopped = local_pdf.run_local_pdfs(run, [pdf], client=EmptyLookup())
-    assert stopped["status"] == "partial"
-    identity = stopped["papers"][0]["id"]
-    run_script(
-        "workflow.py", "consent", "--run-dir", str(run), "--service", "mineru",
-        "--decision", "approved", "--source", "user allowed the upload", "--ids", identity,
-    )
     result = local_pdf.run_local_pdfs(run, [pdf], collection_name="Local PDFs", client=EmptyLookup())
     paper = result["papers"][0]
     assert result["backend"] == "cloud"
@@ -254,9 +217,7 @@ def test_default_chains_mineru_after_consent(tmp_path: Path,
     assert "Do not pause the user" in result["next_action"]
     assert "Local PDFs" in result["resume_shell"]
     assert Path(result["summary_batch_file"]).is_file()
-    manifest = json.loads((run / "manifest.json").read_text())
-    assert manifest["consents"]["mineru"]["decision"] == "approved"
-    assert identity in manifest["consents"]["mineru"]["ids"]
+    assert not json.loads((run / "manifest.json").read_text()).get("consents")
 
 
 def test_local_conversion_keeps_text_beyond_the_identity_front_matter(tmp_path: Path) -> None:
