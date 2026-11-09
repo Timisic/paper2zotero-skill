@@ -82,7 +82,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<安装包>\install\set
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<安装包>\install\setup.ps1' -Agent claude-code -Check
 ```
 
-用户要逐个安装并确认每个模块时，请用户在自己的终端运行 `bash '<安装包>/install/setup.sh' --modules`（Windows 双击 `install\setup-modules.cmd`），模块清单见 [QUICKSTART.md](QUICKSTART.md)。依赖装进用户目录下的独立运行环境，之后删除解压文件夹不影响使用。只有用户能做的事是：安装 Zotero 7 并开启本地 API、可选的 Kimi WebBridge 和 MinerU 云端 Token。逐项询问是否已完成，不代为操作。然后按第 3 节打开向导：Windows 用 `-LaunchWizard`，macOS 请用户在自己的终端运行 `bash '<安装包>/install/setup.sh' --agent claude-code`。最后按第 4 节交付，检查命令用上面的 `--check` / `-Check`。
+依赖装进用户目录下的独立运行环境，之后删除解压文件夹不影响使用。只有用户能做的事是：安装 Zotero 7 并开启本地 API、可选的 Kimi WebBridge 和 MinerU 云端 Token。逐项询问是否已完成，不代为操作。然后按第 3 节打开向导：Windows 用 `-LaunchWizard`，macOS 请用户在自己的终端运行 `bash '<安装包>/install/setup.sh' --agent claude-code`。最后按第 4 节交付，检查命令用上面的 `--check` / `-Check`。
 
 ## 通过其他 skill 分发工具安装
 

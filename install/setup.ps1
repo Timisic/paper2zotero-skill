@@ -1,6 +1,5 @@
 ﻿[CmdletBinding()]
 param([switch]$DependenciesOnly, [switch]$Check, [switch]$Group, [switch]$LaunchWizard, [switch]$Advanced,
-      [switch]$Modules, [ValidateSet('runtime','skills','zotero','mineru','kimi')][string[]]$Module = @(),
       [ValidateSet('auto','codex','claude-code','pi','all')][string]$Agent = 'auto')
 $ErrorActionPreference = 'Stop'
 # Prepare Windows tools, then open the native GUI.
@@ -89,11 +88,6 @@ try {
     }
     if ($pythonPath) { $env:PYTHON_BIN = $pythonPath }
     $scripts = Join-Path $PSScriptRoot '..\paper-to-zotero\scripts'
-    if ($Modules) {
-        # Not piped: the module runner reads answers from this console.
-        & $pythonPath (Join-Path $scripts 'modules.py') --agent $Agent @Module
-        exit $LASTEXITCODE
-    }
     if ($DependenciesOnly) {
         & $pythonPath (Join-Path $scripts 'setup_connection.py') $Agent | Out-Host
         exit $LASTEXITCODE
