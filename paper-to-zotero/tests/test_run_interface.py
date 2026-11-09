@@ -46,14 +46,15 @@ def test_the_run_answers_selection_consent_and_candidates(tmp_path: Path) -> Non
     package = Run.open(run)
     assert package.confirmed is True
     assert package.selected == ["doi:10.1000/alpha"]
+    assert package.consented("mineru", ["doi:10.1000/alpha"]) is True
+    assert package.consent_source("mineru", "doi:10.1000/alpha").startswith("default")
+
+    run_script("workflow.py", "consent", "--run-dir", str(run), "--service", "mineru",
+               "--decision", "denied", "--source", "message:7")
+    package = Run.open(run)
     assert package.consented("mineru", ["doi:10.1000/alpha"]) is False
     with pytest.raises(ValueError, match="consent missing"):
         package.require_consent("mineru", ["doi:10.1000/alpha"])
-
-    run_script("workflow.py", "consent", "--run-dir", str(run), "--service", "mineru",
-               "--decision", "approved", "--source", "message:7")
-    package = Run.open(run)
-    assert package.consented("mineru", ["doi:10.1000/alpha"]) is True
     assert package.consent_source("mineru", "doi:10.1000/alpha") == "message:7"
     assert package.candidates()["doi:10.1000/alpha"]["title"]
 

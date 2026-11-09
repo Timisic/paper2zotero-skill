@@ -1,6 +1,6 @@
 # Acquisition and paper artifacts
 
-`process_run.py` performs this pipeline for a confirmed topic-search selection: it walks the acquisition order below, verifies identity, converts consented PDFs, and hands back the papers whose summaries the agent still owes. A PDF that is already on disk uses the local fast path instead. This document is what the pipeline does, and what to run by hand when one paper needs individual attention. The steps are per paper: a failure at any step never stops the others, and a paper keeps every artifact it already has.
+`process_run.py` performs this pipeline for a confirmed topic-search selection: it walks the acquisition order below, verifies identity, converts the PDFs, and hands back the papers whose summaries the agent still owes. A PDF that is already on disk uses the local fast path instead. This document is what the pipeline does, and what to run by hand when one paper needs individual attention. The steps are per paper: a failure at any step never stops the others, and a paper keeps every artifact it already has.
 
 ## Local PDF fast path
 
@@ -18,7 +18,7 @@ Repeat `--pdf` for a batch. The command does five things:
 2. Complete the record from Crossref and OpenAlex. A printed DOI is looked up directly. With no DOI, a title hit is accepted only when the titles strongly match; a weak hit is not allowed to supply its DOI. The paper is then stored under a `title:` identity with `metadata_degraded`.
 3. Append the candidate. An existing candidate with the same id or DOI is kept as stored, including its title and other fields.
 4. Select those files — supplying the PDF is the selection — and verify them with `import-pdfs`. Identity verification is unchanged: DOI match or a sufficient title match is `verified`; a different paper is `rejected`; unreadable text is `unverified` and kept for a person.
-5. Convert verified PDFs through `process_run.stage_convert`, the [converter chain](#markdown) topic search uses. If consent for those ids is missing, the result is `partial`, the verified PDF stays, and `next_action` says to record consent and then convert. The command does not upload. Ask once unless the user already refused, record `workflow.py consent --service mineru`, then re-run `local_pdf.py` or `process_run.py --stages convert`. `--backend local` writes `local-text/paper.md` and does not record consent. Use that flag only when the user wants no upload.
+5. Convert verified PDFs through `process_run.stage_convert`, the [converter chain](#markdown) topic search uses. It does not ask: MinerU uploads by default, and markitdown converts when MinerU is not configured or fails. `--backend local` writes `local-text/paper.md` and never uploads. Use that flag only when the user says no upload.
 
 Pass `--collection-name` when the user has already named the Zotero collection. If they have not, ask once before ingestion, not before conversion. After `awaiting_summaries`, write each `content_file` from [paper-summary.md](paper-summary.md) yourself, then run `summary_batch_command` and `resume_command`. Do not pause the user for that prose. Ingestion and read-back are the existing `process_run.py --stages ingest` path. `ingest.papers` still carries cloud/local verification and attachment reuse.
 
@@ -107,7 +107,7 @@ Text comes from PyMuPDF, which the private runtime always has because scansci-pd
 
 `local_pdf.py --backend local` writes `local-text/paper.md` and does not upload. The command below is a direct MinerU cloud run.
 
-Use only identity-verified selected PDFs and recorded MinerU consent (see [workflow.md](workflow.md)). Credentials are resolved by `credentials.py` across supported runtimes.
+Use only identity-verified selected PDFs. Credentials are resolved by `credentials.py` across supported runtimes.
 
 ```bash
 python "$SKILL_DIR/scripts/mineru_parse.py" --run-dir <run_dir> --pdf <source.pdf>
@@ -115,7 +115,7 @@ python "$SKILL_DIR/scripts/mineru_parse.py" --run-dir <run_dir> --pdf <source.pd
 
 Repeat `--pdf` for a batch. Default output is `<PDF parent>/mineru/<source-and-config-id>/paper.md` with extracted image assets. `--output <root>` instead groups outputs by data ID under that root. The checkpoint binds source hashes and converter settings; repeat the same command to resume a submitted batch. Read [recovery.md](recovery.md) after interrupted upload, polling or download. Standalone conversion needs `--consent-source '<explicit approval reference>'`.
 
-Self-hosted MinerU speaks the V1 Tasks API (`GET /v1/health`, `POST /v1/tasks`), not the cloud v4 batch URL. The cloud hop still uses `vlm` on mineru.net. Either MinerU hop uploads the PDF and needs recorded consent. A self-hosted failure still reaches the cloud hop and then markitdown. In topic search, a paper without upload consent goes straight to markitdown. `convert.attempts` lists each hop that failed a paper and why. Only a paper that no hop converted gets the `markdown_unavailable` warning, and its PDF stays. A readable PDF can still support a summary labeled `source_basis=pdf`. Conversion failure does not invalidate PDF acquisition or prevent PDF ingestion. To deliver PDFs before a slow conversion, use `process_run.py --stages ingest`; the Markdown attaches to the same parent whenever it arrives. OCR is a MinerU option for scanned input.
+Self-hosted MinerU speaks the V1 Tasks API (`GET /v1/health`, `POST /v1/tasks`), not the cloud v4 batch URL. The cloud hop still uses `vlm` on mineru.net. Either MinerU hop uploads the PDF, unless the user declined that paper. A self-hosted failure still reaches the cloud hop and then markitdown. A declined paper, or every paper when no MinerU is configured, goes straight to markitdown. `convert.attempts` lists each hop that failed a paper and why. Only a paper that no hop converted gets the `markdown_unavailable` warning, and its PDF stays. A readable PDF can still support a summary labeled `source_basis=pdf`. Conversion failure does not invalidate PDF acquisition or prevent PDF ingestion. To deliver PDFs before a slow conversion, use `process_run.py --stages ingest`; the Markdown attaches to the same parent whenever it arrives. OCR is a MinerU option for scanned input.
 
 ## Full-text reading note
 

@@ -26,7 +26,7 @@ CASES = {
         'test_cli.py::test_processing_waits_only_for_the_selection_confirmation',
         'test_process_run.py::test_processing_refuses_before_the_user_confirms_the_list',
         'test_process_run.py::test_unselected_papers_are_never_processed',
-        'test_process_run.py::test_conversion_without_consent_is_recorded_and_never_blocks_the_pdf'],
+        'test_process_run.py::test_declined_upload_is_recorded_and_never_blocks_the_pdf'],
     'local-pdf': [
         'test_import_pdfs.py::test_relative_mapping_import_and_resume_preserve_later_artifacts',
         'test_import_pdfs.py::test_selection_checked_before_any_copy_and_bad_pdf_stays_unrecorded'],

@@ -1,6 +1,6 @@
 # 快速上手
 
-适用于第一次使用的人。开始前请确认三件事：已安装 Zotero 7，已配好 Kimi WebBridge，正在用 Claude Code、Codex 或 Pi 中的一个助手。
+开始前请确认三件事：已安装 Zotero，已配好 Kimi WebBridge，正在用 Claude Code / Codex / Psyclaw 中的一个助手。
 
 ## 三步用起来
 
@@ -10,6 +10,8 @@
 
 以后找论文、写作时都保持 Zotero 打开。
 
+<img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20261109092032294.png" alt="image-20261109092032294" style="zoom:30%;" />
+
 <!-- 图 1：Zotero 设置 → 高级，勾选本地接口 -->
 
 ### 2. 让助手安装
@@ -18,7 +20,11 @@
 
 > 请按照 https://github.com/Timisic/paper2zotero-skill/blob/main/install/AGENT_SETUP.md ，帮我安装并配置这个文献工具，安装到你自己（当前助手）中。
 
-配置窗口打开后，按提示一路继续即可。macOS 和 Linux 在终端里按回车，Windows 在图形窗口里点按钮。如果助手请你在终端粘贴一行命令，照做即可。出现“更多配置（可选）”时直接跳过。
+若网络无法进入github，则使用压缩包中的路径：
+
+> 请按照 paper2zotero-skill/install/AGENT_SETUP.md ，帮我安装并配置这个文献工具，安装到当前助手中。
+
+配置窗口打开后，按提示一路继续即可。macOS 和 Linux 在终端里按回车，Windows 在图形窗口里点按钮。如果助手请你在终端粘贴一行命令，照做即可。
 
 最后助手会发回检查结果。每项前面都是 ✓，并且看到“环境已就绪”，就装好了。
 
@@ -38,38 +44,32 @@
 
 ### ② 选论文，一次回复
 
-助手检索后给出一份 10 到 15 篇的候选清单，包括编号、题目、年份和期刊、入选理由、引用数和来源。同一条消息里，它会问你三件事：选哪几篇，存到 Zotero 的哪个集合，是否允许把 PDF 上传到 MinerU 转换。
+助手检索后给出一份 10 到 15 篇的候选清单，包括编号、题目、年份和期刊、入选理由、引用数和来源。同一条消息里，它会问你两件事：选哪几篇，存到 Zotero 的哪个集合。
 
-<!-- 图 3：候选清单 -->
+一句话回答这两件事：
 
-一句话回答这三件事：
-
-> 选 1、2、4、7，保存到 Zotero 的“AI 与学习”，允许上传 MinerU。
-
-不想上传就说“不上传”，助手会在本机转换。
+> 选 1、2、4、7，保存到 Zotero 的“AI 与学习”
 
 ### ③ 等它处理
 
 接下来不需要你操作。助手会依次完成这些事：
 
 1. 下载 PDF，并核对是不是同一篇论文。
-2. 把 PDF 转成 Markdown。
+2. 把 PDF 转成 Markdown。配置了 MinerU 就上传给 MinerU 转换，没配置就用本机 markitdown，不用你回复。
 3. 按论文语种写阅读笔记，分为任务、挑战、洞见与启发、创新、潜在缺陷和研究动机。
 4. 把论文、PDF、Markdown 和笔记写入 Zotero，再读回来核对。
 
 第一次写入时，Zotero 会弹出“本地 API 授权”窗口，选 **始终允许**。以后就不再询问。
 
-<!-- 图 4：Zotero 的“本地 API 授权”窗口 -->
-
 如果浏览器打开了需要登录或人机验证的页面，在那个页面完成，再对助手说“继续”。
 
 ### ④ 看结果
 
-助手最后给出一张表，每篇论文一行，列出 PDF、Markdown、阅读笔记、Zotero 回读和本机同步的状态。没完成的项会写明原因。
-
-<!-- 图 5：结果表 -->
+助手最后给出一张表，每篇论文一行，列出 PDF、Markdown、阅读笔记、Zotero 回读的状态。没完成的项会写明原因。
 
 打开 Zotero 的“AI 与学习”集合，每篇论文下面都有 PDF、Markdown 和阅读笔记。
+
+<img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20261109092343454.png" alt="image-20261109092343454" style="zoom:20%;" />
 
 <!-- 图 6：Zotero 集合里的条目、附件和笔记 -->
 
@@ -77,11 +77,9 @@
 
 写作只引用这个集合里的文献。例如写讨论：
 
-> 使用 discussion-drafter。研究背景是……，核心发现是……；只使用 Zotero 中“AI 与学习”集合的文献，撰写中文讨论。
+> 使用 discussion-drafter。研究背景是……，核心发现是……；只使用 Zotero 中“AI 与学习”集合的文献。
 
 写文献综述用 `academic-paper` 的 lit-review 模式，写引言用 `nature-writing`，提法相同。
-
-<!-- 图 7：带 APA 引用的讨论草稿 -->
 
 ## 中途出了问题
 

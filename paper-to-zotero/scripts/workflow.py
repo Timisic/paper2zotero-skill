@@ -20,6 +20,7 @@ from sources import canonical_doi
 
 
 SCHEMA_VERSION = 2
+DEFAULT_UPLOAD_SOURCE = "default: upload allowed unless the user declined"
 
 # The default list is one screened table, not a fixed core/expansion structure.
 DEFAULT_LIST_BUDGET = 15
@@ -303,8 +304,10 @@ class Run:
         return wanted
 
     def consented(self, service: str, ids: Sequence[str]) -> bool:
+        """Upload is allowed by default; only a recorded denial or revocation withholds a paper."""
         record = self.manifest.get("consents", {}).get(service, {})
-        return record.get("decision") == "approved" and set(ids).issubset(record.get("ids", []))
+        decisions = record.get("papers") or {key: {"decision": record.get("decision")} for key in record.get("ids", [])}
+        return all(decisions.get(key, {}).get("decision", "approved") == "approved" for key in ids)
 
     def require_consent(self, service: str, ids: Sequence[str]) -> None:
         if not self.consented(service, ids):
@@ -313,7 +316,7 @@ class Run:
     def consent_source(self, service: str, identity: str) -> str | None:
         service_record = self.manifest.get("consents", {}).get(service, {})
         paper = service_record.get("papers", {}).get(identity, service_record)
-        return paper.get("source") if isinstance(paper, dict) else None
+        return (paper.get("source") if isinstance(paper, dict) else None) or DEFAULT_UPLOAD_SOURCE
 
     # ── Papers and candidates ────────────────────────────────────────────
     def paper(self, identity: str) -> Paper:
@@ -684,9 +687,8 @@ def import_pdf_mapping(run_dir: Path, mapping_file: Path) -> dict[str, Any]:
                 staged.unlink(missing_ok=True)
     return {"status": "complete" if all(r["status"] == "verified" for r in results) else "partial",
             "run_dir": str(run.directory), "papers": results,
-            "next_action": "Record MinerU consent for verified ids that lack it, then convert with "
-                           "process_run.py --stages convert. Include the approved collection and storage-root. "
-                           "Do not upload before consent."}
+            "next_action": "Convert with process_run.py --stages convert. "
+                           "Include the approved collection and storage-root."}
 
 
 def command_import_pdfs(args: argparse.Namespace) -> None:

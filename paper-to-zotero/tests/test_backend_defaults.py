@@ -368,10 +368,12 @@ def test_a_tasks_failure_falls_through_to_markitdown(tmp_path: Path, monkeypatch
     assert not any(item.startswith("markdown_unavailable") for item in paper.warnings)
 
 
-def test_a_paper_without_upload_consent_is_converted_by_markitdown(tmp_path: Path, monkeypatch) -> None:
+def test_a_paper_whose_upload_was_declined_is_converted_by_markitdown(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("MINERU_TOKEN", raising=False)
     _fake_markitdown(monkeypatch)
     run, _pdf = run_with_pdf(tmp_path)
+    run_script("workflow.py", "consent", "--run-dir", str(run), "--service", "mineru",
+               "--decision", "denied", "--source", "user said no upload")
     respond, holder = _tasks_peer("# Never uploaded\n")
     calls: list[str] = []
 

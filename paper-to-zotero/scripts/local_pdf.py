@@ -6,10 +6,9 @@ completes the bibliographic record from Crossref and OpenAlex, appends a
 candidate without replacing one that is already stored, and verifies the PDF
 with the same identity check as ``import-pdfs``.
 
-Markdown conversion is ``process_run.stage_convert`` (MinerU). Upload needs
-recorded consent for the verified ids. Without that consent the command stops
-after import and names the consent step. It does not upload. ``--backend local``
-writes on-machine text instead and does not record consent.
+Markdown conversion is ``process_run.stage_convert``: MinerU, then local
+markitdown. Upload is allowed unless the user declined it. ``--backend local``
+writes on-machine text instead and never uploads.
 """
 from __future__ import annotations
 
@@ -34,7 +33,6 @@ from workflow import find_candidate  # noqa: E402
 CONFIDENT_TITLE_OVERLAP = 0.8
 SELECTION_SOURCE = "local-pdf: user supplied the PDF"
 SELECTION_RULE = "files the user or agent already has"
-CLOUD_CONSENT_WARNING = "markdown_unavailable: cloud MinerU upload consent required"
 
 
 class BibliographyClient(Protocol):
@@ -341,24 +339,6 @@ def convert_local(run_dir: Path, plan: dict[str, Any], imported: Mapping[str, An
     plan["status"] = "converted"
 
 
-def mineru_ready(run_dir: Path, plans: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    verified = [plan for plan in plans if plan.get("import_status") == "verified"]
-    package = workflow.Run.open(run_dir)
-    ready: list[dict[str, Any]] = []
-    for plan in verified:
-        if package.consented("mineru", [str(plan["id"])]):
-            ready.append(plan)
-            continue
-        plan["status"] = "consent_required"
-        plan["convert"] = "consent_required"
-        plan["reason"] = CLOUD_CONSENT_WARNING
-        run = workflow.Run.open(run_dir)
-        run.advance(str(plan["id"]), warning=CLOUD_CONSENT_WARNING)
-        run.save()
-        package = run
-    return ready
-
-
 def record_mineru_markdown(run_dir: Path, ready: Sequence[dict[str, Any]], outcome: Mapping[str, Any]) -> None:
     raw_failed = outcome.get("failed")
     raw_skipped = outcome.get("skipped")
@@ -480,30 +460,18 @@ def _run_local_pdfs(run_dir: Path, pdfs: Sequence[Path], *, backend: str,
             if plan.get("import_status") == "verified" and row and row.get("path"):
                 convert_local(run_dir, plan, row)
     else:
-        ready = mineru_ready(run_dir, plans)
+        ready = [plan for plan in plans if plan.get("import_status") == "verified"]
     return plans, identities, ready
-
-
-CONSENT_NEXT_ACTION = (
-    "MinerU upload consent is missing for the verified PDFs. Ask once unless the user already refused, "
-    "record workflow.py consent --service mineru for those ids, then re-run local_pdf.py or "
-    "process_run.py --stages convert. Do not upload before consent"
-)
 
 
 def finish(run_dir: Path, plans: Sequence[dict[str, Any]], identities: Sequence[str], *, backend: str,
            collection_name: str | None, collection_key: str | None, storage_root: Path | None) -> dict[str, Any]:
     failed_open = [plan for plan in plans if plan.get("status") == "extraction_failed"]
-    consent_required = [str(plan["id"]) for plan in plans if plan.get("status") == "consent_required" and plan.get("id")]
-    handoff_ids = [str(plan["id"]) for plan in plans
-                   if plan.get("import_status") == "verified" and plan.get("status") != "consent_required"]
+    handoff_ids = [str(plan["id"]) for plan in plans if plan.get("import_status") == "verified"]
     continuation: dict[str, Any] = {}
     if plans and len(failed_open) == len(plans):
         status = "pending"
         action = "no DOI or usable title could be read; do not invent a bibliographic record"
-    elif consent_required:
-        status = "partial"
-        action = CONSENT_NEXT_ACTION
     else:
         package = workflow.Run.open(run_dir)
         pending = process_run.summary_handoff(package, handoff_ids, package.candidates()) if handoff_ids else []
@@ -526,7 +494,6 @@ def finish(run_dir: Path, plans: Sequence[dict[str, Any]], identities: Sequence[
         "backend": backend,
         "run_dir": str(run_dir),
         "papers": [public_paper(plan) for plan in plans],
-        "consent_required": consent_required,
         "next_action": action,
         **continuation,
     }
@@ -541,8 +508,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pdf", action="append", required=True, dest="pdfs",
                         help="Local PDF. Repeat for a batch. DOI is optional.")
     parser.add_argument("--backend", choices=("local", "cloud"), default="cloud",
-                        help="cloud uploads verified PDFs to MinerU after recorded consent (default). "
-                             "local writes text on this machine and does not record consent.")
+                        help="cloud converts with MinerU, then local markitdown (default). "
+                             "local writes text on this machine and never uploads.")
     parser.add_argument("--collection-name")
     parser.add_argument("--collection-key")
     parser.add_argument("--storage-root")
