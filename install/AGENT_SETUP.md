@@ -68,7 +68,7 @@ bash "$HOME/.local/share/paper2zotero-source/install/setup.sh" --agent claude-co
 
 ## 离线安装包
 
-解压后的文件夹根目录同时有 `runtime/` 和 `VERSION` 时，它是离线安装包：随附 Python 3.12 和全部 Python 依赖，安装不联网，不需要 Git、Homebrew 或 WinGet。离线安装包只有 Windows 和 macOS 版；Linux 按第 2 节在线安装。只有 `开始.md`、没有 `runtime/` 时，按第 2 节“已有仓库时”的命令在线安装，仓库路径就是这个文件夹。
+解压后的文件夹根目录同时有 `runtime/` 和 `VERSION` 时，它是离线安装包：随附 Python 3.12 和全部 Python 依赖，安装不联网，不需要 Git、Homebrew 或 WinGet。离线安装包只有 Windows 和 macOS 版；Linux 按第 2 节在线安装。没有 `runtime/` 时，按第 2 节“已有仓库时”的命令在线安装，仓库路径就是这个文件夹。
 
 `<安装包>` 是解压后文件夹的绝对路径，助手参数同第 1 节。先准备依赖和 skill，再只读检查：
 
@@ -82,7 +82,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<安装包>\install\set
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<安装包>\install\setup.ps1' -Agent claude-code -Check
 ```
 
-用户要逐个安装并确认每个模块时，请用户在自己的终端运行 `bash '<安装包>/install/setup.sh' --modules`（Windows 双击 `install\setup-modules.cmd`），模块清单见 [QUICKSTART.md](QUICKSTART.md)。依赖装进用户目录下的独立运行环境，之后删除解压文件夹不影响使用。`开始.md` 列出只有用户能做的事：安装 Zotero 7 并开启本地 API、可选的 Kimi WebBridge 和 MinerU 云端 Token。逐项询问是否已完成，不代为操作。然后按第 3 节打开向导：Windows 用 `-LaunchWizard`，macOS 请用户在自己的终端运行 `bash '<安装包>/install/setup.sh' --agent claude-code`。最后按第 4 节交付，检查命令用上面的 `--check` / `-Check`。
+用户要逐个安装并确认每个模块时，请用户在自己的终端运行 `bash '<安装包>/install/setup.sh' --modules`（Windows 双击 `install\setup-modules.cmd`），模块清单见 [QUICKSTART.md](QUICKSTART.md)。依赖装进用户目录下的独立运行环境，之后删除解压文件夹不影响使用。只有用户能做的事是：安装 Zotero 7 并开启本地 API、可选的 Kimi WebBridge 和 MinerU 云端 Token。逐项询问是否已完成，不代为操作。然后按第 3 节打开向导：Windows 用 `-LaunchWizard`，macOS 请用户在自己的终端运行 `bash '<安装包>/install/setup.sh' --agent claude-code`。最后按第 4 节交付，检查命令用上面的 `--check` / `-Check`。
 
 ## 通过其他 skill 分发工具安装
 
