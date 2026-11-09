@@ -35,7 +35,7 @@ scansci-pdf and markitdown never go into a system Python; Homebrew and Debian/Ub
 1. An offline bundle, recognized by `runtime/python` and `runtime/wheels` at the bundle root. The bundled Python is copied into the runtime directory and installs from the wheels with `--no-index`.
 2. A venv from the base Python, installing from the configured index, then once from the Tsinghua mirror unless `PIP_INDEX_URL` is set.
 
-In a bundle, `bootstrap.sh` and `setup.ps1` use `runtime/python` as the base interpreter and run no package manager. PDF text comes from PyMuPDF inside the runtime, so no system PDF tool is installed. `--platform` builds bundle the zip's lite content plus `runtime/`, `VERSION` and `开始.md`. `.github/workflows/release.yml` publishes them per tag, and the runtime workflow installs each OS's bundle with the index unreachable.
+In a bundle, `bootstrap.sh` and `setup.ps1` use `runtime/python` as the base interpreter and run no package manager. PDF text comes from PyMuPDF inside the runtime, so no system PDF tool is installed. `--platform` builds bundle the zip's lite content plus `runtime/` and `VERSION`. `.github/workflows/release.yml` publishes them per tag, and the runtime workflow installs each OS's bundle with the index unreachable.
 
 ## Windows constraints
 

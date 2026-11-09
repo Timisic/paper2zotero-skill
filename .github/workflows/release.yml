@@ -30,5 +30,5 @@ jobs:
           python scripts/build-distribution.py --output dist --platform all --version "$TAG"
       - name: Attach to the GitHub Release
         run: |
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes '网络受限时下载对应系统的离线安装包，解压后按 开始.md 操作。'
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes '网络受限时下载对应系统的离线安装包，解压后按 install/QUICKSTART.md 操作。'
           gh release upload "$TAG" dist/*.zip --clobber

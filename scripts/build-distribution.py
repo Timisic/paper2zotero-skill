@@ -38,7 +38,7 @@ PLATFORMS = {
 
 def stage(destination: Path) -> None:
     destination.mkdir(parents=True)
-    for name in ('README.md', 'LICENSE', 'THIRD_PARTY.md', '开始.md'):
+    for name in ('README.md', 'LICENSE', 'THIRD_PARTY.md'):
         shutil.copy2(ROOT / name, destination / name)
     shutil.copytree(ROOT / 'install', destination / 'install')
     for skill_name in SKILL_NAMES:

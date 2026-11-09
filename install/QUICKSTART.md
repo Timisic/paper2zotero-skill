@@ -1,40 +1,143 @@
-# 快速上手
+# paper2zotero 的安装及配置
 
-开始前请确认三件事：已安装 Zotero，已配好 Kimi WebBridge，正在用 Claude Code / Codex / Psyclaw 中的一个助手。
+paper2zotero 是一组 6 个 skill：根据研究需求找论文、下载全文、生成阅读笔记并保存到 Zotero，再用写作 skill 读取 Zotero 集合写综述、引言和讨论。下面逐项安装，每一项装完都有验证命令，以win命令为主。标有“(可选)”的部分可以跳过。
 
-## 三步用起来
+## 1. 准备安装包和 Python
 
-### 1. 打开 Zotero 的本地接口
+**在线：** 在浏览器打开 https://github.com/Timisic/paper2zotero-skill ，点 **Code → Download ZIP**，下载后解压到本地，请记下文件夹路径。
 
-打开 Zotero，进入 **设置 → 高级**，勾选 **允许此计算机上的其他应用程序与 Zotero 通讯**。
+**离线：** 直接使用资源包 agent-res 中的 paper2zotero 文件夹。Windows 上是 `c:\agent-res\paper2zotero`，Mac 上是 `~/agent-res/paper2zotero`。
 
-以后找论文、写作时都保持 Zotero 打开。
+打开命令窗口，进入这个文件夹，例如：
+
+```bat
+cd c:\agent-res\paper2zotero
+```
+
+Mac 上是 `cd ~/agent-res/paper2zotero`。
+
+下文的命令都在这个文件夹里执行。需要 Python 3.11 及以上，Anaconda 自带的 Python 即可。检查版本：
+
+```bat
+python --version
+```
+
+显示 `Python 3.11` 或更高版本即可。
+
+## 2. 安装 Python 依赖
+
+scansci-pdf 用于检索和下载论文，markitdown 用于把 PDF 转成 Markdown。
+
+在线安装：
+
+```bat
+python -m pip install "scansci-pdf==1.19.0" "markitdown[pdf]"
+```
+
+离线安装（使用文件夹里的 wheels）：
+
+```bat
+python -m pip install --no-index --find-links wheels "scansci-pdf==1.19.0" "markitdown[pdf]"
+```
+
+告诉 skill 使用这个 Python：
+
+```bat
+python -c "import sys, pathlib; p = pathlib.Path.home() / '.config/literature-to-zotero'; p.mkdir(parents=True, exist_ok=True); (p / 'python-path').write_text(sys.executable + '\n', encoding='utf-8')"
+```
+
+**验证：**
+
+```bat
+python -c "import importlib.metadata as m, markitdown; print('scansci-pdf', m.version('scansci-pdf'))"
+```
+
+打印出 `scansci-pdf 1.19.0`，说明依赖已正常安装。
+
+## 3. 安装 skill
+
+把 `paper-to-zotero` 文件夹，以及 `writing` 文件夹下的 5 个文件夹（academic-paper、academic-paper-reviewer、discussion-drafter、nature-shared、nature-writing），拷贝到当前用户的 `.claude\skills\` 文件夹下，即 `C:\Users\当前用户名\.claude\skills\`。可以在资源管理器里拷贝，也可以执行：
+
+```bat
+xcopy /E /I /Y paper-to-zotero %USERPROFILE%\.claude\skills\paper-to-zotero
+xcopy /E /I /Y writing %USERPROFILE%\.claude\skills
+```
+
+Mac 上执行 `mkdir -p ~/.claude/skills && cp -R paper-to-zotero writing/* ~/.claude/skills/`。
+
+使用 Codex 时拷贝到 `.codex\skills\`，使用 psyclaw 时拷贝到 `.psyclaw\agent\skills\`。
+
+**验证：**
+
+```bat
+python paper-to-zotero\scripts\configure.py --verify skill-links
+```
+
+显示 `✓ 连接 AI 助手：6 个 skill`，说明 skill 已安装。也可以启动 claude，输入 `/skills`，列表里能看到这 6 个 skill。
+
+<!-- 待补截图：Claude Code 中输入 /skills，列出 paper-to-zotero 等 6 个 skill -->
+
+## 4. Zotero 及其本地 API
+
+安装 Zotero 并开启本地 API：参考本文档 7.2、7.3 节。关键是在 Zotero 的 **设置 → 高级** 中，勾选 **允许此计算机上的其他应用程序与 Zotero 通讯**。以后找论文、写作时都保持 Zotero 打开。
 
 <img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20261109092032294.png" alt="image-20261109092032294" style="zoom:30%;" />
 
 <!-- 图 1：Zotero 设置 → 高级，勾选本地接口 -->
 
-### 2. 让助手安装
+**验证：** 打开 Zotero，然后执行：
 
-把这句话发给助手：
+```bat
+python paper-to-zotero\scripts\configure.py --verify zotero-local
+```
 
-> 请按照 https://github.com/Timisic/paper2zotero-skill/blob/main/install/AGENT_SETUP.md ，帮我安装并配置这个文献工具，安装到你自己（当前助手）中。
+显示 `✓ 连接电脑上的 Zotero：本地 API 应答 127.0.0.1:23119`，说明配置成功。
 
-若网络无法进入github，则使用压缩包中的路径：
+## 5. MinerU(可选)
 
-> 请按照 paper2zotero-skill/install/AGENT_SETUP.md ，帮我安装并配置这个文献工具，安装到当前助手中。
+MinerU 的 PDF 转换效果比本机 markitdown 更好，不配置也能用。
 
-配置窗口打开后，按提示一路继续即可。macOS 和 Linux 在终端里按回车，Windows 在图形窗口里点按钮。如果助手请你在终端粘贴一行命令，照做即可。
+**云端 Token：** 在 https://mineru.net/apiManage/token 创建 Token，然后执行：
 
-最后助手会发回检查结果。每项前面都是 ✓，并且看到“环境已就绪”，就装好了。
+```bat
+python paper-to-zotero\scripts\configure.py --extra mineru
+```
+
+粘贴 Token 后回车，再按 Ctrl+Z 并回车（Mac 按 Ctrl+D）。
+
+**自建 MinerU 服务：** 执行下面的命令，输入服务地址，例如 `192.168.1.20:8000`，结束方式同上。
+
+```bat
+python paper-to-zotero\scripts\configure.py --extra mineru_api
+```
+
+**验证：** 显示 `设置已保存。` 即可。保存前会先连接 MinerU 验证。
+
+## 6. Kimi WebBridge(可选)
+
+Kimi WebBridge 用于通过学校或机构的浏览器登录下载全文，是下载失败时的备用通道。安装配置参考本文档 7.1 节。
+
+**验证：**
+
+```bat
+python paper-to-zotero\scripts\configure.py --verify kimi
+```
+
+显示 `✓ Kimi WebBridge`，说明可以被调用。
+
+## 7. 整体检查
+
+```bat
+python paper-to-zotero\scripts\configure.py --check
+```
+
+必需项前面都是 ✓，并且看到“环境已就绪”，就装好了。可选项未配置时显示 ○，不影响使用。
+
+<img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20261109100926469.png" alt="image-20261109100926469" style="zoom:50%;" />
 
 <!-- 图 2：检查结果，全部 ✓ 和“环境已就绪” -->
 
-某项显示“待完成”时，按它下面那行“下一步”操作，再对助手说“重新检查文献工具”。
-
-### 3. 新开一个会话，说出你要找什么
-
-新开会话是为了让助手加载刚装好的技能。然后直接用自然语言提需求，下面的示例就是一次完整的使用过程。
+装好后，新开一个会话，让助手加载刚装好的 skill，然后直接用自然语言提需求。
 
 ## 一次完整的使用示例
 
@@ -71,7 +174,7 @@
 
 <img src="https://timisic.oss-cn-hangzhou.aliyuncs.com/pic/image-20261109092343454.png" alt="image-20261109092343454" style="zoom:20%;" />
 
-<!-- 图 6：Zotero 集合里的条目、附件和笔记 -->
+<!-- 图 3：Zotero 集合里的条目、附件和笔记 -->
 
 ### ⑤ 用这些文献写作
 
@@ -80,13 +183,3 @@
 > 使用 discussion-drafter。研究背景是……，核心发现是……；只使用 Zotero 中“AI 与学习”集合的文献。
 
 写文献综述用 `academic-paper` 的 lit-review 模式，写引言用 `nature-writing`，提法相同。
-
-## 中途出了问题
-
-| 情况 | 怎么做 |
-| --- | --- |
-| 任务中断，只处理了一部分 | 说“继续上次的任务”。 |
-| 助手找不到这个技能 | 新开一个会话再试。 |
-| 结果表显示某篇没下载到 | 已有 PDF 时直接发给助手，说“把这个 PDF 加到‘AI 与学习’”。 |
-
-其他问题见[安装与使用帮助](HELP.md)。

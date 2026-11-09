@@ -78,7 +78,7 @@ def test_offline_build_lays_out_runtime_version_and_start_page(tmp_path, monkeyp
     with zipfile.ZipFile(archive) as bundle:
         names = set(bundle.namelist())
         assert bundle.read(root + 'VERSION').decode() == 'v9.9.9\n'
-        assert 'install/AGENT_SETUP.md' in bundle.read(root + '开始.md').decode()
+        assert root + 'install/QUICKSTART.md' in names
         assert '| PyMuPDF | 1.0 | AGPL-3.0-or-later |' in bundle.read(root + 'runtime/LICENSES.md').decode()
         interpreter = bundle.getinfo(root + 'runtime/python/bin/python3')
         assert os.name == 'nt' or interpreter.external_attr >> 16 & 0o100, 'the interpreter stays executable after unzip'
