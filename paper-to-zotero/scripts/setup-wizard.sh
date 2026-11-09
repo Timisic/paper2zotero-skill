@@ -113,13 +113,16 @@ export PAPER2ZOTERO_AGENT="${PAPER2ZOTERO_AGENT:-auto}"
 while (( $# )); do
   case "$1" in
     --help)
-      echo 'Usage: bash install/setup.sh [--dependencies-only | --check] [--advanced] [--group] [--agent auto|codex|claude-code|pi|all]'
+      echo 'Usage: bash install/setup.sh [--dependencies-only | --check | --modules [runtime skills zotero mineru kimi]] [--advanced] [--group] [--agent auto|codex|claude-code|pi|all]'
       exit 0 ;;
     --group) GROUP_LIBRARY=1 ;;
     --advanced) ADVANCED=1 ;;
     --agent)
       [[ $# -ge 2 ]] || { echo '--agent needs a value' >&2; exit 2; }
       PAPER2ZOTERO_AGENT="$2"; shift ;;
+    --modules)
+      [[ -z "$MODE" ]] || { echo 'Choose one setup mode' >&2; exit 2; }
+      shift; exec bash "$SKILL_DIR/scripts/bootstrap.sh" --modules "$@" ;;
     --dependencies-only|--check)
       [[ -z "$MODE" ]] || { echo 'Choose one setup mode' >&2; exit 2; }
       MODE="$1" ;;

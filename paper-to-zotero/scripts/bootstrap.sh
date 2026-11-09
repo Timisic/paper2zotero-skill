@@ -3,11 +3,11 @@
 set -euo pipefail
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ "${1:-}" == --help ]]; then
-  echo 'Usage: bash setup.sh [--dependencies-only | --check | --runtime-only]'
+  echo 'Usage: bash setup.sh [--dependencies-only | --check | --runtime-only | --modules [module ...]]'
   echo 'Default: install dependencies and skill, then configure services interactively.'
   exit 0
 fi
-case "${1:-}" in ''|--dependencies-only|--check|--runtime-only) ;; *) echo 'Unknown option; use --help' >&2; exit 2;; esac
+case "${1:-}" in ''|--dependencies-only|--check|--runtime-only|--modules) ;; *) echo 'Unknown option; use --help' >&2; exit 2;; esac
 prefix_path="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin"
 export PATH="$prefix_path:$PATH"
 SYSTEM="$(uname -s)"
@@ -37,7 +37,7 @@ find_python() {
   done
   return 1
 }
-echo '[1/3] 检查本地依赖'
+if [[ "${1:-}" == --modules ]]; then echo '准备：查找 Python 3.11+'; else echo '[1/3] 检查本地依赖'; fi
 python_ready=0
 if find_python; then
   python_ready=1
@@ -78,6 +78,7 @@ if [[ "$python_ready" != 1 ]]; then
   esac
 fi
 find_python || { echo '系统仓库没有 Python 3.11+；请升级到 Debian 12+/Ubuntu 24.04+ 后重试。' >&2; exit 1; }
+if [[ "${1:-}" == --modules ]]; then exec "$PYTHON_BIN" "$SKILL_DIR/scripts/modules.py" "${@:2}"; fi
 echo '[2/3] 准备独立运行环境（scansci-pdf、markitdown），首次可能需要几分钟'
 "$PYTHON_BIN" -c '
 import sys

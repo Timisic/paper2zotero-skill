@@ -47,7 +47,7 @@ irm https://raw.githubusercontent.com/Timisic/paper2zotero-skill/main/install/in
 curl -fsSL https://raw.githubusercontent.com/Timisic/paper2zotero-skill/main/install/install.sh | bash
 ```
 
-网络受限（无法访问 GitHub 或 PyPI）时，从 [Releases](https://github.com/Timisic/paper2zotero-skill/releases) 下载 Windows 或 macOS 的离线安装包，解压后按其中的 `开始.md` 操作。
+想逐个安装并确认每个模块都成功，或者网络受限（无法访问 GitHub 或 PyPI），按[分模块安装与离线安装](install/MODULES.md)操作。
 
 已经下载仓库：Windows 双击 `install/setup.cmd`；macOS/Linux 运行 `bash install/setup.sh`。以后可让助手“继续文献工具的配置”或“打开文献工具的更多设置”。[安装与使用帮助](install/HELP.md)包含 Windows 操作说明、数据流向和常见问题。
 
