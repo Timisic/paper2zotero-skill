@@ -71,7 +71,14 @@ def probe(command: str) -> dict[str, object]:
         ok = agent_installation.installation_ok(agent)
         roots = dict.fromkeys(str(Path(path).parent) for name in agent_installation.SKILL_NAMES
                               for path in agent_installation.installed_paths(agent=agent, skill_name=name))
-        detail = f"{len(agent_installation.SKILL_NAMES)} 个 skill → {'、'.join(roots)}"
+        expected = list(dict.fromkeys(str(root) for root in agent_installation.selected_roots(agent)))
+        if ok:
+            detail = f"{len(agent_installation.SKILL_NAMES)} 个 skill → {'、'.join(roots)}"
+        else:
+            looked = '、'.join(expected) if expected else '未发现 .claude / .codex / .pi 目录'
+            detail = f"未找到完整安装，已检查：{looked}"
+            action = ('把 6 个 skill 文件夹复制到上面的目录。若下载目录里出现名为 %USERPROFILE% 的文件夹，'
+                      '说明在 PowerShell 中执行了 cmd 的 xcopy 写法，请改用文档中的 PowerShell 命令。')
     else:
         try:
             result = subprocess.run([sys.executable, str(SCRIPTS / 'verify.py'), command],
@@ -91,7 +98,7 @@ def render(record: dict[str, object]) -> None:
         print(f"○ {record['name']}：可选，未就绪")
         print(f"  需要时：{record['action']}")
     else:
-        print(f"待完成 {record['name']}")
+        print(f"待完成 {record['name']}" + (f"（{record['detail']}）" if record.get('detail') else ''))
         print(f"  下一步：{record['action']}")
 
 
@@ -215,7 +222,20 @@ def main() -> int:
     return 2
 
 
+def _utf8_output() -> None:
+    """Keep ✓/○ printable when this output is redirected on a cp936 Windows host."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, 'reconfigure', None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding='utf-8', errors='replace')
+        except (OSError, ValueError):
+            pass
+
+
 if __name__ == '__main__':
+    _utf8_output()
     try:
         raise SystemExit(main())
     except (ValueError, OSError, subprocess.SubprocessError) as exc:

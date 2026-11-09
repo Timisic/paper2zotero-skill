@@ -56,12 +56,24 @@ python -c "import importlib.metadata as m, markitdown; print('scansci-pdf', m.ve
 
 ## 3. 安装 skill
 
-把 `paper-to-zotero` 文件夹，以及 `writing` 文件夹下的 5 个文件夹（academic-paper、academic-paper-reviewer、discussion-drafter、nature-shared、nature-writing），拷贝到当前用户的 `.claude\skills\` 文件夹下，即 `C:\Users\当前用户名\.claude\skills\`。可以在资源管理器里拷贝，也可以执行：
+把 `paper-to-zotero` 文件夹，以及 `writing` 文件夹下的 5 个文件夹（academic-paper、academic-paper-reviewer、discussion-drafter、nature-shared、nature-writing），拷贝到当前用户的 `.claude\skills\` 文件夹下，即 `C:\Users\当前用户名\.claude\skills\`。可以在资源管理器里拷贝，也可以执行下面的命令。
+
+**PowerShell**（Windows 11 的默认终端）中执行：
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\skills" | Out-Null
+Copy-Item -Recurse -Force paper-to-zotero -Destination "$env:USERPROFILE\.claude\skills\"
+Copy-Item -Recurse -Force writing\* -Destination "$env:USERPROFILE\.claude\skills\"
+```
+
+如果你的窗口是 **cmd.exe**（命令提示符），改用：
 
 ```bat
 xcopy /E /I /Y paper-to-zotero %USERPROFILE%\.claude\skills\paper-to-zotero
 xcopy /E /I /Y writing %USERPROFILE%\.claude\skills
 ```
+
+> **注意：`%USERPROFILE%` 只在 cmd.exe 中有效。** 在 PowerShell 中执行上面两行 `xcopy` 不会报错，但 `%USERPROFILE%` 会被当成一个普通文件夹名，在当前目录下生成 `%USERPROFILE%\.claude\skills\`，skill 实际没有安装到 Claude Code 的位置。如果安装后 `skills` 里看不到它们，先检查当前目录有没有多出一个名为 `%USERPROFILE%` 的文件夹；有就删掉它，改用上面的 PowerShell 命令重做。
 
 Mac 上执行 `mkdir -p ~/.claude/skills && cp -R paper-to-zotero writing/* ~/.claude/skills/`。
 
