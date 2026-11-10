@@ -122,6 +122,12 @@ def test_the_wrong_version_is_not_configured(monkeypatch) -> None:
     assert answer.status != "empty"
 
 
+@pytest.mark.parametrize("version,ok", [("1.21.0", True), ("1.18.2", False), ("2.0.0", False)])
+def test_newer_1x_versions_are_accepted(monkeypatch, version, ok) -> None:
+    _install(monkeypatch, __version__=version, search_papers=lambda *_args, **_kwargs: [])
+    assert (search(Query(text="robots"), budget=10).status == "empty") is ok
+
+
 def test_a_spent_budget_does_not_call_the_library(monkeypatch) -> None:
     def search_papers(*_args, **_kwargs):
         raise AssertionError("search_papers must not run when the budget is spent")

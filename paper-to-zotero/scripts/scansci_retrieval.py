@@ -207,10 +207,12 @@ def _library() -> tuple[Any, LibraryStatus]:
         detail = f"scansci-pdf {PIN} is not installed ({type(exc).__name__}). {INSTALL_LINE}"
         return None, LibraryStatus(ok=False, detail=detail, install=INSTALL_LINE)
     version = getattr(scansci_pdf, "__version__", None)
-    if version != PIN:
-        detail = f"scansci-pdf {version} is not {PIN}. {INSTALL_LINE}"
+    # shortcut: API checked identical for 1.19–1.21, recheck on a 2.x release
+    major, minor = (str(version).split(".") + ["", ""])[:2]
+    if not (major == "1" and minor.isdigit() and int(minor) >= 19):
+        detail = f"scansci-pdf {version} is not compatible (need 1.x >= 1.19). {INSTALL_LINE}"
         return None, LibraryStatus(ok=False, detail=detail, install=INSTALL_LINE)
-    return scansci_pdf, LibraryStatus(ok=True, detail=f"scansci-pdf {PIN}", install=INSTALL_LINE)
+    return scansci_pdf, LibraryStatus(ok=True, detail=f"scansci-pdf {version}", install=INSTALL_LINE)
 
 
 def _download_kwargs(policy: GreyPolicy) -> dict[str, object]:

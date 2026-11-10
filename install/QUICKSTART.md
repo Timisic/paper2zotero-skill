@@ -34,12 +34,6 @@ scansci-pdf 用于检索和下载论文，markitdown 用于把 PDF 转成 Markdo
 python -m pip install "scansci-pdf==1.19.0" "markitdown[pdf]"
 ```
 
-离线安装（使用文件夹里的 wheels）：
-
-```bat
-python -m pip install --no-index --find-links wheels "scansci-pdf==1.19.0" "markitdown[pdf]"
-```
-
 告诉 skill 使用这个 Python：
 
 ```bat
@@ -73,8 +67,6 @@ xcopy /E /I /Y paper-to-zotero %USERPROFILE%\.claude\skills\paper-to-zotero
 xcopy /E /I /Y writing %USERPROFILE%\.claude\skills
 ```
 
-> **注意：`%USERPROFILE%` 只在 cmd.exe 中有效。** 在 PowerShell 中执行上面两行 `xcopy` 不会报错，但 `%USERPROFILE%` 会被当成一个普通文件夹名，在当前目录下生成 `%USERPROFILE%\.claude\skills\`，skill 实际没有安装到 Claude Code 的位置。如果安装后 `skills` 里看不到它们，先检查当前目录有没有多出一个名为 `%USERPROFILE%` 的文件夹；有就删掉它，改用上面的 PowerShell 命令重做。
-
 Mac 上执行 `mkdir -p ~/.claude/skills && cp -R paper-to-zotero writing/* ~/.claude/skills/`。
 
 使用 Codex 时拷贝到 `.codex\skills\`，使用 psyclaw 时拷贝到 `.psyclaw\agent\skills\`。
@@ -86,8 +78,6 @@ python paper-to-zotero\scripts\configure.py --verify skill-links
 ```
 
 显示 `✓ 连接 AI 助手：6 个 skill`，说明 skill 已安装。也可以启动 claude，输入 `/skills`，列表里能看到这 6 个 skill。
-
-<!-- 待补截图：Claude Code 中输入 /skills，列出 paper-to-zotero 等 6 个 skill -->
 
 ## 4. Zotero 及其本地 API
 

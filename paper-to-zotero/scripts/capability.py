@@ -246,7 +246,8 @@ def probe_kimi(binary: Path | None = None, live: bool = True) -> dict[str, str |
         status["error"] = completed.stderr.strip() or "daemon status exited non-zero"
         return status
     try:
-        payload = json.loads(completed.stdout)
+        # The CLI may print notices around the JSON object.
+        payload = json.loads(completed.stdout[completed.stdout.find("{"):completed.stdout.rfind("}") + 1])
     except json.JSONDecodeError:
         status["error"] = "unexpected daemon status output"
         return status
