@@ -169,7 +169,7 @@ def test_zotero_local_probe_answers_200(monkeypatch: object) -> None:
 def test_kimi_probe_reads_daemon_status_json(tmp_path: Path) -> None:
     binary = tmp_path / "kimi-webbridge"
     binary.write_text(
-        "#!/bin/sh\nprintf '%s\\n' '{\"running\": true, \"extension_connected\": true}'\n"
+        "#!/bin/sh\necho '==> upgrade available'\nprintf '%s\\n' '{\"running\": true, \"extension_connected\": true}'\n"
     )
     binary.chmod(0o755)
     status = MODULE.probe_kimi(binary)

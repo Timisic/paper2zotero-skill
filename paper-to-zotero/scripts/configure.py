@@ -95,7 +95,7 @@ def render(record: dict[str, object]) -> None:
     if record['ok']:
         print(f"✓ {record['name']}" + (f"：{record['detail']}" if record.get('detail') else ''))
     elif record.get('optional'):
-        print(f"○ {record['name']}：可选，未就绪")
+        print(f"○ {record['name']}：可选，未就绪" + (f"（{record['detail']}）" if record.get('detail') else ''))
         print(f"  需要时：{record['action']}")
     else:
         print(f"待完成 {record['name']}" + (f"（{record['detail']}）" if record.get('detail') else ''))
