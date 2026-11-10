@@ -5,7 +5,7 @@ Use the parent SKILL.md's doctor and run commands from the repository root. Ever
 | Feature | Safe recipe | Boundary |
 |---|---|---|
 | [Discovery and shortlist](discovery.md) | `run --feature discovery` | Fixture JSON and local peers. These nodes do not start Kimi |
-| [ScanSci search and download](scansci.md) | `run --feature scansci` | Mocked `scansci-pdf` 1.19.0. Not a live library download |
+| [ScanSci search and download](scansci.md) | `run --feature scansci` | Mocked scansci-pdf. Accepts 1.x with minor 19 or newer, and rejects 2.x. Not a live library download |
 | [Selection and upload consent](selection.md) | `run --feature selection` | Real CLI. The declined-upload node skips a MinerU upload. markitdown does not read consent |
 | [Import local PDF](local-pdf.md) | `run --feature local-pdf` | Real CLI and fixture PDF. These nodes do not run the converter chain |
 | [Acquire verified PDF](acquisition.md) | `run --feature acquisition` | HTTP fallback. The suite disables scansci |

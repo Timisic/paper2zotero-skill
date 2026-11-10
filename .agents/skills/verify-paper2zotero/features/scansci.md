@@ -1,10 +1,10 @@
 # ScanSci search and download
 
-Search and download through scansci-pdf 1.19.0 when `SEARCH_BACKEND` is unset. Grey PDF sources, including Sci-Hub, are on. These nodes mock the library.
+Search and download through scansci-pdf when `SEARCH_BACKEND` is unset. A 1.x release whose minor version is 19 or newer is accepted. 2.x is rejected. Grey PDF sources, including Sci-Hub, are on. These nodes mock the library.
 
 ## Sub-features
 
-- `search`: an omitted, empty, or whitespace `SEARCH_BACKEND` calls `scansci_retrieval.search`. A missing install or any version other than `1.19.0` is `not_configured` and names `pip install 'scansci-pdf==1.19.0'`. An empty hit list is `empty`. A library error or a non-list payload is `unavailable`. A spent budget is `skipped` and does not call the library.
+- `search`: an omitted, empty, or whitespace `SEARCH_BACKEND` calls `scansci_retrieval.search`. A missing install is `not_configured` and names `pip install 'scansci-pdf==1.19.0'`. That message does not include an installed version. A 1.x release whose minor version is 19 or newer runs, and the ready detail is `scansci-pdf` plus that version. Any other installed version is `not_configured`. That detail names the installed version, `need 1.x >= 1.19`, and the same install line. An empty hit list is `empty`. A library error or a non-list payload is `unavailable`. A spent budget is `skipped` and does not call the library.
 - `download`: `fetch_candidate` prefers a DOI, otherwise an arXiv id, recorded as `preprint`. No DOI and no arXiv id is `NotAddressable` and writes no scansci trail row. Grey sends `strategy=fastest` and `scihub_enabled=True`, so a Sci-Hub file is kept. `--legal-only` or `SCANSCI_LEGAL_ONLY` set to `1`, `true`, `yes`, `legal`, or `legal_only` forces legal sources and drops opaque labels such as Sci-Hub and `local_cache`. An unknown value raises `ValueError`.
 - `fallback`: when no `--sources` is given and scansci fails (any status but `ok`, `empty` or `skipped`), the same round asks Kimi. That outcome's detail starts with `fallback for ScanSci`. A failed Kimi answer is a second recorded failure.
 - `backend`: `SEARCH_BACKEND=http` and the aliases `openalex,semantic_scholar` and `openalex+semantic_scholar` select OpenAlex and Semantic Scholar. `SEARCH_BACKEND=kimi` searches with Kimi only. The HTTP client rejects the source name `scansci`.
@@ -21,7 +21,7 @@ Preconditions: run Doctor from the parent SKILL.md. Python, pytest, and pymupdf 
 "$VERIFY_PYTHON" .agents/skills/verify-paper2zotero/scripts/verify_runner.py run --feature scansci
 ```
 
-The runner collects `tests/test_scansci_retrieval.py`. The tests install a fake `scansci_pdf` module at version `1.19.0`. `test_the_skill_names_the_install_line` reads `paper-to-zotero/SKILL.md`, which the runner copies into the snapshot. `test_discover_asks_scansci_when_the_backend_is_unset` clears the suite's `SEARCH_BACKEND=http` and checks that `discover()` asks scansci. The other features keep the autouse stub that sets `LITERATURE_SCANSCI_DISABLED=1`.
+The runner collects `tests/test_scansci_retrieval.py`. The tests install a fake `scansci_pdf` module. The default version is `1.19.0`. `test_newer_1x_versions_are_accepted` also installs `1.21.0`, `1.18.2`, and `2.0.0`. `test_the_skill_names_the_install_line` reads `paper-to-zotero/SKILL.md`, which the runner copies into the snapshot. `test_discover_asks_scansci_when_the_backend_is_unset` clears the suite's `SEARCH_BACKEND=http` and checks that `discover()` asks scansci. The other features keep the autouse stub that sets `LITERATURE_SCANSCI_DISABLED=1`.
 
 Inspect `results.xml` for each assertion. These tests call the adapter in process, so `commands.jsonl` may stay empty. Run cleanup is automatic and must leave evidence intact.
 
